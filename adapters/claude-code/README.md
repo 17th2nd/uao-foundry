@@ -33,7 +33,7 @@ Claude does not write canonical UAOs or UROs.
 - Claude Code installed and authenticated
 - Java 21 and Maven for the Foundry
 
-The current Claude Code CLI supports non-interactive `-p/--print`, structured `--output-format json`, `--json-schema`, tool allow/deny rules, `--no-session-persistence`, model selection and turn limits. The adapter uses those surfaces rather than interactive automation.
+The current Claude Code CLI supports non-interactive `-p/--print`, structured `--output-format json`, `--json-schema`, tool availability/permission controls, `--no-session-persistence`, model selection and turn limits. The adapter uses those surfaces rather than interactive automation.
 
 ## Security boundary
 
@@ -42,9 +42,10 @@ For manufacturing calls the adapter starts Claude Code with:
 - `--bare`;
 - `--no-session-persistence`;
 - `--no-chrome`;
+- `--tools WebSearch,WebFetch` to restrict built-in tool availability;
 - `--permission-mode dontAsk`;
 - allowed tools: `WebSearch`, `WebFetch`;
-- explicitly disallowed: `Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Agent`, `Skill`.
+- explicitly disallowed defense-in-depth entries: `Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Agent`, `Skill`.
 
 The model therefore receives the manufacturing request, bounded registry discovery context and bounded immutable registry evidence through stdin. It is not given general repository filesystem or shell capability by this adapter.
 
@@ -79,7 +80,7 @@ New live keys outside `ext:*` or `foundry:v0.1:*` fail closed.
 
 Keys that appear to contain UUID/session/model/timestamp material also fail closed. Model/session/turn identity is not semantic identity.
 
-This is an adapter discipline for repeatable manufacturing; it does not claim to solve all future cross-domain identity equivalence questions.
+This is an adapter discipline for repeatable manufacturing; it does not claim to solve all future cross-domain identity equivalence questions. See [`../../docs/STABLE-SEMANTIC-IDENTITY.md`](../../docs/STABLE-SEMANTIC-IDENTITY.md).
 
 ## Relationship authority
 
