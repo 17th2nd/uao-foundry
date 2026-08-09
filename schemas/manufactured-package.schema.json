@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://17th2nd.github.io/uao-foundry/schemas/manufactured-package.schema.json",
+  "title": "UAO Manufactured Package",
+  "type": "object",
+  "required": ["packageVersion", "request", "uao", "verification", "checksums", "publicationStatus"],
+  "properties": {
+    "packageVersion": {"type": "string", "const": "0.1.0"},
+    "request": {"$ref": "manufacturing-request.schema.json"},
+    "uao": {"$ref": "canonical-uao.schema.json"},
+    "verification": {
+      "type": "object",
+      "required": ["passed", "findings"],
+      "properties": {
+        "passed": {"type": "boolean"},
+        "findings": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "checksums": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "publicationStatus": {
+      "type": "string",
+      "enum": ["NOT_PUBLISHED", "PUBLISHED", "REJECTED", "SUPERSEDED"]
+    }
+  },
+  "additionalProperties": false
+}

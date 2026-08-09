@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://17th2nd.github.io/uao-foundry/schemas/manufacturing-request.schema.json",
+  "title": "UAO Manufacturing Request",
+  "type": "object",
+  "required": ["schemaVersion", "identitySeed"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "0.1.0"
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "identitySeed": {
+      "type": "string",
+      "minLength": 1
+    },
+    "language": {
+      "type": "string",
+      "minLength": 1,
+      "default": "en"
+    },
+    "manufacturingProfile": {
+      "type": "string",
+      "minLength": 1,
+      "default": "default"
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "domainHint": {"type": "string"},
+        "jurisdiction": {"type": "string"},
+        "temporal": {"type": "string"},
+        "audience": {"type": "string"},
+        "depth": {"type": "string"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
