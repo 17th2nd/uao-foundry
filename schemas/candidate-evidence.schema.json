@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UAO Foundry Candidate Evidence",
+  "type": "object",
+  "required": ["evidenceId", "sourceRef", "supportsCandidateRef", "extract"],
+  "properties": {
+    "evidenceId": {"type": "string", "pattern": "^ev-[a-z0-9._-]+$"},
+    "sourceRef": {"type": "string", "pattern": "^src-[a-z0-9._-]+$"},
+    "supportsCandidateRef": {"type": "string", "minLength": 1},
+    "extract": {"type": "string", "minLength": 1},
+    "locatorWithinSource": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}

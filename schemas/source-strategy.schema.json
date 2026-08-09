@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UAO Foundry Source Strategy",
+  "type": "object",
+  "required": ["strategyVersion", "sourceClasses", "authorityNotes", "safetyConstraints"],
+  "properties": {
+    "strategyVersion": {"type": "string", "const": "0.1.0"},
+    "sourceClasses": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["classId", "purpose", "priority"],
+        "properties": {
+          "classId": {"type": "string", "minLength": 1},
+          "purpose": {"type": "string", "minLength": 1},
+          "priority": {"type": "integer", "minimum": 1}
+        },
+        "additionalProperties": false
+      }
+    },
+    "authorityNotes": {"type": "array", "items": {"type": "string"}},
+    "safetyConstraints": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

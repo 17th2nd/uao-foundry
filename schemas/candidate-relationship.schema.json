@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UAO Foundry Candidate Relationship",
+  "type": "object",
+  "required": ["candidateId", "typeVersion", "participants", "identityLiterals", "contextualBindings", "sourceRefs"],
+  "properties": {
+    "candidateId": {"type": "string", "pattern": "^rel-[a-z0-9._-]+$"},
+    "typeVersion": {"type": "string", "pattern": "^asa\\.core/[a-z_]+@[0-9]+$"},
+    "participants": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["role", "candidateIdentityRef"],
+        "properties": {
+          "role": {"type": "string", "minLength": 1},
+          "candidateIdentityRef": {"type": "string", "pattern": "^cid-[a-z0-9._-]+$"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "identityLiterals": {"type": "object", "additionalProperties": {"type": "string"}},
+    "contextualBindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["scopeKey", "scopeValue"],
+        "properties": {
+          "scopeKey": {"type": "string", "minLength": 1},
+          "scopeValue": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    },
+    "sourceRefs": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^src-[a-z0-9._-]+$"}, "uniqueItems": true}
+  },
+  "additionalProperties": false
+}

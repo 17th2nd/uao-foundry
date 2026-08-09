@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UAO Foundry Fixture Provider Bundle",
+  "type": "object",
+  "required": ["fixtureVersion", "identitySeed", "fixedClock", "knowledgeHorizon", "interpretations", "scopeResolution", "manufacturingPlan", "sourceStrategy", "sources", "candidates", "coverageAnswers"],
+  "properties": {
+    "fixtureVersion": {"type": "string", "const": "0.1.0"},
+    "identitySeed": {"type": "string", "minLength": 1},
+    "fixedClock": {"type": "string", "format": "date-time"},
+    "knowledgeHorizon": {"type": "string", "format": "date-time"},
+    "interpretations": {"type": "array", "minItems": 1},
+    "scopeResolution": {"type": "object"},
+    "manufacturingPlan": {"type": "object"},
+    "sourceStrategy": {"type": "object"},
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["sourceId", "locator", "sourceClass", "retrievedAt", "license", "content"],
+        "properties": {
+          "sourceId": {"type": "string", "pattern": "^src-[a-z0-9._-]+$"},
+          "locator": {"type": "string", "minLength": 1},
+          "sourceClass": {"type": "string", "minLength": 1},
+          "retrievedAt": {"type": "string", "format": "date-time"},
+          "license": {"type": "string", "minLength": 1},
+          "content": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    },
+    "candidates": {
+      "type": "object",
+      "required": ["identities", "claims", "relationships", "evidence"],
+      "properties": {
+        "identities": {"type": "array", "minItems": 1},
+        "claims": {"type": "array"},
+        "relationships": {"type": "array"},
+        "evidence": {"type": "array"},
+        "states": {"type": "array"},
+        "events": {"type": "array"},
+        "languageMappings": {"type": "array"}
+      },
+      "additionalProperties": false
+    },
+    "coverageAnswers": {"type": "object", "additionalProperties": {"type": "string", "enum": ["covered", "partial", "unresolved"]}}
+  },
+  "additionalProperties": false
+}

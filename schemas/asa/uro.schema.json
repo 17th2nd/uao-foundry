@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://17th2nd.github.io/uao-foundry/schemas/asa/uro.schema.json",
+  "$comment": "Non-authoritative validation projection of ASA CSS 2026.1 primitive_definitions.URO at ASA main 908c5255fb3144c2a2e3f48c993d031e347d1695. CSS remains sole semantic authority.",
+  "type": "object",
+  "properties": {
+    "uid": {"type": "string", "pattern": "^uro-[a-f0-9]{12}$"},
+    "identity": {
+      "type": "object",
+      "required": ["type_version"],
+      "properties": {"type_version": {"type": "string", "pattern": "^asa\\.core/[a-z_]+@[0-9]+$"}},
+      "additionalProperties": false
+    },
+    "participants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["role", "participant_uid"],
+        "properties": {
+          "role": {"type": "string"},
+          "participant_uid": {"type": "string", "pattern": "^(uao|uro)-[a-f0-9]{12}$"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "identity_literals": {"type": "object", "additionalProperties": {"type": "string"}},
+    "contextual_bindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["scope_key", "scope_value"],
+        "properties": {
+          "scope_key": {"type": "string"},
+          "scope_value": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

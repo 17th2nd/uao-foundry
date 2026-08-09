@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UAO Foundry Verification Report",
+  "type": "object",
+  "required": ["passed", "errors", "warnings", "checks"],
+  "properties": {
+    "passed": {"type": "boolean"},
+    "errors": {"type": "array", "items": {"type": "string"}},
+    "warnings": {"type": "array", "items": {"type": "string"}},
+    "checks": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

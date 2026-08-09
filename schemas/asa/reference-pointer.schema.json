@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://17th2nd.github.io/uao-foundry/schemas/asa/reference-pointer.schema.json",
+  "$comment": "Non-authoritative validation projection of ASA CSS 2026.1 shared_types.reference_pointer at ASA main 908c5255fb3144c2a2e3f48c993d031e347d1695. CSS remains sole semantic authority.",
+  "type": "object",
+  "required": ["id", "type", "load_condition"],
+  "properties": {
+    "id": {"type": "string"},
+    "type": {"type": "string"},
+    "load_condition": {"type": "string"}
+  },
+  "additionalProperties": false
+}

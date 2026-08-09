@@ -23,19 +23,68 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Verify
+      - name: Unit and integration tests
         run: mvn -B -ntp clean verify
 
-      - name: Package
-        run: mvn -B -ntp package
+      - name: Package executable
+        run: mvn -B -ntp package -DskipTests
 
-      - name: Cross-domain smoke test
+      - name: Guard production code against demonstration identities
         shell: bash
         run: |
           set -euo pipefail
-          for seed in "cow" "hydrogen" "granite" "Certificate III Electrotechnology"; do
-            output="$(java -jar target/uao-foundry-0.1.0-SNAPSHOT.jar manufacture --identity "$seed")"
-            printf '%s\n' "$output" | grep -F '"phase":"REQUEST_ACCEPTED"'
-            printf '%s\n' "$output" | grep -F '"publicationStatus":"NOT_PUBLISHED"'
-            printf '%s\n' "$output" | grep -F "\"identitySeed\":\"$seed\""
+          if grep -RniE '\b(cow|granite|pie|hydrogen|rock)\b' src/main/java; then
+            echo 'Demonstration identity leaked into production Java.' >&2
+            exit 1
+          fi
+
+      - name: Cross-domain full manufacture
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work dist
+          declare -A fixtures=(
+            [cow]='src/test/resources/fixtures/biological-cow.json'
+            [granite]='src/test/resources/fixtures/material-granite.json'
+            [pie]='src/test/resources/fixtures/cultural-pie.json'
+          )
+          for seed in cow granite pie; do
+            output="$(java -jar target/uao-foundry-0.1.0.jar manufacture "$seed" --fixture "${fixtures[$seed]}" --repository-commit "$GITHUB_SHA")"
+            printf '%s\n' "$output"
+            printf '%s\n' "$output" | grep -F '"publicationStatus":"EXPERIMENTAL"'
+            printf '%s\n' "$output" | grep -F '"verificationPassed":true'
           done
+          test "$(find dist -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 3
+          for package in dist/UAO-*; do
+            java -jar target/uao-foundry-0.1.0.jar verify "$package" | grep -F '"passed":true'
+          done
+
+      - name: Determinism and resume proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work dist /tmp/uao-first
+          first="$(java -jar target/uao-foundry-0.1.0.jar manufacture cow --fixture src/test/resources/fixtures/biological-cow.json --repository-commit "$GITHUB_SHA")"
+          job_id="$(printf '%s' "$first" | jq -r .jobId)"
+          package="$(printf '%s' "$first" | jq -r .packagePath)"
+          cp -a "$package" /tmp/uao-first
+          second="$(java -jar target/uao-foundry-0.1.0.jar manufacture cow --fixture src/test/resources/fixtures/biological-cow.json --repository-commit "$GITHUB_SHA")"
+          package2="$(printf '%s' "$second" | jq -r .packagePath)"
+          diff -ru /tmp/uao-first "$package2"
+          resumed="$(java -jar target/uao-foundry-0.1.0.jar resume "$job_id" --repository-commit "$GITHUB_SHA")"
+          printf '%s\n' "$resumed" | jq -e '.resumedStages >= 10 and .verificationPassed == true'
+          diff -ru /tmp/uao-first "$package2"
+
+      - name: Tamper negative control
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="$(find dist -mindepth 1 -maxdepth 1 -type d -name 'UAO-*' | head -n1)"
+          rm -rf /tmp/uao-tampered
+          cp -a "$package" /tmp/uao-tampered
+          snapshot="$(find /tmp/uao-tampered/source-corpus -type f | head -n1)"
+          printf '\nTAMPER\n' >> "$snapshot"
+          if java -jar target/uao-foundry-0.1.0.jar verify /tmp/uao-tampered; then
+            echo 'Tampered package incorrectly verified.' >&2
+            exit 1
+          fi

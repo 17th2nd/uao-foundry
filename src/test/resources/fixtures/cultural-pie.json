@@ -1,0 +1,211 @@
+{
+  "fixtureVersion": "0.1.0",
+  "identitySeed": "pie",
+  "fixedClock": "2026-08-09T00:00:00Z",
+  "knowledgeHorizon": "2026-08-09T00:00:00Z",
+  "interpretations": [
+    {
+      "candidateId": "int-pie-food",
+      "label": "baked pie food class",
+      "definition": "A culinary interpretation selected to exercise manufactured/cultural identity handling.",
+      "semanticTypeProposal": "CulinaryArtifactClass",
+      "confidence": 0.88,
+      "status": "SELECTED",
+      "references": [
+        "fixture://src-pie-cultural"
+      ]
+    },
+    {
+      "candidateId": "int-pie-chart",
+      "label": "pie chart",
+      "definition": "A chart interpretation intentionally excluded by scope.",
+      "semanticTypeProposal": "InformationVisualization",
+      "confidence": 0.72,
+      "status": "EXCLUDED",
+      "references": []
+    }
+  ],
+  "scopeResolution": {
+    "selectedInterpretation": "int-pie-food",
+    "scopeStatus": "FIXTURE_SELECTED",
+    "canonicalWorkingLabel": "baked pie food class",
+    "includedBoundaries": [
+      "culinary artifact",
+      "food terminology"
+    ],
+    "excludedBoundaries": [
+      "pie charts",
+      "acronyms"
+    ],
+    "excludedInterpretations": [
+      "int-pie-chart"
+    ],
+    "unresolvedQuestions": []
+  },
+  "manufacturingPlan": {
+    "planVersion": "0.1.0",
+    "selectedIdentity": "baked pie food class",
+    "dimensions": [
+      "definition",
+      "components",
+      "manufacture-context",
+      "cultural-terminology"
+    ],
+    "neighbouringIdentities": [
+      "pastry",
+      "filling"
+    ],
+    "anticipatedSourceClasses": [
+      "culinary-reference",
+      "cultural-reference"
+    ],
+    "risks": [
+      "food-versus-chart ambiguity"
+    ],
+    "completionQuestions": [
+      {
+        "questionId": "q-definition",
+        "prompt": "Is the culinary identity definition represented?",
+        "required": true
+      },
+      {
+        "questionId": "q-components",
+        "prompt": "Are relevant component identities distinguished?",
+        "required": true
+      }
+    ],
+    "exclusions": [
+      "chart interpretation"
+    ]
+  },
+  "sourceStrategy": {
+    "strategyVersion": "0.1.0",
+    "sourceClasses": [
+      {
+        "classId": "culinary-reference",
+        "purpose": "exercise manufactured food identity evidence",
+        "priority": 1
+      },
+      {
+        "classId": "cultural-reference",
+        "purpose": "exercise terminology evidence",
+        "priority": 2
+      }
+    ],
+    "authorityNotes": [
+      "Fixture evidence is synthetic and non-authoritative."
+    ],
+    "safetyConstraints": [
+      "No network access in fixture mode."
+    ]
+  },
+  "sources": [
+    {
+      "sourceId": "src-pie-cultural",
+      "locator": "fixture://src-pie-cultural",
+      "sourceClass": "culinary-reference",
+      "retrievedAt": "2026-08-09T00:00:00Z",
+      "license": "TEST-FIXTURE",
+      "content": "Synthetic fixture: pie is scoped as a culinary artifact class and not as a chart."
+    },
+    {
+      "sourceId": "src-pie-terms",
+      "locator": "fixture://src-pie-terms",
+      "sourceClass": "cultural-reference",
+      "retrievedAt": "2026-08-09T00:00:00Z",
+      "license": "TEST-FIXTURE",
+      "content": "Synthetic fixture: pastry and filling are retained as neighbouring component identities for structural diversity."
+    }
+  ],
+  "candidates": {
+    "identities": [
+      {
+        "candidateId": "cid-root",
+        "label": "baked pie food class",
+        "resolutionKey": "fixture:culinary:pie",
+        "root": true,
+        "aliases": [
+          "pie"
+        ],
+        "sourceRefs": [
+          "src-pie-cultural"
+        ],
+        "externalIdentifiers": {}
+      },
+      {
+        "candidateId": "cid-pastry",
+        "label": "pastry component",
+        "resolutionKey": "fixture:culinary:pastry-component",
+        "root": false,
+        "aliases": [
+          "pastry"
+        ],
+        "sourceRefs": [
+          "src-pie-terms"
+        ],
+        "externalIdentifiers": {}
+      },
+      {
+        "candidateId": "cid-filling",
+        "label": "filling component",
+        "resolutionKey": "fixture:culinary:filling-component",
+        "root": false,
+        "aliases": [
+          "filling"
+        ],
+        "sourceRefs": [
+          "src-pie-terms"
+        ],
+        "externalIdentifiers": {}
+      }
+    ],
+    "claims": [
+      {
+        "candidateId": "clm-pie-scope",
+        "subjectIdentityRef": "cid-root",
+        "statement": "Fixture assertion: the selected identity is culinary and explicitly excludes the chart interpretation.",
+        "channels": [
+          "foundry"
+        ],
+        "sourceRefs": [
+          "src-pie-cultural"
+        ]
+      },
+      {
+        "candidateId": "clm-components",
+        "subjectIdentityRef": "cid-pastry",
+        "statement": "Fixture assertion: a pastry component is represented as a distinct neighbouring identity.",
+        "channels": [
+          "foundry"
+        ],
+        "sourceRefs": [
+          "src-pie-terms"
+        ]
+      }
+    ],
+    "relationships": [],
+    "evidence": [
+      {
+        "evidenceId": "ev-pie",
+        "sourceRef": "src-pie-cultural",
+        "supportsCandidateRef": "clm-pie-scope",
+        "extract": "Synthetic culinary scope evidence.",
+        "locatorWithinSource": "sentence-1"
+      },
+      {
+        "evidenceId": "ev-components",
+        "sourceRef": "src-pie-terms",
+        "supportsCandidateRef": "clm-components",
+        "extract": "Synthetic component distinction evidence.",
+        "locatorWithinSource": "sentence-1"
+      }
+    ],
+    "states": [],
+    "events": [],
+    "languageMappings": []
+  },
+  "coverageAnswers": {
+    "q-definition": "covered",
+    "q-components": "covered"
+  }
+}

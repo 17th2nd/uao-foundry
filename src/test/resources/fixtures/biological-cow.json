@@ -1,0 +1,182 @@
+{
+  "fixtureVersion": "0.1.0",
+  "identitySeed": "cow",
+  "fixedClock": "2026-08-09T00:00:00Z",
+  "knowledgeHorizon": "2026-08-09T00:00:00Z",
+  "interpretations": [
+    {
+      "candidateId": "int-cattle-female",
+      "label": "adult female cattle",
+      "definition": "A biological interpretation of the seed as an adult female domestic bovine.",
+      "semanticTypeProposal": "BiologicalEntityClass",
+      "confidence": 0.96,
+      "status": "SELECTED",
+      "references": [
+        "fixture://src-cow-bio"
+      ]
+    },
+    {
+      "candidateId": "int-other-use",
+      "label": "other lexical uses",
+      "definition": "Non-biological lexical uses remain excluded from this fixture scope.",
+      "semanticTypeProposal": "LexicalAlternative",
+      "confidence": 0.2,
+      "status": "EXCLUDED",
+      "references": []
+    }
+  ],
+  "scopeResolution": {
+    "selectedInterpretation": "int-cattle-female",
+    "scopeStatus": "FIXTURE_SELECTED",
+    "canonicalWorkingLabel": "adult female cattle",
+    "includedBoundaries": [
+      "biological identity",
+      "domestic bovine context"
+    ],
+    "excludedBoundaries": [
+      "brand names",
+      "metaphorical uses"
+    ],
+    "excludedInterpretations": [
+      "int-other-use"
+    ],
+    "unresolvedQuestions": []
+  },
+  "manufacturingPlan": {
+    "planVersion": "0.1.0",
+    "selectedIdentity": "adult female cattle",
+    "dimensions": [
+      "taxonomy",
+      "sex-and-life-stage",
+      "domestication"
+    ],
+    "neighbouringIdentities": [
+      "domestic cattle"
+    ],
+    "anticipatedSourceClasses": [
+      "biological-reference"
+    ],
+    "risks": [
+      "lexical ambiguity"
+    ],
+    "completionQuestions": [
+      {
+        "questionId": "q-taxonomy",
+        "prompt": "Is the biological classification represented?",
+        "required": true
+      },
+      {
+        "questionId": "q-boundary",
+        "prompt": "Is the selected adult-female scope explicit?",
+        "required": true
+      }
+    ],
+    "exclusions": [
+      "non-biological uses"
+    ]
+  },
+  "sourceStrategy": {
+    "strategyVersion": "0.1.0",
+    "sourceClasses": [
+      {
+        "classId": "biological-reference",
+        "purpose": "exercise biological identity and classification evidence",
+        "priority": 1
+      }
+    ],
+    "authorityNotes": [
+      "Fixture evidence is synthetic and non-authoritative."
+    ],
+    "safetyConstraints": [
+      "No network access in fixture mode."
+    ]
+  },
+  "sources": [
+    {
+      "sourceId": "src-cow-bio",
+      "locator": "fixture://src-cow-bio",
+      "sourceClass": "biological-reference",
+      "retrievedAt": "2026-08-09T00:00:00Z",
+      "license": "TEST-FIXTURE",
+      "content": "Synthetic fixture: the selected identity is an adult female domestic bovine; this sentence exists only to exercise provenance and is not authority."
+    }
+  ],
+  "candidates": {
+    "identities": [
+      {
+        "candidateId": "cid-root",
+        "label": "adult female cattle",
+        "resolutionKey": "fixture:biology:adult-female-cattle",
+        "root": true,
+        "aliases": [
+          "cow"
+        ],
+        "sourceRefs": [
+          "src-cow-bio"
+        ],
+        "externalIdentifiers": {}
+      },
+      {
+        "candidateId": "cid-bovine-context",
+        "label": "domestic cattle",
+        "resolutionKey": "fixture:biology:domestic-cattle",
+        "root": false,
+        "aliases": [
+          "cattle"
+        ],
+        "sourceRefs": [
+          "src-cow-bio"
+        ],
+        "externalIdentifiers": {}
+      }
+    ],
+    "claims": [
+      {
+        "candidateId": "clm-root-scope",
+        "subjectIdentityRef": "cid-root",
+        "statement": "Fixture assertion: this manufactured identity is scoped to an adult female domestic bovine.",
+        "channels": [
+          "foundry"
+        ],
+        "sourceRefs": [
+          "src-cow-bio"
+        ]
+      },
+      {
+        "candidateId": "clm-context",
+        "subjectIdentityRef": "cid-bovine-context",
+        "statement": "Fixture assertion: domestic cattle is retained as a neighbouring identity rather than merged with the root.",
+        "channels": [
+          "foundry"
+        ],
+        "sourceRefs": [
+          "src-cow-bio"
+        ]
+      }
+    ],
+    "relationships": [],
+    "evidence": [
+      {
+        "evidenceId": "ev-root",
+        "sourceRef": "src-cow-bio",
+        "supportsCandidateRef": "clm-root-scope",
+        "extract": "Synthetic fixture evidence for root scope.",
+        "locatorWithinSource": "sentence-1"
+      },
+      {
+        "evidenceId": "ev-context",
+        "sourceRef": "src-cow-bio",
+        "supportsCandidateRef": "clm-context",
+        "extract": "Synthetic fixture evidence for neighbouring identity distinction.",
+        "locatorWithinSource": "sentence-1"
+      }
+    ],
+    "states": [],
+    "events": [],
+    "languageMappings": []
+  },
+  "coverageAnswers": {
+    "q-taxonomy": "covered",
+    "q-boundary": "covered"
+  }
+}
