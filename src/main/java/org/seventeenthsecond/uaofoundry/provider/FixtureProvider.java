@@ -25,8 +25,11 @@ public final class FixtureProvider implements FoundryProvider {
     }
 
     public String name() { return "fixture"; }
+    public String kind() { return "fixture"; }
+    public String executionMode() { return "fixture"; }
     public String hash() { return hash; }
     public Path source() { return source; }
+    public Map<String, Object> snapshot() { return Json.object(Json.parse(Json.canonical(bundle)), "Fixture snapshot"); }
     public String identitySeed() { return string("identitySeed"); }
     public String fixedClock() { return string("fixedClock"); }
     public String knowledgeHorizon() { return string("knowledgeHorizon"); }
