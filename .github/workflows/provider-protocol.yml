@@ -40,7 +40,7 @@ jobs:
           EOF
           chmod +x "$provider"
 
-          first="$(java -jar target/uao-foundry-0.1.0-SNAPSHOT.jar \
+          first="$(java -jar target/uao-foundry-0.1.0.jar \
             manufacture cow \
             --provider-command "$provider" \
             --provider-timeout-seconds 10 \
@@ -51,12 +51,12 @@ jobs:
 
           job_id="$(printf '%s' "$first" | python3 -c 'import json,sys; print(json.load(sys.stdin)["jobId"])')"
           package_path="$(printf '%s' "$first" | python3 -c 'import json,sys; print(json.load(sys.stdin)["packagePath"])')"
-          java -jar target/uao-foundry-0.1.0-SNAPSHOT.jar verify "$package_path" | grep -F '"passed":true'
+          java -jar target/uao-foundry-0.1.0.jar verify "$package_path" | grep -F '"passed":true'
 
           before="$(find "$package_path" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
           rm -f "$provider"
 
-          resumed="$(java -jar target/uao-foundry-0.1.0-SNAPSHOT.jar \
+          resumed="$(java -jar target/uao-foundry-0.1.0.jar \
             resume "$job_id" \
             --work-dir .provider-work \
             --dist-dir .provider-dist \
@@ -64,7 +64,7 @@ jobs:
           printf '%s\n' "$resumed" | grep -F '"providerKind":"snapshot"'
           resumed_count="$(printf '%s' "$resumed" | python3 -c 'import json,sys; print(json.load(sys.stdin)["resumedStages"])')"
           test "$resumed_count" -ge 10
-          java -jar target/uao-foundry-0.1.0-SNAPSHOT.jar verify "$package_path" | grep -F '"passed":true'
+          java -jar target/uao-foundry-0.1.0.jar verify "$package_path" | grep -F '"passed":true'
           after="$(find "$package_path" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
           test "$before" = "$after"
 
@@ -83,7 +83,7 @@ jobs:
           PY
 
           set +e
-          output="$(java -jar target/uao-foundry-0.1.0-SNAPSHOT.jar \
+          output="$(java -jar target/uao-foundry-0.1.0.jar \
             resume "$job_id" \
             --work-dir .provider-work \
             --dist-dir .provider-dist \
