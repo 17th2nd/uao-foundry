@@ -110,12 +110,16 @@ If Claude cites a `registry://` source, the model-supplied content is discarded.
 
 A model cannot make changed text become registered evidence merely by retaining a `registry://` prefix.
 
+## Executable-provider boundary
+
+The Java Foundry accepts only an exact executable provider path. Git hosting may not preserve an executable bit for files created through repository APIs, so `scripts/manufacture-claude.sh` manufactures a temporary `0700` launcher whose only action is `exec python3 <checked-in adapter>`. This preserves the Foundry's executable-provider invariant without requiring the Python source file itself to be executable after every clone.
+
 ## Direct protocol test
 
 The adapter itself expects one protocol envelope on stdin. Most operators should not call it manually; use the Foundry scripts instead.
 
 ```bash
-cat provider-envelope.json | adapters/claude-code/claude_provider.py
+cat provider-envelope.json | python3 adapters/claude-code/claude_provider.py
 ```
 
 Stdout is reserved for exactly one JSON provider bundle. Diagnostics are written to stderr.
