@@ -1,0 +1,71 @@
+name: UAO Foundry semantic delta
+
+on:
+  push:
+    branches: ["main", "foundry/semantic-delta/**", "foundry/semantic-delta-**"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  semantic-delta:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Package executable
+        run: mvn -B -ntp clean package
+
+      - name: Seed verified registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .delta-work .delta-dist .delta-registry
+          first="$(java -jar target/uao-foundry-0.1.0-SNAPSHOT.jar manufacture cow --fixture src/test/resources/fixtures/biological-cow.json --work-dir .delta-work/seed --dist-dir .delta-dist/seed --repository-commit "$GITHUB_SHA")"
+          seed_package="$(printf '%s' "$first" | python3 -c 'import json,sys; print(json.load(sys.stdin)["packagePath"])')"
+          java -cp target/uao-foundry-0.1.0-SNAPSHOT.jar org.seventeenthsecond.uaofoundry.registry.RegistryApplication register "$seed_package" --registry .delta-registry
+          java -cp target/uao-foundry-0.1.0-SNAPSHOT.jar org.seventeenthsecond.uaofoundry.registry.RegistryApplication verify --registry .delta-registry | grep -F '"passed":true'
+
+      - name: Registry-aware reuse manufacture
+        shell: bash
+        run: |
+          set -euo pipefail
+          prior_package="$(find .delta-registry/packages -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | head -n1)"
+          python3 - "$prior_package" <<'PY'
+          import json, pathlib, sys
+          data = json.loads(pathlib.Path('src/test/resources/fixtures/biological-cow.json').read_text())
+          src = data['sources'][0]
+          src['locator'] = f"registry://{sys.argv[1]}/source-corpus/{src['sourceId']}.txt"
+          pathlib.Path('.delta-provider-bundle.json').write_text(json.dumps(data, sort_keys=True, separators=(',', ':')) + '\n')
+          PY
+
+          provider="$(mktemp)"
+          cat > "$provider" <<'EOF_PROVIDER'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          cat > .delta-provider-input.json
+          cat .delta-provider-bundle.json
+          EOF_PROVIDER
+          chmod +x "$provider"
+
+          output="$(java -cp target/uao-foundry-0.1.0-SNAPSHOT.jar org.seventeenthsecond.uaofoundry.reuse.RegistryManufactureApplication cow --provider-command "$provider" --provider-timeout-seconds 10 --registry .delta-registry --work-dir .delta-work/reuse --dist-dir .delta-dist/reuse --repository-commit "$GITHUB_SHA" --register)"
+          printf '%s\n' "$output" | grep -F '"reusedUaoCount":2'
+          printf '%s\n' "$output" | grep -F '"newUaoCount":0'
+          printf '%s\n' "$output" | grep -F '"registrySourceCount":1'
+          package_path="$(printf '%s' "$output" | python3 -c 'import json,sys; print(json.load(sys.stdin)["packagePath"])')"
+          test -f "$package_path/reuse-report.json"
+          java -jar target/uao-foundry-0.1.0-SNAPSHOT.jar verify "$package_path" | grep -F '"passed":true'
+          java -cp target/uao-foundry-0.1.0-SNAPSHOT.jar org.seventeenthsecond.uaofoundry.registry.RegistryApplication verify --registry .delta-registry | grep -F '"passed":true'
+          python3 - <<'PY'
+          import json
+          d = json.load(open('.delta-provider-input.json'))
+          assert d['registryContext']['matches']
+          assert d['constraints']['reusePreference'] == 'REUSE_VERIFIED_REGISTRY_IDENTITIES_BEFORE_NEW_ACQUISITION'
+          PY
