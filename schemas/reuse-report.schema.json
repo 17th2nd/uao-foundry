@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://17th2nd.org/uao-foundry/reuse-report.schema.json",
+  "title": "UAO Foundry Reuse Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["reportVersion", "registryContextHash", "registryIndexHash", "reusedUaos", "newUaos", "registrySources", "newSources", "counts"],
+  "properties": {
+    "reportVersion": {"const": "0.1.0"},
+    "registryContextHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "registryIndexHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "reusedUaos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["uid", "resolutionKey", "canonicalLabel", "priorOccurrences"],
+        "properties": {
+          "uid": {"type": "string", "pattern": "^uao-[a-f0-9]{12}$"},
+          "resolutionKey": {"type": "string", "minLength": 1},
+          "canonicalLabel": {"type": "string", "minLength": 1},
+          "priorOccurrences": {"type": "array", "minItems": 1, "items": {"type": "object"}}
+        }
+      }
+    },
+    "newUaos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["uid", "resolutionKey", "canonicalLabel"],
+        "properties": {
+          "uid": {"type": "string", "pattern": "^uao-[a-f0-9]{12}$"},
+          "resolutionKey": {"type": "string", "minLength": 1},
+          "canonicalLabel": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "registrySources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sourceId", "locator", "registryPackageId", "registryPath", "sha256"],
+        "properties": {
+          "sourceId": {"type": "string", "minLength": 1},
+          "locator": {"type": "string", "minLength": 1},
+          "registryPackageId": {"type": "string", "pattern": "^pkg-[a-f0-9]{16}$"},
+          "registryPath": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        }
+      }
+    },
+    "newSources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sourceId", "locator"],
+        "properties": {
+          "sourceId": {"type": "string", "minLength": 1},
+          "locator": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reusedUaoCount", "newUaoCount", "registrySourceCount", "newSourceCount"],
+      "properties": {
+        "reusedUaoCount": {"type": "integer", "minimum": 0},
+        "newUaoCount": {"type": "integer", "minimum": 0},
+        "registrySourceCount": {"type": "integer", "minimum": 0},
+        "newSourceCount": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}
