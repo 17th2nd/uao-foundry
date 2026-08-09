@@ -31,8 +31,16 @@ pass "Claude Code: $($CLAUDE_BIN --version 2>&1 | head -n1)"
 
 ADAPTER="$ROOT/adapters/claude-code/claude_provider.py"
 [[ -f "$ADAPTER" ]] || fail "Claude adapter missing: $ADAPTER"
-[[ -x "$ADAPTER" ]] || fail "Claude adapter is not executable: $ADAPTER"
-pass "Claude adapter executable"
+python3 -m py_compile "$ADAPTER" || fail "Claude adapter does not compile"
+pass "Claude adapter compiles"
+
+LAUNCHER_DIR="$(mktemp -d)"
+trap 'rm -rf "$LAUNCHER_DIR"' EXIT
+LAUNCHER="$LAUNCHER_DIR/uao-foundry-claude-provider"
+printf '#!/usr/bin/env bash\nexec python3 %q\n' "$ADAPTER" > "$LAUNCHER"
+chmod 700 "$LAUNCHER"
+[[ -x "$LAUNCHER" ]] || fail "unable to manufacture executable provider launcher"
+pass "temporary exact-executable provider launcher"
 
 [[ -f schemas/fixture-bundle.schema.json ]] || fail "provider bundle schema missing"
 [[ -f schemas/reuse-report.schema.json ]] || fail "reuse-report schema missing"
