@@ -32,12 +32,13 @@ public final class FoundryPipeline extends PackageStages {
     public FoundryPipeline(Path schemaDir, Path workDir, Path distDir, String repositoryCommit) { super(schemaDir, workDir, distDir, repositoryCommit); }
 
     public PipelineResult manufacture(ManufacturingRequest request, FoundryProvider provider, boolean resume) {
-        if (!"fixture".equals(request.executionMode())) {
-            throw new IllegalArgumentException("v0.1 live provider is not configured. Use executionMode=fixture; live manufacture fails closed.");
+        if (!request.executionMode().equals(provider.executionMode())) {
+            throw new IllegalArgumentException("Request executionMode=" + request.executionMode()
+                    + " does not match provider executionMode=" + provider.executionMode() + ".");
         }
         String normalisedRequestSeed = normalise(request.identitySeed());
         if (!normalisedRequestSeed.equals(normalise(provider.identitySeed()))) {
-            throw new IllegalArgumentException("Fixture identitySeed does not match request after normalisation.");
+            throw new IllegalArgumentException("Provider identitySeed does not match request after normalisation.");
         }
 
         Map<String, Object> jobKey = new LinkedHashMap<>();
@@ -50,8 +51,26 @@ public final class FoundryPipeline extends PackageStages {
         try { Files.createDirectories(jobDir); } catch (Exception ex) { throw new IllegalArgumentException("Unable to create job directory: " + ex.getMessage(), ex); }
         this.checkpoint = loadCheckpoint(resume);
         this.resumedStages = 0;
+
+        Path providerSnapshot = jobDir.resolve("provider-snapshot.json");
+        if (!resume) {
+            FileOps.writeJson(providerSnapshot, provider.snapshot());
+        } else if (!Files.isRegularFile(providerSnapshot)) {
+            throw new IllegalArgumentException("Provider snapshot is missing for resumed job: " + providerSnapshot);
+        }
+        if (checkpoint.containsKey("providerHash") && !provider.hash().equals(checkpoint.get("providerHash"))) {
+            throw new IllegalArgumentException("Provider snapshot hash differs from the original job provider hash.");
+        }
+        if (checkpoint.containsKey("providerExecutionMode") && !provider.executionMode().equals(checkpoint.get("providerExecutionMode"))) {
+            throw new IllegalArgumentException("Provider snapshot execution mode differs from the original job.");
+        }
+
         checkpoint.putIfAbsent("request", deepCopy(request.toMap()));
         checkpoint.putIfAbsent("providerSource", provider.source().toString());
+        checkpoint.putIfAbsent("providerKind", provider.kind());
+        checkpoint.putIfAbsent("providerName", provider.name());
+        checkpoint.putIfAbsent("providerExecutionMode", provider.executionMode());
+        checkpoint.putIfAbsent("providerSnapshot", "provider-snapshot.json");
         checkpoint.putIfAbsent("providerHash", provider.hash());
         checkpoint.putIfAbsent("repositoryCommit", repositoryCommit);
         FileOps.writeJson(jobDir.resolve("checkpoint.json"), checkpoint);
