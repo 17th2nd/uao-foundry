@@ -1,0 +1,41 @@
+name: UAO Foundry CI
+
+on:
+  push:
+    branches: ["main", "foundry/**"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Verify
+        run: mvn -B -ntp clean verify
+
+      - name: Package
+        run: mvn -B -ntp package
+
+      - name: Cross-domain smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          for seed in "cow" "hydrogen" "granite" "Certificate III Electrotechnology"; do
+            output="$(java -jar target/uao-foundry-0.1.0-SNAPSHOT.jar manufacture --identity "$seed")"
+            printf '%s\n' "$output" | grep -F '"phase":"REQUEST_ACCEPTED"'
+            printf '%s\n' "$output" | grep -F '"publicationStatus":"NOT_PUBLISHED"'
+            printf '%s\n' "$output" | grep -F "\"identitySeed\":\"$seed\""
+          done

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://17th2nd.github.io/uao-foundry/schemas/canonical-uao.schema.json",
+  "title": "Canonical UAO Envelope",
+  "type": "object",
+  "required": ["schemaVersion", "uaoId", "identity", "relationships", "provenance", "coverage", "unresolvedItems", "status"],
+  "properties": {
+    "schemaVersion": {"type": "string", "const": "0.1.0"},
+    "uaoId": {"type": "string", "minLength": 1},
+    "identity": {
+      "type": "object",
+      "required": ["canonicalLabel"],
+      "properties": {
+        "canonicalLabel": {"type": "string", "minLength": 1},
+        "aliases": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "relationships": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["relationshipId", "type", "bindings"],
+        "properties": {
+          "relationshipId": {"type": "string", "minLength": 1},
+          "type": {"type": "string", "minLength": 1},
+          "bindings": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "required": ["role", "semanticIdentity"],
+              "properties": {
+                "role": {"type": "string", "minLength": 1},
+                "semanticIdentity": {"type": "string", "minLength": 1}
+              },
+              "additionalProperties": false
+            }
+          },
+          "evidenceRefs": {
+            "type": "array",
+            "items": {"type": "string"},
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "provenance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sourceId", "locator"],
+        "properties": {
+          "sourceId": {"type": "string", "minLength": 1},
+          "locator": {"type": "string", "minLength": 1},
+          "retrievedAt": {"type": "string", "format": "date-time"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "properties": {
+        "dimensions": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "notes": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "unresolvedItems": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "description"],
+        "properties": {
+          "code": {"type": "string", "minLength": 1},
+          "description": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["EXPERIMENTAL", "VERIFIED", "REJECTED", "SUPERSEDED"]
+    }
+  },
+  "additionalProperties": false
+}
