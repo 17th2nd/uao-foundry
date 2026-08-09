@@ -49,6 +49,7 @@ class PackageStages extends CanonicalStages {
 
         FileOps.writeJson(packageDir.resolve("manufacturing-job.json"), finalJob);
         FileOps.writeJson(packageDir.resolve("manufacturing-request.json"), request.toMap());
+        FileOps.writeJson(packageDir.resolve("provider-snapshot.json"), FileOps.readJson(jobDir.resolve("provider-snapshot.json")));
         FileOps.writeJson(packageDir.resolve("identity-seed.json"), seed);
         FileOps.writeJson(packageDir.resolve("interpretation-candidates.json"), interpretations);
         FileOps.writeJson(packageDir.resolve("scope-resolution.json"), scope);

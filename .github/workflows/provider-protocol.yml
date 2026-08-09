@@ -1,0 +1,94 @@
+name: UAO Foundry provider protocol
+
+on:
+  push:
+    branches: ["main", "foundry/provider-protocol/**", "foundry/provider-protocol-**"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  provider-protocol:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Package executable
+        run: mvn -B -ntp clean package
+
+      - name: Live provider manufacture and snapshot-only resume
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .provider-work .provider-dist
+          provider="$(mktemp)"
+          cat > "$provider" <<EOF
+          #!/usr/bin/env bash
+          set -euo pipefail
+          cat >/dev/null
+          cat "$GITHUB_WORKSPACE/src/test/resources/fixtures/biological-cow.json"
+          EOF
+          chmod +x "$provider"
+
+          first="$(java -jar target/uao-foundry-0.1.0-SNAPSHOT.jar \
+            manufacture cow \
+            --provider-command "$provider" \
+            --provider-timeout-seconds 10 \
+            --work-dir .provider-work \
+            --dist-dir .provider-dist \
+            --repository-commit "$GITHUB_SHA")"
+          printf '%s\n' "$first" | grep -F '"providerKind":"command"'
+
+          job_id="$(printf '%s' "$first" | python3 -c 'import json,sys; print(json.load(sys.stdin)["jobId"])')"
+          package_path="$(printf '%s' "$first" | python3 -c 'import json,sys; print(json.load(sys.stdin)["packagePath"])')"
+          java -jar target/uao-foundry-0.1.0-SNAPSHOT.jar verify "$package_path" | grep -F '"passed":true'
+
+          before="$(find "$package_path" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
+          rm -f "$provider"
+
+          resumed="$(java -jar target/uao-foundry-0.1.0-SNAPSHOT.jar \
+            resume "$job_id" \
+            --work-dir .provider-work \
+            --dist-dir .provider-dist \
+            --repository-commit "$GITHUB_SHA")"
+          printf '%s\n' "$resumed" | grep -F '"providerKind":"snapshot"'
+          resumed_count="$(printf '%s' "$resumed" | python3 -c 'import json,sys; print(json.load(sys.stdin)["resumedStages"])')"
+          test "$resumed_count" -ge 10
+          java -jar target/uao-foundry-0.1.0-SNAPSHOT.jar verify "$package_path" | grep -F '"passed":true'
+          after="$(find "$package_path" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
+          test "$before" = "$after"
+
+      - name: Provider snapshot tamper negative control
+        shell: bash
+        run: |
+          set -euo pipefail
+          job_id="$(find .provider-work -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | head -n1)"
+          snapshot=".provider-work/$job_id/provider-snapshot.json"
+          python3 - "$snapshot" <<'PY'
+          import json, pathlib, sys
+          path = pathlib.Path(sys.argv[1])
+          data = json.loads(path.read_text())
+          data["identitySeed"] = "tampered identity"
+          path.write_text(json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n")
+          PY
+
+          set +e
+          output="$(java -jar target/uao-foundry-0.1.0-SNAPSHOT.jar \
+            resume "$job_id" \
+            --work-dir .provider-work \
+            --dist-dir .provider-dist \
+            --repository-commit "$GITHUB_SHA" 2>&1)"
+          rc=$?
+          set -e
+          test "$rc" -ne 0
+          printf '%s\n' "$output" | grep -F 'Provider snapshot hash differs from the original job provider hash.'

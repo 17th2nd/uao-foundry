@@ -48,6 +48,18 @@ public final class PackageVerifier {
             collectForbidden(manufactured, "$", errors);
             checks.add("ASA_FORBIDDEN_FIELDS");
         }
+        Path providerSnapshot = packageDir.resolve("provider-snapshot.json");
+        if (!Files.isRegularFile(providerSnapshot)) {
+            errors.add("provider-snapshot.json is missing");
+        } else {
+            try {
+                Object snapshot = FileOps.readJson(providerSnapshot);
+                errors.addAll(prefix(validator.validate(snapshot, schemaDir.resolve("fixture-bundle.schema.json")).errors(), "provider-snapshot: "));
+                checks.add("PROVIDER_SNAPSHOT_SCHEMA");
+            } catch (IllegalArgumentException ex) {
+                errors.add("provider-snapshot: " + ex.getMessage());
+            }
+        }
         if (manifest != null && manufactured != null) {
             if (!manifest.get("rootUaoId").equals(manufactured.get("rootUaoId"))) errors.add("Manifest rootUaoId differs from manufactured package.");
             Map<String, Object> pub = object(manufactured.get("publicationDecision"), "publicationDecision", errors);

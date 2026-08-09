@@ -6,7 +6,10 @@ import org.seventeenthsecond.uaofoundry.json.Json;
 import org.seventeenthsecond.uaofoundry.model.ManufacturingRequest;
 import org.seventeenthsecond.uaofoundry.pipeline.FoundryPipeline;
 import org.seventeenthsecond.uaofoundry.pipeline.PipelineResult;
+import org.seventeenthsecond.uaofoundry.provider.CommandProvider;
 import org.seventeenthsecond.uaofoundry.provider.FixtureProvider;
+import org.seventeenthsecond.uaofoundry.provider.FoundryProvider;
+import org.seventeenthsecond.uaofoundry.provider.SnapshotProvider;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
 import org.seventeenthsecond.uaofoundry.validation.ValidationResult;
 import org.seventeenthsecond.uaofoundry.verifier.PackageVerifier;
@@ -14,6 +17,7 @@ import org.seventeenthsecond.uaofoundry.verifier.PackageVerifier;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -22,6 +26,7 @@ import java.util.Map;
 
 public final class FoundryApplication {
     private static final String FOUNDRY_VERSION = FoundryPipeline.FOUNDRY_VERSION;
+    private static final long DEFAULT_PROVIDER_TIMEOUT_SECONDS = 300L;
 
     private final PrintStream out;
     private final PrintStream err;
@@ -39,7 +44,7 @@ public final class FoundryApplication {
         String command = args[0];
         String[] commandArgs = Arrays.copyOfRange(args, 1, args.length);
         return switch (command) {
-            case "manufacture" -> manufacture(commandArgs, false);
+            case "manufacture" -> manufacture(commandArgs);
             case "validate-request" -> validateRequest(commandArgs);
             case "interpret" -> interpret(commandArgs);
             case "status" -> status(commandArgs);
@@ -51,27 +56,28 @@ public final class FoundryApplication {
         };
     }
 
-    private int manufacture(String[] args, boolean resume) {
+    private int manufacture(String[] args) {
         try {
             Arguments parsed = Arguments.parse(args);
             Path schemaDir = path(parsed, "--schema-dir", "schemas");
             Path workDir = path(parsed, "--work-dir", "work");
             Path distDir = path(parsed, "--dist-dir", "dist");
             RequestLoader loader = new RequestLoader(schemaDir.resolve("manufacturing-request.schema.json"));
+            String selectedMode = selectedProviderMode(parsed, true);
             ManufacturingRequest request;
             if (parsed.optional("--request").isPresent()) {
                 if (!parsed.positionals().isEmpty() || parsed.optional("--identity").isPresent()) throw new IllegalArgumentException("--request cannot be combined with an identity seed.");
                 request = loader.fromFile(Path.of(parsed.required("--request")));
             } else {
-                request = loader.fromSeed(parsed.identitySeed(), parsed.optional("--language").orElse(null), parsed.optional("--profile").orElse(null));
+                request = loader.fromSeed(parsed.identitySeed(), parsed.optional("--language").orElse(null), parsed.optional("--profile").orElse(null), selectedMode);
             }
-            String fixtureArg = parsed.optional("--fixture").orElseThrow(() -> new IllegalArgumentException(
-                    "Full v0.1 manufacture requires a provider. Use --fixture <bundle.json>. Live/AI adapters are intentionally fail-closed until configured."));
-            FixtureProvider provider = new FixtureProvider(Path.of(fixtureArg), schemaDir);
+            FoundryProvider provider = createProvider(parsed, request, schemaDir);
             FoundryPipeline pipeline = new FoundryPipeline(schemaDir, workDir, distDir, repositoryCommit(parsed));
-            PipelineResult result = pipeline.manufacture(request, provider, resume);
+            PipelineResult result = pipeline.manufacture(request, provider, false);
             Map<String,Object> response = new LinkedHashMap<>();
             response.put("foundryVersion", FOUNDRY_VERSION);
+            response.put("provider", provider.name());
+            response.put("providerKind", provider.kind());
             response.put("phase", "PACKAGE_MANUFACTURED");
             response.putAll(result.toMap());
             out.println(Json.canonical(response));
@@ -103,15 +109,21 @@ public final class FoundryApplication {
             Map<String,Object> response = new LinkedHashMap<>();
             response.put("identitySeed", seed);
             response.put("normalisedExpression", seed.strip().replaceAll("\\s+", " ").toLowerCase(java.util.Locale.ROOT));
-            if (parsed.optional("--fixture").isEmpty()) {
+            boolean hasFixture = parsed.optional("--fixture").isPresent();
+            boolean hasCommand = parsed.optional("--provider-command").isPresent();
+            if (!hasFixture && !hasCommand) {
                 response.put("status", "PROVIDER_REQUIRED");
                 response.put("interpretations", List.of());
                 response.put("publicationStatus", "NOT_PUBLISHED");
             } else {
                 Path schemaDir = path(parsed, "--schema-dir", "schemas");
-                FixtureProvider provider = new FixtureProvider(Path.of(parsed.required("--fixture")), schemaDir);
+                String selectedMode = selectedProviderMode(parsed, true);
+                RequestLoader loader = new RequestLoader(schemaDir.resolve("manufacturing-request.schema.json"));
+                ManufacturingRequest request = loader.fromSeed(seed, parsed.optional("--language").orElse(null), parsed.optional("--profile").orElse(null), selectedMode);
+                FoundryProvider provider = createProvider(parsed, request, schemaDir);
                 response.put("status", "INTERPRETATIONS_AVAILABLE");
                 response.put("provider", provider.name());
+                response.put("providerKind", provider.kind());
                 response.put("interpretations", provider.interpretations());
                 response.put("scopeResolution", provider.scopeResolution());
                 response.put("publicationStatus", "NOT_PUBLISHED");
@@ -131,6 +143,9 @@ public final class FoundryApplication {
             Map<String,Object> cp = Json.object(FileOps.readJson(checkpoint), "checkpoint");
             Map<String,Object> response = new LinkedHashMap<>();
             response.put("jobId", cp.get("jobId"));
+            response.put("providerName", cp.get("providerName"));
+            response.put("providerKind", cp.get("providerKind"));
+            response.put("providerExecutionMode", cp.get("providerExecutionMode"));
             Object completed = cp.get("completed");
             response.put("completedStages", completed instanceof Map<?,?> m ? new java.math.BigDecimal(m.size()) : java.math.BigDecimal.ZERO);
             Path packageStage = jobDir.resolve("16-package-manufacture.json");
@@ -148,19 +163,32 @@ public final class FoundryApplication {
             Path schemaDir = path(parsed, "--schema-dir", "schemas");
             Path workDir = path(parsed, "--work-dir", "work");
             Path distDir = path(parsed, "--dist-dir", "dist");
-            Map<String,Object> cp = Json.object(FileOps.readJson(workDir.resolve(requestedJobId).resolve("checkpoint.json")), "checkpoint");
+            Path jobDir = workDir.resolve(requestedJobId).toAbsolutePath().normalize();
+            Map<String,Object> cp = Json.object(FileOps.readJson(jobDir.resolve("checkpoint.json")), "checkpoint");
             Map<String,Object> requestMap = Json.object(cp.get("request"), "checkpoint request");
             RequestLoader loader = new RequestLoader(schemaDir.resolve("manufacturing-request.schema.json"));
             ManufacturingRequest request = loader.fromObject(requestMap);
-            String providerSource = requiredString(cp.get("providerSource"), "checkpoint providerSource");
-            FixtureProvider provider = new FixtureProvider(Path.of(providerSource), schemaDir);
+            String providerSnapshot = requiredString(cp.get("providerSnapshot"), "checkpoint providerSnapshot");
+            Path snapshotPath = jobDir.resolve(providerSnapshot).normalize();
+            if (!snapshotPath.startsWith(jobDir)) throw new IllegalArgumentException("Provider snapshot path escapes the job directory.");
+            String providerName = requiredString(cp.get("providerName"), "checkpoint providerName");
+            String providerMode = requiredString(cp.get("providerExecutionMode"), "checkpoint providerExecutionMode");
+            String expectedProviderHash = requiredString(cp.get("providerHash"), "checkpoint providerHash");
+            FoundryProvider provider = new SnapshotProvider(snapshotPath, schemaDir, providerName, providerMode);
+            if (!expectedProviderHash.equals(provider.hash())) {
+                throw new IllegalArgumentException("Provider snapshot hash differs from the original job provider hash.");
+            }
             String originalCommit = cp.get("repositoryCommit") instanceof String saved ? saved : "UNPINNED";
             String resumeCommit = parsed.optional("--repository-commit").orElse(originalCommit);
             FoundryPipeline pipeline = new FoundryPipeline(schemaDir, workDir, distDir, resumeCommit);
             PipelineResult result = pipeline.manufacture(request, provider, true);
             if (!requestedJobId.equals(result.jobId())) throw new IllegalArgumentException("Checkpoint job id does not match recomputed deterministic job id.");
             Map<String,Object> response = new LinkedHashMap<>();
-            response.put("foundryVersion", FOUNDRY_VERSION); response.put("phase", "JOB_RESUMED"); response.putAll(result.toMap());
+            response.put("foundryVersion", FOUNDRY_VERSION);
+            response.put("provider", provider.name());
+            response.put("providerKind", "snapshot");
+            response.put("phase", "JOB_RESUMED");
+            response.putAll(result.toMap());
             out.println(Json.canonical(response));
             return successfulStatus(result.publicationStatus()) && result.verificationPassed() ? 0 : 4;
         } catch (IllegalArgumentException ex) { err.println(ex.getMessage()); return 2; }
@@ -195,6 +223,39 @@ public final class FoundryApplication {
         } catch (IllegalArgumentException ex) { err.println(ex.getMessage()); return 2; }
     }
 
+    private FoundryProvider createProvider(Arguments parsed, ManufacturingRequest request, Path schemaDir) {
+        String mode = selectedProviderMode(parsed, true);
+        if ("fixture".equals(mode)) return new FixtureProvider(Path.of(parsed.required("--fixture")), schemaDir);
+        long timeoutSeconds = parsed.optional("--provider-timeout-seconds")
+                .map(this::parseTimeout)
+                .orElse(DEFAULT_PROVIDER_TIMEOUT_SECONDS);
+        return new CommandProvider(Path.of(parsed.required("--provider-command")), request, schemaDir, Duration.ofSeconds(timeoutSeconds));
+    }
+
+    private String selectedProviderMode(Arguments parsed, boolean required) {
+        boolean fixture = parsed.optional("--fixture").isPresent();
+        boolean command = parsed.optional("--provider-command").isPresent();
+        if (fixture && command) throw new IllegalArgumentException("Use exactly one provider: --fixture or --provider-command, not both.");
+        if (!fixture && !command) {
+            if (required) throw new IllegalArgumentException("Full manufacture requires a provider: --fixture <bundle.json> or --provider-command <executable>.");
+            return null;
+        }
+        if (fixture && parsed.optional("--provider-timeout-seconds").isPresent()) {
+            throw new IllegalArgumentException("--provider-timeout-seconds is only valid with --provider-command.");
+        }
+        return fixture ? "fixture" : "live";
+    }
+
+    private long parseTimeout(String value) {
+        try {
+            long seconds = Long.parseLong(value);
+            if (seconds < 1 || seconds > 3600) throw new IllegalArgumentException("Provider timeout must be between 1 and 3600 seconds.");
+            return seconds;
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("--provider-timeout-seconds must be an integer between 1 and 3600.");
+        }
+    }
+
     private String repositoryCommit(Arguments parsed) {
         return parsed.optional("--repository-commit").orElseGet(() -> {
             String sha = System.getenv("GITHUB_SHA");
@@ -209,10 +270,11 @@ public final class FoundryApplication {
     private void printUsage() {
         out.println("UAO Foundry " + FOUNDRY_VERSION);
         out.println("Usage:");
-        out.println("  uao-foundry manufacture <identity-seed> --fixture <bundle.json> [--work-dir work] [--dist-dir dist]");
-        out.println("  uao-foundry manufacture --request <request.json> --fixture <bundle.json>");
+        out.println("  uao-foundry manufacture <identity-seed> --fixture <bundle.json>");
+        out.println("  uao-foundry manufacture <identity-seed> --provider-command <executable> [--provider-timeout-seconds 300]");
+        out.println("  uao-foundry manufacture --request <request.json> (--fixture <bundle.json> | --provider-command <executable>)");
         out.println("  uao-foundry validate-request <request.json>");
-        out.println("  uao-foundry interpret <identity-seed> [--fixture <bundle.json>]");
+        out.println("  uao-foundry interpret <identity-seed> [--fixture <bundle.json> | --provider-command <executable>]");
         out.println("  uao-foundry status <job-id> [--work-dir work]");
         out.println("  uao-foundry resume <job-id> [--work-dir work] [--dist-dir dist]");
         out.println("  uao-foundry verify <package-path>");

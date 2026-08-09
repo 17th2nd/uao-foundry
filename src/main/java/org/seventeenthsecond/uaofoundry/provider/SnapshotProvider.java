@@ -9,31 +9,37 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-/** Deterministic offline provider. Identity-specific material is fixture data, never core logic. */
-public final class FixtureProvider implements FoundryProvider {
+/** Replays a captured provider bundle during resume without invoking the original provider again. */
+public final class SnapshotProvider implements FoundryProvider {
     private final Path source;
     private final Map<String, Object> bundle;
     private final String hash;
+    private final String name;
+    private final String executionMode;
 
-    public FixtureProvider(Path source, Path schemaDir) {
-        this.source = source.toAbsolutePath().normalize();
+    public SnapshotProvider(Path snapshot, Path schemaDir, String providerName, String executionMode) {
+        this.source = snapshot.toAbsolutePath().normalize();
         Object parsed = FileOps.readJson(this.source);
         new SchemaValidator().validate(parsed, schemaDir.resolve("fixture-bundle.schema.json"))
-                .requireValid("Fixture provider bundle");
-        this.bundle = Json.object(parsed, "Fixture bundle");
+                .requireValid("Provider snapshot bundle");
+        this.bundle = Json.object(parsed, "Provider snapshot bundle");
         this.hash = Hashes.canonicalJson(bundle);
+        this.name = providerName == null || providerName.isBlank() ? "snapshot" : providerName;
+        if (!"fixture".equals(executionMode) && !"live".equals(executionMode)) {
+            throw new IllegalArgumentException("Snapshot provider executionMode must be fixture or live.");
+        }
+        this.executionMode = executionMode;
     }
 
-    public String name() { return "fixture"; }
-    public String kind() { return "fixture"; }
-    public String executionMode() { return "fixture"; }
+    public String name() { return name; }
+    public String kind() { return "snapshot"; }
+    public String executionMode() { return executionMode; }
     public String hash() { return hash; }
     public Path source() { return source; }
-    public Map<String, Object> snapshot() { return Json.object(Json.parse(Json.canonical(bundle)), "Fixture snapshot"); }
+    public Map<String, Object> snapshot() { return Json.object(Json.parse(Json.canonical(bundle)), "Provider snapshot"); }
     public String identitySeed() { return string("identitySeed"); }
     public String fixedClock() { return string("fixedClock"); }
     public String knowledgeHorizon() { return string("knowledgeHorizon"); }
-
     @SuppressWarnings("unchecked") public List<Object> interpretations() { return (List<Object>) bundle.get("interpretations"); }
     public Map<String, Object> scopeResolution() { return Json.object(bundle.get("scopeResolution"), "scopeResolution"); }
     public Map<String, Object> manufacturingPlan() { return Json.object(bundle.get("manufacturingPlan"), "manufacturingPlan"); }
@@ -45,6 +51,6 @@ public final class FixtureProvider implements FoundryProvider {
     private String string(String key) {
         Object value = bundle.get(key);
         if (value instanceof String s) return s;
-        throw new IllegalArgumentException("Fixture field must be string: " + key);
+        throw new IllegalArgumentException("Provider snapshot field must be string: " + key);
     }
 }

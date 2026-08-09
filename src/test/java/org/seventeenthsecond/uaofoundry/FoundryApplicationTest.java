@@ -49,6 +49,7 @@ class FoundryApplicationTest {
             assertEquals("EXPERIMENTAL", result.publicationStatus());
             assertTrue(result.verificationPassed());
             assertTrue(new PackageVerifier(SCHEMAS).verify(result.packagePath()).passed());
+            assertTrue(Files.isRegularFile(result.packagePath().resolve("provider-snapshot.json")));
             rootIds.add(result.rootUaoId());
 
             Object plan = FileOps.readJson(result.packagePath().resolve("manufacturing-plan.json"));
@@ -79,6 +80,83 @@ class FoundryApplicationTest {
     }
 
     @Test
+    void commandProviderIsCapturedAndResumeDoesNotReinvokeDeletedCommand() throws Exception {
+        Path work = temp.resolve("command-work");
+        Path dist = temp.resolve("command-dist");
+        Path command = providerScript(FIXTURES.resolve("biological-cow.json"));
+
+        ByteArrayOutputStream firstOut = new ByteArrayOutputStream();
+        ByteArrayOutputStream firstErr = new ByteArrayOutputStream();
+        FoundryApplication firstApp = new FoundryApplication(new PrintStream(firstOut), new PrintStream(firstErr));
+        int firstExit = firstApp.run(new String[]{
+                "manufacture", "cow", "--provider-command", command.toString(),
+                "--provider-timeout-seconds", "10", "--work-dir", work.toString(), "--dist-dir", dist.toString(),
+                "--repository-commit", "test-sha"
+        });
+        assertEquals(0, firstExit, firstErr.toString(StandardCharsets.UTF_8));
+        Map<String,Object> first = Json.object(Json.parse(firstOut.toString(StandardCharsets.UTF_8)), "command manufacture output");
+        assertEquals("command", first.get("providerKind"));
+        String jobId = (String) first.get("jobId");
+        Path packagePath = Path.of((String) first.get("packagePath"));
+        String firstHash = FileOps.treeHash(packagePath);
+        assertTrue(Files.isRegularFile(work.resolve(jobId).resolve("provider-snapshot.json")));
+
+        Files.delete(command);
+        ByteArrayOutputStream resumeOut = new ByteArrayOutputStream();
+        ByteArrayOutputStream resumeErr = new ByteArrayOutputStream();
+        FoundryApplication resumeApp = new FoundryApplication(new PrintStream(resumeOut), new PrintStream(resumeErr));
+        int resumeExit = resumeApp.run(new String[]{
+                "resume", jobId, "--work-dir", work.toString(), "--dist-dir", dist.toString(),
+                "--repository-commit", "test-sha"
+        });
+        assertEquals(0, resumeExit, resumeErr.toString(StandardCharsets.UTF_8));
+        Map<String,Object> resumed = Json.object(Json.parse(resumeOut.toString(StandardCharsets.UTF_8)), "resume output");
+        assertEquals("snapshot", resumed.get("providerKind"));
+        assertTrue(((java.math.BigDecimal) resumed.get("resumedStages")).intValue() >= 10);
+        assertEquals(firstHash, FileOps.treeHash(Path.of((String) resumed.get("packagePath"))));
+    }
+
+    @Test
+    void failedCommandProviderFailsClosed() throws Exception {
+        Path command = temp.resolve("failed-provider.sh");
+        Files.writeString(command, "#!/usr/bin/env sh\ncat >/dev/null\necho provider-failed >&2\nexit 7\n", StandardCharsets.UTF_8);
+        assertTrue(command.toFile().setExecutable(true));
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+        FoundryApplication app = new FoundryApplication(new PrintStream(stdout), new PrintStream(stderr));
+        int exit = app.run(new String[]{"manufacture", "cow", "--provider-command", command.toString(), "--provider-timeout-seconds", "10"});
+        assertEquals(2, exit);
+        assertTrue(stderr.toString(StandardCharsets.UTF_8).contains("exited 7"));
+        assertTrue(stderr.toString(StandardCharsets.UTF_8).contains("provider-failed"));
+    }
+
+    @Test
+    void tamperedProviderSnapshotCannotResume() throws Exception {
+        Path work = temp.resolve("snapshot-work");
+        Path dist = temp.resolve("snapshot-dist");
+        ByteArrayOutputStream firstOut = new ByteArrayOutputStream();
+        ByteArrayOutputStream firstErr = new ByteArrayOutputStream();
+        FoundryApplication app = new FoundryApplication(new PrintStream(firstOut), new PrintStream(firstErr));
+        int firstExit = app.run(new String[]{
+                "manufacture", "cow", "--fixture", FIXTURES.resolve("biological-cow.json").toString(),
+                "--work-dir", work.toString(), "--dist-dir", dist.toString(), "--repository-commit", "test-sha"
+        });
+        assertEquals(0, firstExit, firstErr.toString(StandardCharsets.UTF_8));
+        Map<String,Object> first = Json.object(Json.parse(firstOut.toString(StandardCharsets.UTF_8)), "fixture output");
+        String jobId = (String) first.get("jobId");
+        Path snapshot = work.resolve(jobId).resolve("provider-snapshot.json");
+        Map<String,Object> snapshotJson = Json.object(FileOps.readJson(snapshot), "provider snapshot");
+        snapshotJson.put("identitySeed", "tampered identity");
+        FileOps.writeJson(snapshot, snapshotJson);
+
+        ByteArrayOutputStream resumeErr = new ByteArrayOutputStream();
+        int resumeExit = new FoundryApplication(new PrintStream(new ByteArrayOutputStream()), new PrintStream(resumeErr))
+                .run(new String[]{"resume", jobId, "--work-dir", work.toString(), "--dist-dir", dist.toString(), "--repository-commit", "test-sha"});
+        assertEquals(2, resumeExit);
+        assertTrue(resumeErr.toString(StandardCharsets.UTF_8).contains("hash differs"));
+    }
+
+    @Test
     void tamperedSourceSnapshotFailsPackageVerification() throws Exception {
         PipelineResult result = run("granite", "material-granite.json", temp.resolve("work"), temp.resolve("dist"), false);
         Path snapshot;
@@ -97,7 +175,10 @@ class FoundryApplicationTest {
         RequestLoader loader = new RequestLoader(SCHEMAS.resolve("manufacturing-request.schema.json"));
         ManufacturingRequest first = loader.fromSeed("cow", "en", "experimental");
         ManufacturingRequest second = loader.fromSeed("cow", "en", "experimental");
+        ManufacturingRequest live = loader.fromSeed("cow", "en", "experimental", "live");
         assertEquals(first.requestId(), second.requestId());
+        assertNotEquals(first.requestId(), live.requestId());
+        assertEquals("live", live.executionMode());
         assertThrows(IllegalArgumentException.class, () -> loader.fromObject(Map.of("identitySeed", "cow", "invented", "no")));
     }
 
@@ -164,5 +245,14 @@ class FoundryApplicationTest {
         ManufacturingRequest request = loader.fromSeed(seed, "en", "experimental");
         FixtureProvider provider = new FixtureProvider(FIXTURES.resolve(fixture), SCHEMAS);
         return new FoundryPipeline(SCHEMAS, work, dist, "test-sha").manufacture(request, provider, resume);
+    }
+
+    private Path providerScript(Path fixture) throws Exception {
+        Path command = temp.resolve("provider.sh");
+        String safePath = fixture.toAbsolutePath().normalize().toString().replace("'", "'\"'\"'");
+        String script = "#!/usr/bin/env sh\ncat >/dev/null\ncat '" + safePath + "'\n";
+        Files.writeString(command, script, StandardCharsets.UTF_8);
+        assertTrue(command.toFile().setExecutable(true));
+        return command;
     }
 }

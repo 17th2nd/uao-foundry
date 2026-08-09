@@ -7,8 +7,11 @@ import java.util.Map;
 /** Provider boundary for identity-specific interpretation, planning, sources and candidates. */
 public interface FoundryProvider {
     String name();
+    String kind();
+    String executionMode();
     String hash();
     Path source();
+    Map<String, Object> snapshot();
     String identitySeed();
     String fixedClock();
     String knowledgeHorizon();
