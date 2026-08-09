@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://17th2nd.github.io/uao-foundry/schemas/canonical-uro.schema.json",
+  "$comment": "Foundry publication profile over the non-authoritative ASA URO validation projection. Required-field policy belongs to UAO Foundry and does not amend ASA CSS.",
+  "allOf": [
+    {"$ref": "asa/uro.schema.json"},
+    {"required": ["uid", "identity", "participants", "identity_literals", "contextual_bindings"]}
+  ]
+}

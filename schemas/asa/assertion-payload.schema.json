@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://17th2nd.github.io/uao-foundry/schemas/asa/assertion-payload.schema.json",
+  "$comment": "Non-authoritative validation projection of ASA CSS 2026.1 shared_types.assertion_payload at ASA main 908c5255fb3144c2a2e3f48c993d031e347d1695. epistemic_class vocabulary remains DEFERRED_ON_RECORD to ASA-SPEC-0003; this schema does not mint a normative vocabulary.",
+  "type": "object",
+  "required": ["statement", "epistemic_class", "channels"],
+  "properties": {
+    "statement": {"type": "string"},
+    "epistemic_class": {
+      "type": "string",
+      "not": {"enum": ["Unevaluated", "Endorsed", "Disputed", "Rejected"]}
+    },
+    "channels": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

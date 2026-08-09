@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UAO Foundry Manufacturing Job",
+  "type": "object",
+  "required": ["jobId", "requestId", "foundryVersion", "repositoryCommit", "provider", "providerHash", "startedAt", "stageStatus", "configurationHash"],
+  "properties": {
+    "jobId": {"type": "string", "pattern": "^job-[a-f0-9]{16}$"},
+    "requestId": {"type": "string", "pattern": "^req-[a-f0-9]{16}$"},
+    "foundryVersion": {"type": "string", "minLength": 1},
+    "repositoryCommit": {"type": "string", "minLength": 1},
+    "provider": {"type": "string", "minLength": 1},
+    "providerHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "startedAt": {"type": "string", "format": "date-time"},
+    "configurationHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "stageStatus": {"type": "object", "additionalProperties": {"type": "string", "enum": ["PENDING", "COMPLETE", "FAILED", "QUARANTINED"]}},
+    "resourceLimits": {"type": "object", "additionalProperties": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

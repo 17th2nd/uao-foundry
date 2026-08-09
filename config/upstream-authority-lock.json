@@ -1,0 +1,12 @@
+{
+  "recordType": "UPSTREAM_AUTHORITY_POINTER",
+  "authorityCreatedHere": false,
+  "asaRepository": "17th2nd/ASA",
+  "asaMainCommitReviewed": "908c5255fb3144c2a2e3f48c993d031e347d1695",
+  "canonicalSpecificationSource": "specification/core/canonical_source.json",
+  "canonicalSchemaVersion": "2026.1",
+  "compilerSpecification": "00_Governance/Specifications/ASA-SPEC-0004_Compiler_Specification_v0.1.md",
+  "relationshipArchitecture": "00_Governance/ADR/ADR-002_Relationship_Ontology_and_Ownership.md",
+  "relationshipTypeRoleAuthority": "NOT_FOUND_IN_CURRENT_CSS_AUTHORITY_SURFACE",
+  "rule": "ASA source authority governs; this pointer is evidence/provenance only and must be refreshed when upstream authority changes."
+}

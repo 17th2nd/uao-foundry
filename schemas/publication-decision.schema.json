@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UAO Foundry Publication Decision",
+  "type": "object",
+  "required": ["status", "eligible", "reasons"],
+  "properties": {
+    "status": {"type": "string", "enum": ["FAILED", "QUARANTINED", "INTERPRETATION_UNRESOLVED", "EXPERIMENTAL", "STRUCTURALLY_COMPLETE", "EVIDENCE_INCOMPLETE", "VALIDATED_RELEASE"]},
+    "eligible": {"type": "boolean"},
+    "reasons": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UAO Foundry Scope Resolution",
+  "type": "object",
+  "required": ["selectedInterpretation", "scopeStatus", "canonicalWorkingLabel", "includedBoundaries", "excludedBoundaries", "excludedInterpretations", "unresolvedQuestions"],
+  "properties": {
+    "selectedInterpretation": {"type": "string", "minLength": 1},
+    "scopeStatus": {"type": "string", "enum": ["FIXTURE_SELECTED", "USER_SELECTED", "MACHINE_SELECTED_EXPERIMENTAL", "REQUIRES_SELECTION"]},
+    "canonicalWorkingLabel": {"type": "string", "minLength": 1},
+    "includedBoundaries": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "excludedBoundaries": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "excludedInterpretations": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "unresolvedQuestions": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+  },
+  "additionalProperties": false
+}

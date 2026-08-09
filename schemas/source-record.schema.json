@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UAO Foundry Source Record",
+  "type": "object",
+  "required": ["sourceId", "locator", "sourceClass", "retrievedAt", "license", "sha256", "snapshotPath"],
+  "properties": {
+    "sourceId": {"type": "string", "pattern": "^src-[a-z0-9._-]+$"},
+    "locator": {"type": "string", "minLength": 1},
+    "sourceClass": {"type": "string", "minLength": 1},
+    "retrievedAt": {"type": "string", "format": "date-time"},
+    "license": {"type": "string", "minLength": 1},
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "snapshotPath": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": false
+}

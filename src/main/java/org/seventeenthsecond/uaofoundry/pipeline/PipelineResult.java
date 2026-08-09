@@ -1,0 +1,18 @@
+package org.seventeenthsecond.uaofoundry.pipeline;
+
+import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+public record PipelineResult(String jobId, Path packagePath, String publicationStatus, String rootUaoId, boolean verificationPassed, int resumedStages) {
+    public Map<String, Object> toMap() {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("jobId", jobId);
+        out.put("packagePath", packagePath.toString());
+        out.put("publicationStatus", publicationStatus);
+        out.put("rootUaoId", rootUaoId);
+        out.put("verificationPassed", verificationPassed);
+        out.put("resumedStages", resumedStages);
+        return out;
+    }
+}

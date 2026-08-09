@@ -6,13 +6,15 @@
 
     <groupId>org.seventeenthsecond</groupId>
     <artifactId>uao-foundry</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <name>UAO Foundry</name>
     <description>Domain-independent Universal ASA Object manufacturing pipeline.</description>
 
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <project.build.outputTimestamp>2026-08-09T00:00:00Z</project.build.outputTimestamp>
         <junit.version>5.11.4</junit.version>
     </properties>
 
@@ -36,6 +38,9 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
+                <configuration>
+                    <useModulePath>false</useModulePath>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

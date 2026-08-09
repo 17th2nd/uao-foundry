@@ -1,0 +1,181 @@
+{
+  "fixtureVersion": "0.1.0",
+  "identitySeed": "granite",
+  "fixedClock": "2026-08-09T00:00:00Z",
+  "knowledgeHorizon": "2026-08-09T00:00:00Z",
+  "interpretations": [
+    {
+      "candidateId": "int-granite-material",
+      "label": "granite rock material",
+      "definition": "A material-class interpretation used to exercise a geological manufacturing plan.",
+      "semanticTypeProposal": "MaterialClass",
+      "confidence": 0.98,
+      "status": "SELECTED",
+      "references": [
+        "fixture://src-granite-material"
+      ]
+    }
+  ],
+  "scopeResolution": {
+    "selectedInterpretation": "int-granite-material",
+    "scopeStatus": "FIXTURE_SELECTED",
+    "canonicalWorkingLabel": "granite rock material",
+    "includedBoundaries": [
+      "material class",
+      "geological description"
+    ],
+    "excludedBoundaries": [
+      "individual named stones",
+      "commercial product listings"
+    ],
+    "excludedInterpretations": [],
+    "unresolvedQuestions": []
+  },
+  "manufacturingPlan": {
+    "planVersion": "0.1.0",
+    "selectedIdentity": "granite rock material",
+    "dimensions": [
+      "composition-description",
+      "formation-context",
+      "material-boundary"
+    ],
+    "neighbouringIdentities": [
+      "mineral",
+      "rock"
+    ],
+    "anticipatedSourceClasses": [
+      "geological-reference",
+      "material-reference"
+    ],
+    "risks": [
+      "class-versus-specimen ambiguity"
+    ],
+    "completionQuestions": [
+      {
+        "questionId": "q-material",
+        "prompt": "Is the material-class boundary represented?",
+        "required": true
+      },
+      {
+        "questionId": "q-composition",
+        "prompt": "Is composition evidence represented?",
+        "required": true
+      },
+      {
+        "questionId": "q-formation",
+        "prompt": "Is formation context represented?",
+        "required": true
+      }
+    ],
+    "exclusions": [
+      "individual specimens"
+    ]
+  },
+  "sourceStrategy": {
+    "strategyVersion": "0.1.0",
+    "sourceClasses": [
+      {
+        "classId": "geological-reference",
+        "purpose": "exercise geological classification evidence",
+        "priority": 1
+      },
+      {
+        "classId": "material-reference",
+        "purpose": "exercise material-property evidence",
+        "priority": 2
+      }
+    ],
+    "authorityNotes": [
+      "Fixture evidence is synthetic and non-authoritative."
+    ],
+    "safetyConstraints": [
+      "No network access in fixture mode."
+    ]
+  },
+  "sources": [
+    {
+      "sourceId": "src-granite-material",
+      "locator": "fixture://src-granite-material",
+      "sourceClass": "geological-reference",
+      "retrievedAt": "2026-08-09T00:00:00Z",
+      "license": "TEST-FIXTURE",
+      "content": "Synthetic fixture: granite is treated here as a geological material class for pipeline testing."
+    },
+    {
+      "sourceId": "src-granite-context",
+      "locator": "fixture://src-granite-context",
+      "sourceClass": "material-reference",
+      "retrievedAt": "2026-08-09T00:00:00Z",
+      "license": "TEST-FIXTURE",
+      "content": "Synthetic fixture: a second source exists to exercise multi-source acquisition and hashing."
+    }
+  ],
+  "candidates": {
+    "identities": [
+      {
+        "candidateId": "cid-root",
+        "label": "granite rock material",
+        "resolutionKey": "fixture:material:granite",
+        "root": true,
+        "aliases": [
+          "granite"
+        ],
+        "sourceRefs": [
+          "src-granite-material",
+          "src-granite-context"
+        ],
+        "externalIdentifiers": {}
+      }
+    ],
+    "claims": [
+      {
+        "candidateId": "clm-material",
+        "subjectIdentityRef": "cid-root",
+        "statement": "Fixture assertion: the root is represented as a material class rather than an individual specimen.",
+        "channels": [
+          "foundry"
+        ],
+        "sourceRefs": [
+          "src-granite-material"
+        ]
+      },
+      {
+        "candidateId": "clm-multisource",
+        "subjectIdentityRef": "cid-root",
+        "statement": "Fixture assertion: the package exercises evidence from more than one source snapshot.",
+        "channels": [
+          "foundry"
+        ],
+        "sourceRefs": [
+          "src-granite-material",
+          "src-granite-context"
+        ]
+      }
+    ],
+    "relationships": [],
+    "evidence": [
+      {
+        "evidenceId": "ev-material",
+        "sourceRef": "src-granite-material",
+        "supportsCandidateRef": "clm-material",
+        "extract": "Synthetic material-class evidence.",
+        "locatorWithinSource": "sentence-1"
+      },
+      {
+        "evidenceId": "ev-multisource",
+        "sourceRef": "src-granite-context",
+        "supportsCandidateRef": "clm-multisource",
+        "extract": "Synthetic second-source evidence.",
+        "locatorWithinSource": "sentence-1"
+      }
+    ],
+    "states": [],
+    "events": [],
+    "languageMappings": []
+  },
+  "coverageAnswers": {
+    "q-material": "covered",
+    "q-composition": "covered",
+    "q-formation": "covered"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UAO Foundry Identity Seed",
+  "type": "object",
+  "required": ["originalExpression", "normalisedExpression", "inputLanguage"],
+  "properties": {
+    "originalExpression": {"type": "string", "minLength": 1},
+    "normalisedExpression": {"type": "string", "minLength": 1},
+    "inputLanguage": {"type": "string", "minLength": 1},
+    "scopeHint": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}

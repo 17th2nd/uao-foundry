@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://17th2nd.github.io/uao-foundry/schemas/asa/uao.schema.json",
+  "$comment": "Non-authoritative validation projection of ASA CSS 2026.1 primitive_definitions.UAO at ASA main 908c5255fb3144c2a2e3f48c993d031e347d1695. CSS remains sole semantic authority.",
+  "type": "object",
+  "properties": {
+    "uid": {"type": "string", "pattern": "^uao-[a-f0-9]{12}$"},
+    "lifecycle_status": {"type": "string", "enum": ["Registered", "Superseded", "Retired"]},
+    "successor_identity_ref": {"$ref": "reference-pointer.schema.json"},
+    "internal_state": {"type": "object"},
+    "assertions": {"type": "array", "items": {"$ref": "assertion-payload.schema.json"}},
+    "relationship_references": {"type": "array", "items": {"$ref": "reference-pointer.schema.json"}},
+    "provenance": {
+      "type": "object",
+      "required": ["knowledge_horizon", "assertion_time", "proposer_profile"],
+      "properties": {
+        "knowledge_horizon": {"type": "string", "format": "date-time"},
+        "assertion_time": {"type": "string", "format": "date-time"},
+        "proposer_profile": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "disclaimer": {"type": "string", "const": "AUTHORITY_SNAPSHOT_ONLY"}
+  },
+  "additionalProperties": false,
+  "if": {
+    "type": "object",
+    "required": ["lifecycle_status"],
+    "properties": {"lifecycle_status": {"const": "Superseded"}}
+  },
+  "then": {"required": ["successor_identity_ref"]}
+}
