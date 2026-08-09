@@ -32,7 +32,11 @@ shift
 
 ADAPTER="$ROOT/adapters/claude-code/claude_provider.py"
 [[ -f "$ADAPTER" ]] || { echo "Claude adapter missing: $ADAPTER" >&2; exit 2; }
-python3 -m py_compile "$ADAPTER" || { echo "Claude adapter failed Python compilation." >&2; exit 2; }
+python3 - "$ADAPTER" <<'PY' || { echo "Claude adapter failed Python syntax validation." >&2; exit 2; }
+import ast, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+PY
 
 JAR="$ROOT/target/uao-foundry-0.1.0.jar"
 if [[ ! -f "$JAR" ]]; then
