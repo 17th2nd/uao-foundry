@@ -12,7 +12,7 @@ The demonstration deliberately uses the same generic Foundry executable and Clau
 From the repository root:
 
 ```bash
-scripts/preflight-live.sh
+bash scripts/preflight-live.sh
 rm -rf demo-work demo-dist demo-registry
 ```
 
@@ -21,7 +21,7 @@ For a persistent demonstration registry, omit the `rm -rf demo-registry` line on
 ## 2. Manufacture the first knowledge package
 
 ```bash
-scripts/manufacture-claude.sh \
+bash scripts/manufacture-claude.sh \
   "Certificate III Electrotechnology" \
   --registry demo-registry \
   --work-dir demo-work \
@@ -60,7 +60,7 @@ Inspect the response and package. In particular:
 Then run:
 
 ```bash
-scripts/manufacture-claude.sh \
+bash scripts/manufacture-claude.sh \
   "Electric Vehicle Maintenance" \
   --registry demo-registry \
   --work-dir demo-work \
