@@ -7,11 +7,11 @@ cd "$ROOT"
 if [[ $# -lt 1 ]]; then
   cat >&2 <<'EOF'
 Usage:
-  scripts/manufacture-claude.sh <identity-seed> [RegistryManufactureApplication options]
+  bash scripts/manufacture-claude.sh <identity-seed> [RegistryManufactureApplication options]
 
 Examples:
-  scripts/manufacture-claude.sh "Certificate III Electrotechnology"
-  scripts/manufacture-claude.sh "Electric Vehicle Maintenance" --registry .uao-registry --register
+  bash scripts/manufacture-claude.sh "Certificate III Electrotechnology"
+  bash scripts/manufacture-claude.sh "Electric Vehicle Maintenance" --registry .uao-registry --register
 
 Common options passed through:
   --registry <dir>
@@ -31,15 +31,22 @@ IDENTITY="$1"
 shift
 
 ADAPTER="$ROOT/adapters/claude-code/claude_provider.py"
-[[ -x "$ADAPTER" ]] || { echo "Claude adapter missing or not executable: $ADAPTER" >&2; exit 2; }
+[[ -f "$ADAPTER" ]] || { echo "Claude adapter missing: $ADAPTER" >&2; exit 2; }
+python3 -m py_compile "$ADAPTER" || { echo "Claude adapter failed Python compilation." >&2; exit 2; }
 
 JAR="$ROOT/target/uao-foundry-0.1.0.jar"
 if [[ ! -f "$JAR" ]]; then
   mvn -B -ntp -q package -DskipTests
 fi
 
-exec java -cp "$JAR" \
+LAUNCHER_DIR="$(mktemp -d)"
+trap 'rm -rf "$LAUNCHER_DIR"' EXIT
+LAUNCHER="$LAUNCHER_DIR/uao-foundry-claude-provider"
+printf '#!/usr/bin/env bash\nexec python3 %q\n' "$ADAPTER" > "$LAUNCHER"
+chmod 700 "$LAUNCHER"
+
+java -cp "$JAR" \
   org.seventeenthsecond.uaofoundry.reuse.RegistryManufactureApplication \
   "$IDENTITY" \
-  --provider-command "$ADAPTER" \
+  --provider-command "$LAUNCHER" \
   "$@"
