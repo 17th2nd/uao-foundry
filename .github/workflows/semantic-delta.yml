@@ -28,10 +28,10 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf .delta-work .delta-dist .delta-registry
-          first="$(java -jar target/uao-foundry-0.1.0-SNAPSHOT.jar manufacture cow --fixture src/test/resources/fixtures/biological-cow.json --work-dir .delta-work/seed --dist-dir .delta-dist/seed --repository-commit "$GITHUB_SHA")"
+          first="$(java -jar target/uao-foundry-0.1.0.jar manufacture cow --fixture src/test/resources/fixtures/biological-cow.json --work-dir .delta-work/seed --dist-dir .delta-dist/seed --repository-commit "$GITHUB_SHA")"
           seed_package="$(printf '%s' "$first" | python3 -c 'import json,sys; print(json.load(sys.stdin)["packagePath"])')"
-          java -cp target/uao-foundry-0.1.0-SNAPSHOT.jar org.seventeenthsecond.uaofoundry.registry.RegistryApplication register "$seed_package" --registry .delta-registry
-          java -cp target/uao-foundry-0.1.0-SNAPSHOT.jar org.seventeenthsecond.uaofoundry.registry.RegistryApplication verify --registry .delta-registry | grep -F '"passed":true'
+          java -cp target/uao-foundry-0.1.0.jar org.seventeenthsecond.uaofoundry.registry.RegistryApplication register "$seed_package" --registry .delta-registry
+          java -cp target/uao-foundry-0.1.0.jar org.seventeenthsecond.uaofoundry.registry.RegistryApplication verify --registry .delta-registry | grep -F '"passed":true'
 
       - name: Registry-aware reuse manufacture
         shell: bash
@@ -55,14 +55,14 @@ jobs:
           EOF_PROVIDER
           chmod +x "$provider"
 
-          output="$(java -cp target/uao-foundry-0.1.0-SNAPSHOT.jar org.seventeenthsecond.uaofoundry.reuse.RegistryManufactureApplication cow --provider-command "$provider" --provider-timeout-seconds 10 --registry .delta-registry --work-dir .delta-work/reuse --dist-dir .delta-dist/reuse --repository-commit "$GITHUB_SHA" --register)"
+          output="$(java -cp target/uao-foundry-0.1.0.jar org.seventeenthsecond.uaofoundry.reuse.RegistryManufactureApplication cow --provider-command "$provider" --provider-timeout-seconds 10 --registry .delta-registry --work-dir .delta-work/reuse --dist-dir .delta-dist/reuse --repository-commit "$GITHUB_SHA" --register)"
           printf '%s\n' "$output" | grep -F '"reusedUaoCount":2'
           printf '%s\n' "$output" | grep -F '"newUaoCount":0'
           printf '%s\n' "$output" | grep -F '"registrySourceCount":1'
           package_path="$(printf '%s' "$output" | python3 -c 'import json,sys; print(json.load(sys.stdin)["packagePath"])')"
           test -f "$package_path/reuse-report.json"
-          java -jar target/uao-foundry-0.1.0-SNAPSHOT.jar verify "$package_path" | grep -F '"passed":true'
-          java -cp target/uao-foundry-0.1.0-SNAPSHOT.jar org.seventeenthsecond.uaofoundry.registry.RegistryApplication verify --registry .delta-registry | grep -F '"passed":true'
+          java -jar target/uao-foundry-0.1.0.jar verify "$package_path" | grep -F '"passed":true'
+          java -cp target/uao-foundry-0.1.0.jar org.seventeenthsecond.uaofoundry.registry.RegistryApplication verify --registry .delta-registry | grep -F '"passed":true'
           python3 - <<'PY'
           import json
           d = json.load(open('.delta-provider-input.json'))
