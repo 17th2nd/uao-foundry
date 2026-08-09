@@ -1,5 +1,6 @@
 package org.seventeenthsecond.uaofoundry.verifier;
 
+import org.seventeenthsecond.uaofoundry.identifiers.StableIdentifiers;
 import org.seventeenthsecond.uaofoundry.json.Json;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
 import org.seventeenthsecond.uaofoundry.util.Hashes;
@@ -37,6 +38,12 @@ public final class PackageVerifier {
 
         Map<String, Object> manifest = readObject(packageDir.resolve("manifest.json"), "manifest", errors);
         Map<String, Object> manufactured = readObject(packageDir.resolve("manufactured-package.json"), "manufactured-package", errors);
+        Object canonicalIdentities = readValue(packageDir.resolve("canonical-identities.json"), "canonical-identities", errors);
+        Object canonicalRelationships = readValue(packageDir.resolve("canonical-relationships.json"), "canonical-relationships", errors);
+        Map<String, Object> request = readObject(packageDir.resolve("manufacturing-request.json"), "manufacturing-request", errors);
+        Map<String, Object> publication = readObject(packageDir.resolve("publication-decision.json"), "publication-decision", errors);
+        Map<String, Object> verification = readObject(packageDir.resolve("verification-report.json"), "verification-report", errors);
+
         if (manifest != null) {
             errors.addAll(prefix(validator.validate(manifest, schemaDir.resolve("release-manifest.schema.json")).errors(), "manifest: "));
             checks.add("MANIFEST_SCHEMA");
@@ -48,6 +55,12 @@ public final class PackageVerifier {
             collectForbidden(manufactured, "$", errors);
             checks.add("ASA_FORBIDDEN_FIELDS");
         }
+
+        verifyCrossFileConsistency(manifest, manufactured, canonicalIdentities, canonicalRelationships, request, publication, verification, errors);
+        checks.add("PACKAGE_CROSS_FILE_CONSISTENCY");
+        verifyCanonicalIdentityDerivations(manifest, canonicalIdentities, errors);
+        checks.add("UAO_IDENTITY_DERIVATION");
+
         Path providerSnapshot = packageDir.resolve("provider-snapshot.json");
         if (!Files.isRegularFile(providerSnapshot)) {
             errors.add("provider-snapshot.json is missing");
@@ -60,14 +73,95 @@ public final class PackageVerifier {
                 errors.add("provider-snapshot: " + ex.getMessage());
             }
         }
-        if (manifest != null && manufactured != null) {
-            if (!manifest.get("rootUaoId").equals(manufactured.get("rootUaoId"))) errors.add("Manifest rootUaoId differs from manufactured package.");
-            Map<String, Object> pub = object(manufactured.get("publicationDecision"), "publicationDecision", errors);
-            if (pub != null && !manifest.get("publicationStatus").equals(pub.get("status"))) errors.add("Manifest publication status differs from publication decision.");
-        }
+
         verifySourceSnapshots(packageDir, errors);
         checks.add("SOURCE_SNAPSHOT_HASHES");
         return new Result(errors.isEmpty(), List.copyOf(errors), List.copyOf(checks));
+    }
+
+    private void verifyCrossFileConsistency(
+            Map<String, Object> manifest,
+            Map<String, Object> manufactured,
+            Object canonicalIdentities,
+            Object canonicalRelationships,
+            Map<String, Object> request,
+            Map<String, Object> publication,
+            Map<String, Object> verification,
+            List<String> errors) {
+        if (manufactured == null) return;
+
+        compareJson("manufactured-package.uaos", manufactured.get("uaos"), "canonical-identities.json", canonicalIdentities, errors);
+        compareJson("manufactured-package.uros", manufactured.get("uros"), "canonical-relationships.json", canonicalRelationships, errors);
+        compareJson("manufactured-package.request", manufactured.get("request"), "manufacturing-request.json", request, errors);
+        compareJson("manufactured-package.publicationDecision", manufactured.get("publicationDecision"), "publication-decision.json", publication, errors);
+        compareJson("manufactured-package.verification", manufactured.get("verification"), "verification-report.json", verification, errors);
+
+        if (manifest != null) {
+            Object manifestRoot = manifest.get("rootUaoId");
+            Object manufacturedRoot = manufactured.get("rootUaoId");
+            if (!java.util.Objects.equals(manifestRoot, manufacturedRoot)) errors.add("Manifest rootUaoId differs from manufactured package.");
+            if (publication != null && !java.util.Objects.equals(manifest.get("publicationStatus"), publication.get("status"))) {
+                errors.add("Manifest publication status differs from publication decision.");
+            }
+        }
+    }
+
+    private void compareJson(String leftLabel, Object left, String rightLabel, Object right, List<String> errors) {
+        if (left == null || right == null) return;
+        try {
+            if (!Json.canonical(left).equals(Json.canonical(right))) {
+                errors.add(leftLabel + " differs from " + rightLabel + ".");
+            }
+        } catch (IllegalArgumentException ex) {
+            errors.add("Unable to compare " + leftLabel + " with " + rightLabel + ": " + ex.getMessage());
+        }
+    }
+
+    private void verifyCanonicalIdentityDerivations(Map<String, Object> manifest, Object rawIdentities, List<String> errors) {
+        if (!(rawIdentities instanceof List<?> identities)) {
+            if (rawIdentities != null) errors.add("canonical-identities.json is not an array.");
+            return;
+        }
+        Set<String> seenUids = new LinkedHashSet<>();
+        Map<String, String> uidToResolutionKey = new LinkedHashMap<>();
+        boolean rootPresent = false;
+        String manifestRoot = manifest != null && manifest.get("rootUaoId") instanceof String s ? s : null;
+
+        for (int i = 0; i < identities.size(); i++) {
+            Object item = identities.get(i);
+            if (!(item instanceof Map<?, ?> raw)) {
+                errors.add("canonical-identities[" + i + "] is not an object.");
+                continue;
+            }
+            @SuppressWarnings("unchecked") Map<String, Object> uao = (Map<String, Object>) raw;
+            Object uidRaw = uao.get("uid");
+            if (!(uidRaw instanceof String uid)) {
+                errors.add("canonical-identities[" + i + "].uid is not a string.");
+                continue;
+            }
+            if (!seenUids.add(uid)) errors.add("Duplicate canonical UAO uid: " + uid);
+            if (uid.equals(manifestRoot)) rootPresent = true;
+
+            Map<String, Object> internal = object(uao.get("internal_state"), "canonical-identities[" + i + "].internal_state", errors);
+            if (internal == null) continue;
+            Map<String, Object> foundryIdentity = object(internal.get("foundry_identity"), "canonical-identities[" + i + "].internal_state.foundry_identity", errors);
+            if (foundryIdentity == null) continue;
+            Object keyRaw = foundryIdentity.get("resolution_key");
+            if (!(keyRaw instanceof String resolutionKey) || resolutionKey.isBlank()) {
+                errors.add("canonical-identities[" + i + "] has no non-blank foundry resolution_key.");
+                continue;
+            }
+
+            String expected = StableIdentifiers.forText("uao", 12, resolutionKey);
+            if (!uid.equals(expected)) {
+                errors.add("Canonical UAO uid does not match deterministic resolution_key derivation: " + uid + " expected " + expected + ".");
+            }
+            String previous = uidToResolutionKey.putIfAbsent(uid, resolutionKey);
+            if (previous != null && !previous.equals(resolutionKey)) {
+                errors.add("Canonical UAO uid collision maps different resolution keys: " + uid + ".");
+            }
+        }
+        if (manifestRoot != null && !rootPresent) errors.add("Manifest rootUaoId is absent from canonical-identities.json.");
     }
 
     private void verifyChecksums(Path packageDir, Path checksumFile, List<String> errors) {
@@ -138,10 +232,16 @@ public final class PackageVerifier {
         }
     }
 
-    private Map<String,Object> readObject(Path path, String label, List<String> errors) {
+    private Object readValue(Path path, String label, List<String> errors) {
         if (!Files.isRegularFile(path)) { errors.add(label + " file is missing: " + path.getFileName()); return null; }
-        try { return Json.object(FileOps.readJson(path), label); }
+        try { return FileOps.readJson(path); }
         catch (IllegalArgumentException ex) { errors.add(label + ": " + ex.getMessage()); return null; }
+    }
+
+    private Map<String,Object> readObject(Path path, String label, List<String> errors) {
+        Object value = readValue(path, label, errors);
+        if (value == null) return null;
+        return object(value, label, errors);
     }
 
     @SuppressWarnings("unchecked")
