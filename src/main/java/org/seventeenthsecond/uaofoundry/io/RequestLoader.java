@@ -30,10 +30,15 @@ public final class RequestLoader {
     }
 
     public ManufacturingRequest fromSeed(String identitySeed, String language, String profile) {
+        return fromSeed(identitySeed, language, profile, "fixture");
+    }
+
+    public ManufacturingRequest fromSeed(String identitySeed, String language, String profile, String executionMode) {
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("identitySeed", identitySeed);
         if (language != null) request.put("inputLanguage", language);
         if (profile != null) request.put("manufacturingProfile", profile);
+        if (executionMode != null) request.put("executionMode", executionMode);
         return fromObject(request);
     }
 
