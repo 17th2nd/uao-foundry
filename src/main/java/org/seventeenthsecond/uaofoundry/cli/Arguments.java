@@ -10,7 +10,8 @@ import java.util.Set;
 public final class Arguments {
     private static final Set<String> ALLOWED = Set.of(
             "--identity", "--language", "--profile", "--request", "--schema-dir",
-            "--fixture", "--work-dir", "--dist-dir", "--repository-commit"
+            "--fixture", "--provider-command", "--provider-timeout-seconds",
+            "--work-dir", "--dist-dir", "--repository-commit"
     );
 
     private final Map<String, String> values;
