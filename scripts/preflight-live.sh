@@ -31,8 +31,12 @@ pass "Claude Code: $($CLAUDE_BIN --version 2>&1 | head -n1)"
 
 ADAPTER="$ROOT/adapters/claude-code/claude_provider.py"
 [[ -f "$ADAPTER" ]] || fail "Claude adapter missing: $ADAPTER"
-python3 -m py_compile "$ADAPTER" || fail "Claude adapter does not compile"
-pass "Claude adapter compiles"
+python3 - "$ADAPTER" <<'PY' || fail "Claude adapter does not parse"
+import ast, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+PY
+pass "Claude adapter parses"
 
 LAUNCHER_DIR="$(mktemp -d)"
 trap 'rm -rf "$LAUNCHER_DIR"' EXIT
