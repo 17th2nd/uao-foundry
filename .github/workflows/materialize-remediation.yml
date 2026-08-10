@@ -4,13 +4,16 @@ on:
   push:
     branches:
       - "transport/uao-remediation-r1-20260810"
+  pull_request:
+    branches:
+      - "main"
 
 permissions:
   contents: write
 
 jobs:
   materialize:
-    if: contains(github.event.head_commit.message, 'transport: materialize audit remediation payload')
+    if: github.event_name == 'pull_request' || contains(github.event.head_commit.message, 'transport: materialize audit remediation payload')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout transport payload
