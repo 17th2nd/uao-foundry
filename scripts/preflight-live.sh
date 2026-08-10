@@ -27,7 +27,14 @@ CLAUDE_BIN="${UAO_FOUNDRY_CLAUDE_BIN:-$(command -v claude || true)}"
 [[ -n "$CLAUDE_BIN" ]] || fail "Claude Code not found; install it or set UAO_FOUNDRY_CLAUDE_BIN"
 [[ -f "$CLAUDE_BIN" ]] || fail "Claude Code path is not a file: $CLAUDE_BIN"
 [[ -x "$CLAUDE_BIN" ]] || fail "Claude Code path is not executable: $CLAUDE_BIN"
-pass "Claude Code: $($CLAUDE_BIN --version 2>&1 | head -n1)"
+CLAUDE_VERSION="$($CLAUDE_BIN --version 2>&1 | head -n1)"
+python3 - "$CLAUDE_VERSION" <<'PYV' || fail "Claude Code v2.1.205+ required; found: $CLAUDE_VERSION"
+import re, sys
+m = re.search(r"(?<!\d)(\d+)\.(\d+)\.(\d+)(?!\d)", sys.argv[1])
+if not m or tuple(map(int, m.groups())) < (2, 1, 205):
+    raise SystemExit(1)
+PYV
+pass "Claude Code: $CLAUDE_VERSION"
 
 ADAPTER="$ROOT/adapters/claude-code/claude_provider.py"
 [[ -f "$ADAPTER" ]] || fail "Claude adapter missing: $ADAPTER"

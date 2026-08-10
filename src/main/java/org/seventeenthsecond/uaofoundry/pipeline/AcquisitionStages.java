@@ -1,6 +1,7 @@
 package org.seventeenthsecond.uaofoundry.pipeline;
 
 import org.seventeenthsecond.uaofoundry.identifiers.StableIdentifiers;
+import org.seventeenthsecond.uaofoundry.identifiers.ResolutionKeys;
 import org.seventeenthsecond.uaofoundry.json.Json;
 import org.seventeenthsecond.uaofoundry.model.ManufacturingRequest;
 import org.seventeenthsecond.uaofoundry.provider.FoundryProvider;
@@ -28,6 +29,7 @@ import java.util.function.Supplier;
 /** Interpretation, planning, evidence, validation, resolution and relationship-gate stages. */
 class AcquisitionStages extends PipelineBase {
     protected AcquisitionStages(Path schemaDir, Path workDir, Path distDir, String repositoryCommit) { super(schemaDir, workDir, distDir, repositoryCommit); }
+    protected AcquisitionStages(Path schemaDir, Path workDir, Path distDir, String repositoryCommit, Path registryRoot, Map<String,Object> registryIndex) { super(schemaDir, workDir, distDir, repositoryCommit, registryRoot, registryIndex); }
 
     protected Map<String, Object> jobInitialisation(ManufacturingRequest request, FoundryProvider provider) {
         Map<String, Object> stages = new LinkedHashMap<>();
@@ -105,15 +107,27 @@ class AcquisitionStages extends PipelineBase {
             Map<String, Object> source = map(raw);
             String sourceId = string(source.get("sourceId"), "sourceId");
             if (!ids.add(sourceId)) throw new IllegalArgumentException("Duplicate sourceId: " + sourceId);
-            String content = string(source.get("content"), "source content");
+            String locator = string(source.get("locator"), "source locator");
+            String content;
+            Object sourceClass = source.get("sourceClass");
+            Object license = source.get("license");
+            if (locator.startsWith("registry://")) {
+                byte[] exact = verifiedRegistryBytes(locator);
+                try { content = new String(exact, StandardCharsets.UTF_8); }
+                catch (Exception ex) { throw new IllegalArgumentException("Registry evidence is not UTF-8 text: " + locator, ex); }
+                sourceClass = "foundry-registry";
+                license = "UAO-FOUNDRY-REGISTRY-SNAPSHOT";
+            } else {
+                content = string(source.get("content"), "source content");
+            }
             String fileName = sourceId + ".txt";
             FileOps.writeText(corpus.resolve(fileName), content);
             Map<String, Object> record = new LinkedHashMap<>();
             record.put("sourceId", sourceId);
-            record.put("locator", source.get("locator"));
-            record.put("sourceClass", source.get("sourceClass"));
+            record.put("locator", locator);
+            record.put("sourceClass", sourceClass);
             record.put("retrievedAt", source.get("retrievedAt"));
-            record.put("license", source.get("license"));
+            record.put("license", license);
             record.put("sha256", Hashes.sha256(content.getBytes(StandardCharsets.UTF_8)));
             record.put("snapshotPath", "source-corpus/" + fileName);
             validate(record, "source-record.schema.json", "Source record " + sourceId);
@@ -180,7 +194,8 @@ class AcquisitionStages extends PipelineBase {
         Map<String, List<Map<String, Object>>> groups = new TreeMap<>();
         for (Object raw : list(valid.get("identities"), "identities")) {
             Map<String, Object> candidate = map(raw);
-            groups.computeIfAbsent(string(candidate.get("resolutionKey"), "resolutionKey"), ignored -> new ArrayList<>()).add(candidate);
+            String resolutionKey = ResolutionKeys.requireCanonical(string(candidate.get("resolutionKey"), "resolutionKey"));
+            groups.computeIfAbsent(resolutionKey, ignored -> new ArrayList<>()).add(candidate);
         }
         if (groups.isEmpty()) throw new IllegalArgumentException("No valid candidate identities remain after validation.");
         List<Object> resolved = new ArrayList<>();

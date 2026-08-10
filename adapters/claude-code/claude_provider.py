@@ -18,6 +18,7 @@ import re
 import shutil
 import subprocess
 import sys
+from decimal import Decimal, InvalidOperation
 from datetime import datetime, timezone
 from typing import Any
 
@@ -29,6 +30,8 @@ DEFAULT_MAX_TURNS = 8
 DEFAULT_TIMEOUT_SECONDS = 240
 DEFAULT_REGISTRY_EVIDENCE_BYTES = 1_000_000
 DEFAULT_REGISTRY_EVIDENCE_FILES = 8
+MIN_CLAUDE_VERSION = (2, 1, 205)
+MAX_BUDGET_USD = Decimal("1000")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FOUNDRY_BUNDLE_SCHEMA = REPO_ROOT / "schemas" / "fixture-bundle.schema.json"
@@ -132,6 +135,40 @@ def _claude_binary() -> str:
     return discovered
 
 
+def _claude_environment() -> dict[str, str]:
+    source = os.environ
+    env: dict[str, str] = {}
+    for key in ("PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "LANG", "TZ", "SSL_CERT_FILE", "SSL_CERT_DIR"):
+        value = source.get(key)
+        if value:
+            env[key] = value
+    for key, value in source.items():
+        if (key.startswith("LC_") or key.startswith("UAO_FOUNDRY_")) and value:
+            env[key] = value
+
+    # Resolve at most one direct Anthropic credential. Local Claude credential files remain
+    # reachable through HOME and do not require secret environment inheritance.
+    oauth = source.get("CLAUDE_CODE_OAUTH_TOKEN", "").strip()
+    api_key = source.get("ANTHROPIC_API_KEY", "").strip()
+    if oauth:
+        env["CLAUDE_CODE_OAUTH_TOKEN"] = oauth
+    elif api_key:
+        env["ANTHROPIC_API_KEY"] = api_key
+
+    # Explicit custom-endpoint operation is permitted but provenance-visible. Never copy
+    # unrelated cloud/CI secrets into the provider process.
+    base_url = source.get("ANTHROPIC_BASE_URL", "").strip()
+    auth_token = source.get("ANTHROPIC_AUTH_TOKEN", "").strip()
+    if base_url:
+        env["ANTHROPIC_BASE_URL"] = base_url
+        if auth_token:
+            env["ANTHROPIC_AUTH_TOKEN"] = auth_token
+
+    env["CLAUDE_CODE_SKIP_PROMPT_HISTORY"] = "1"
+    env["CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY"] = "1"
+    return env
+
+
 def _claude_version(binary: str) -> str:
     try:
         proc = subprocess.run(
@@ -142,17 +179,35 @@ def _claude_version(binary: str) -> str:
             check=False,
             env=_claude_environment(),
         )
-    except Exception:
-        return "unavailable"
-    text = (proc.stdout or proc.stderr or "").strip().splitlines()
-    return text[0][:200] if text else "unavailable"
+    except Exception as exc:
+        _die(f"unable to determine Claude Code version: {exc}")
+    if proc.returncode != 0:
+        _die(f"Claude Code --version exited {proc.returncode}")
+    lines = (proc.stdout or proc.stderr or "").strip().splitlines()
+    if not lines:
+        _die("Claude Code --version returned no version")
+    raw = lines[0][:200]
+    match = re.search(r"(?<!\d)(\d+)\.(\d+)\.(\d+)(?!\d)", raw)
+    if not match:
+        _die(f"Claude Code version is unparseable: {raw!r}")
+    parsed = tuple(int(match.group(i)) for i in range(1, 4))
+    if parsed < MIN_CLAUDE_VERSION:
+        minimum = ".".join(str(v) for v in MIN_CLAUDE_VERSION)
+        _die(f"Claude Code {raw!r} is below required minimum v{minimum} for enforced --json-schema format handling")
+    return raw
 
 
-def _claude_environment() -> dict[str, str]:
-    env = os.environ.copy()
-    env["CLAUDE_CODE_SKIP_PROMPT_HISTORY"] = "1"
-    env["CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY"] = "1"
-    return env
+def _budget_usd() -> str | None:
+    raw = os.environ.get("UAO_FOUNDRY_CLAUDE_MAX_BUDGET_USD", "").strip()
+    if not raw:
+        return None
+    try:
+        value = Decimal(raw)
+    except InvalidOperation:
+        _die("UAO_FOUNDRY_CLAUDE_MAX_BUDGET_USD must be a decimal number")
+    if not value.is_finite() or value <= 0 or value > MAX_BUDGET_USD:
+        _die(f"UAO_FOUNDRY_CLAUDE_MAX_BUDGET_USD must be > 0 and <= {MAX_BUDGET_USD}")
+    return format(value.normalize(), "f")
 
 
 def _registry_evidence(envelope: dict[str, Any]) -> tuple[list[dict[str, Any]], bool]:
@@ -278,11 +333,7 @@ def _build_prompt(envelope: dict[str, Any], evidence: list[dict[str, Any]], trun
     )
 
 
-def _invoke_claude(binary: str, schema: dict[str, Any], prompt: str) -> tuple[dict[str, Any], str, str]:
-    model = os.environ.get("UAO_FOUNDRY_CLAUDE_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
-    max_turns = _bounded_int("UAO_FOUNDRY_CLAUDE_MAX_TURNS", DEFAULT_MAX_TURNS, 1, 100)
-    timeout = _bounded_int("UAO_FOUNDRY_CLAUDE_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS, 1, 3600)
-
+def _claude_command(binary: str, schema: dict[str, Any], model: str, max_turns: int, budget: str | None) -> list[str]:
     command = [
         binary,
         "-p",
@@ -290,6 +341,7 @@ def _invoke_claude(binary: str, schema: dict[str, Any], prompt: str) -> tuple[di
         "--bare",
         "--no-session-persistence",
         "--no-chrome",
+        "--strict-mcp-config",
         "--tools",
         "WebSearch,WebFetch",
         "--permission-mode",
@@ -306,6 +358,7 @@ def _invoke_claude(binary: str, schema: dict[str, Any], prompt: str) -> tuple[di
         "Grep",
         "Agent",
         "Skill",
+        "mcp__*",
         "--max-turns",
         str(max_turns),
         "--model",
@@ -315,9 +368,17 @@ def _invoke_claude(binary: str, schema: dict[str, Any], prompt: str) -> tuple[di
         "--json-schema",
         json.dumps(schema, sort_keys=True, separators=(",", ":")),
     ]
-    budget = os.environ.get("UAO_FOUNDRY_CLAUDE_MAX_BUDGET_USD", "").strip()
-    if budget:
+    if budget is not None:
         command.extend(["--max-budget-usd", budget])
+    return command
+
+
+def _invoke_claude(binary: str, schema: dict[str, Any], prompt: str) -> tuple[dict[str, Any], str, str, str]:
+    model = os.environ.get("UAO_FOUNDRY_CLAUDE_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    max_turns = _bounded_int("UAO_FOUNDRY_CLAUDE_MAX_TURNS", DEFAULT_MAX_TURNS, 1, 100)
+    timeout = _bounded_int("UAO_FOUNDRY_CLAUDE_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS, 1, 3600)
+    budget = _budget_usd()
+    command = _claude_command(binary, schema, model, max_turns, budget)
 
     try:
         proc = subprocess.run(
@@ -351,6 +412,7 @@ def _invoke_claude(binary: str, schema: dict[str, Any], prompt: str) -> tuple[di
         _die("Claude Code JSON wrapper must be an object")
 
     structured = wrapper.get("structured_output")
+    output_path = "structured_output"
     if isinstance(structured, str):
         try:
             structured = json.loads(structured)
@@ -358,14 +420,15 @@ def _invoke_claude(binary: str, schema: dict[str, Any], prompt: str) -> tuple[di
             _die(f"Claude Code structured_output string is invalid JSON: {exc}")
     if structured is None and isinstance(wrapper.get("result"), str):
         try:
-            structured = json.loads(wrapper["result"])
+            candidate = json.loads(wrapper["result"])
         except json.JSONDecodeError:
-            structured = None
-    if structured is None and all(field in wrapper for field in REQUIRED_BUNDLE_FIELDS):
-        structured = wrapper
+            candidate = None
+        if isinstance(candidate, dict):
+            structured = candidate
+            output_path = "result-json-fallback"
     if not isinstance(structured, dict):
         _die("Claude Code response did not contain an object structured_output")
-    return structured, model, (proc.stderr or "")
+    return structured, model, (proc.stderr or ""), output_path
 
 
 def _registry_resolution_keys(envelope: dict[str, Any]) -> set[str]:
@@ -430,6 +493,7 @@ def _normalize_bundle(
     clock: str,
     model: str,
     cli_version: str,
+    output_path: str,
 ) -> dict[str, Any]:
     normalized = json.loads(json.dumps(bundle, ensure_ascii=False))
     request = envelope["request"]
@@ -461,11 +525,14 @@ def _normalize_bundle(
         _die("sourceStrategy.authorityNotes must be an array of strings when present")
     notes.extend(
         [
-            f"Claude Code provider adapter={ADAPTER_VERSION}; model={model}; cli={cli_version}",
+            f"Claude Code provider adapter={ADAPTER_VERSION}; model={model}; cli={cli_version}; output_path={output_path}",
             "Claude research output is non-authoritative intermediate evidence; UAO Foundry owns validation, canonicalisation, verification and publication.",
             "Relationship candidate emission disabled pending governed ASA Relationship Type role authority (ASA#29 / uao-foundry#3).",
         ]
     )
+    base_url = os.environ.get("ANTHROPIC_BASE_URL", "").strip()
+    if base_url:
+        notes.append(f"Claude provider endpoint override={base_url}")
     strategy["authorityNotes"] = notes
     return normalized
 
@@ -478,8 +545,8 @@ def main() -> int:
     binary = _claude_binary()
     version = _claude_version(binary)
     clock = _iso_clock()
-    bundle, model, _stderr = _invoke_claude(binary, schema, prompt)
-    normalized = _normalize_bundle(bundle, envelope, evidence, clock, model, version)
+    bundle, model, _stderr, output_path = _invoke_claude(binary, schema, prompt)
+    normalized = _normalize_bundle(bundle, envelope, evidence, clock, model, version, output_path)
     # stdout is protocol data only. All diagnostics belong on stderr.
     sys.stdout.write(json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n")
     return 0

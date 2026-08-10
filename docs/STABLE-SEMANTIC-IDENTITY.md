@@ -61,7 +61,7 @@ The following MUST NOT determine semantic identity:
 - current job ID;
 - wording variations that do not change the intended identity.
 
-The Sprint 2026-08-10 Claude adapter rejects new live keys outside `ext:*` or `foundry:v0.1:*`, and rejects obvious UUID/model/session/timestamp material.
+The Sprint 2026-08-10 Claude adapter rejects new live keys outside `ext:*` or `foundry:v0.1:*`, and rejects obvious UUID/model/session/timestamp material. The Java Foundry independently requires NFKC-normalized, whitespace-free canonical key grammar (with the checked-in `fixture:*` namespace retained only for deterministic fixtures). Case/whitespace/Unicode surface variants do not become silently distinct UAOs.
 
 ## 4. Candidate IDs are not semantic IDs
 
@@ -80,7 +80,7 @@ Stable UAO reuse depends on the semantic `resolutionKey`, not on those local han
 
 ## 5. Registry authority boundary
 
-The Foundry registry indexes verified package occurrences and stable UAO identities. It does not decide by heuristic that two different identities are equivalent.
+The Foundry registry indexes verified package occurrences and stable UAO identities. It does not decide by heuristic that two different identities are equivalent. When an already-registered key is proposed again, registry admission now requires lexical continuity between canonical labels/aliases; otherwise it rejects the merge transactionally. This is a conservative collision guard, not semantic-equivalence inference.
 
 The provider may use registry discovery context to identify a possible match. If it chooses exact reuse, the Foundry later computes the resulting reused/new delta from stable UAO IDs. Provider text cannot override the registry or force canonical reuse by assertion.
 
@@ -104,4 +104,6 @@ Live adapters should prove at least:
 - stable new-key generation independent of model/session metadata;
 - rejection of an obviously ephemeral key;
 - preservation of ambiguity instead of forced key reuse;
-- semantic-delta reporting based on Foundry identity results rather than model self-report.
+- semantic-delta reporting based on Foundry identity results rather than model self-report;
+- rejection of case/whitespace/Unicode key variants;
+- rejection of a same-key/different-name collision with no registry mutation.

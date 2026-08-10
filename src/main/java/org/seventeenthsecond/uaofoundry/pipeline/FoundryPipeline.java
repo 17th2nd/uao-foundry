@@ -30,6 +30,7 @@ public final class FoundryPipeline extends PackageStages {
     public static final String FOUNDRY_VERSION = VERSION;
 
     public FoundryPipeline(Path schemaDir, Path workDir, Path distDir, String repositoryCommit) { super(schemaDir, workDir, distDir, repositoryCommit); }
+    public FoundryPipeline(Path schemaDir, Path workDir, Path distDir, String repositoryCommit, Path registryRoot, Map<String,Object> registryIndex) { super(schemaDir, workDir, distDir, repositoryCommit, registryRoot, registryIndex); }
 
     public PipelineResult manufacture(ManufacturingRequest request, FoundryProvider provider, boolean resume) {
         if (!request.executionMode().equals(provider.executionMode())) {
@@ -51,6 +52,7 @@ public final class FoundryPipeline extends PackageStages {
         try { Files.createDirectories(jobDir); } catch (Exception ex) { throw new IllegalArgumentException("Unable to create job directory: " + ex.getMessage(), ex); }
         this.checkpoint = loadCheckpoint(resume);
         this.resumedStages = 0;
+        this.invalidatedStages = new ArrayList<>();
 
         Path providerSnapshot = jobDir.resolve("provider-snapshot.json");
         if (!resume) {
@@ -95,7 +97,7 @@ public final class FoundryPipeline extends PackageStages {
         String rootUaoId = string(canonical.get("rootUaoId"), "rootUaoId");
         String status = string(publication.get("status"), "publication status");
         Path packagePath = Path.of(string(packageResult.get("packagePath"), "packagePath"));
-        return new PipelineResult(jobId, packagePath, status, rootUaoId, bool(verification.get("passed")), resumedStages);
+        return new PipelineResult(jobId, packagePath, status, rootUaoId, bool(verification.get("passed")), resumedStages, List.copyOf(invalidatedStages));
     }
 
 }

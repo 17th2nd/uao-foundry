@@ -45,7 +45,7 @@ public final class RegistryManufactureApplication {
                     parsed.providerCommand(), request, schemaDir, Duration.ofSeconds(parsed.timeoutSeconds()), registryContext, parsed.registry());
             if (!registryContextHash.equals(provider.registryContextHash())) throw new IllegalArgumentException("Registry context hash changed before provider acquisition.");
 
-            FoundryPipeline pipeline = new FoundryPipeline(schemaDir, parsed.workDir(), parsed.distDir(), parsed.repositoryCommit());
+            FoundryPipeline pipeline = new FoundryPipeline(schemaDir, parsed.workDir(), parsed.distDir(), parsed.repositoryCommit(), parsed.registry(), preIndex);
             PipelineResult result = pipeline.manufacture(request, provider, false);
             ReuseAnalyzer analyzer = new ReuseAnalyzer(schemaDir);
             Map<String,Object> report = analyzer.analyze(preIndex, parsed.registry(), result.packagePath(), registryContextHash);

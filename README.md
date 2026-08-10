@@ -1,7 +1,7 @@
 # UAO Foundry
 
 **Release target:** `v0.1.0`  
-**Status:** functional deterministic manufacturing core with live provider protocol, immutable verified-package registry, semantic-delta reuse, and a bounded Claude Code research adapter. Arbitrary-domain URO publication remains fail-closed pending current ASA Relationship Type role authority.
+**Status:** functional deterministic manufacturing core under independent-audit remediation. Package verification now targets content-addressed structural integrity/self-consistency; it does **not** certify external knowledge truth or authorship. Arbitrary-domain URO publication remains fail-closed pending current ASA Relationship Type role authority.
 
 UAO Foundry is the domain-independent Java 21 manufacturing system for **Universal ASA Objects (UAOs)**. It transforms a minimally specified identity expression into a governed JSON package through explicit interpretation, scope, planning, evidence, candidate, resolution, canonicalisation, completeness, verification and publication stages.
 
@@ -29,6 +29,8 @@ verified immutable registry
 
 Provider output is intermediate. Providers do not acquire canonical-write or publication authority.
 
+`verify` proves that a package is structurally consistent with its recorded Foundry inputs and content address. It does **not** establish that an external claim is factually correct, nor does a self-contained package provide third-party authenticity without an external trust anchor.
+
 The checked-in `schemas/asa/*` files are **validation projections**, not independent ASA authority. Their upstream evidence lock is in [`config/upstream-authority-lock.json`](config/upstream-authority-lock.json).
 
 ## Sixteen-stage manufacturing pipeline
@@ -52,7 +54,7 @@ The checked-in `schemas/asa/*` files are **validation projections**, not indepen
 16  Package manufacture + checksums
 ```
 
-Every stage writes an inspectable checkpoint artifact. Resume validates checkpoint hashes and reuses completed stages rather than silently restarting the job.
+Every stage writes an inspectable checkpoint artifact. Resume re-derives cached stages from the preserved provider snapshot and reuses them only when the deterministic projection matches; invalidated stages are surfaced explicitly.
 
 ## Implemented v0.1 surfaces
 
@@ -60,12 +62,12 @@ Every stage writes an inspectable checkpoint artifact. Resume validates checkpoi
 
 - Java 21 / Maven executable;
 - fail-closed JSON Schema contract validation;
-- deterministic request, job, UAO and package identifiers;
+- deterministic request/job/UAO identifiers and content-addressed package identifiers;
 - explicit ambiguity/scope records;
 - evidence snapshots and provenance hashes;
 - candidate quarantine without silent repair;
 - canonical UAO construction aligned to the reviewed ASA surface;
-- verification, publication decision, manifest and SHA-256 inventory;
+- structural verification, independently reconstructed publication decision, content digest, manifest and SHA-256 inventory;
 - checkpoint/status/resume/verify/inspect lifecycle;
 - byte-determinism and tamper negative controls.
 
@@ -94,7 +96,7 @@ A checksum-covered `reuse-report.json` distinguishes:
 - exact `registry://` source evidence resolved from prior immutable packages;
 - newly acquired sources.
 
-The model/provider cannot simply declare canonical reuse. Registry evidence bytes are SHA-256 checked against the prior immutable package.
+The model/provider cannot simply declare canonical reuse. `registry://` evidence is admitted only through verified registry custody in the core acquisition stage and is SHA-256 checked against the prior immutable package. Reuse identity is exact canonical `resolutionKey` continuity with conservative name-conflict rejection; it is not a claim of universal semantic equivalence.
 
 See [`docs/SEMANTIC-DELTA.md`](docs/SEMANTIC-DELTA.md).
 
@@ -102,12 +104,12 @@ See [`docs/SEMANTIC-DELTA.md`](docs/SEMANTIC-DELTA.md).
 
 [`adapters/claude-code/`](adapters/claude-code/) supplies a bounded live adapter for an installed Claude Code CLI. Claude is used as a research/evidence provider; Java Foundry still owns validation, identity resolution, canonicalisation, verification and publication.
 
-The adapter:
+The adapter requires Claude Code v2.1.205+ and:
 
-- uses non-interactive structured output;
-- restricts the model-facing tool surface to web research;
+- uses non-interactive schema-constrained structured output;
+- restricts built-in tools to `WebSearch,WebFetch`, explicitly denies filesystem/shell/agent and MCP tool surfaces, and mechanically asserts that argv contract in tests;
 - disables manufacturing-session persistence;
-- applies stable semantic resolution-key discipline;
+- applies early stable semantic resolution-key discipline while the Java Foundry independently enforces canonical key syntax;
 - restores exact immutable registry evidence bytes after the model response;
 - rejects non-empty relationship candidates while the upstream Relationship Type role authority is unavailable.
 

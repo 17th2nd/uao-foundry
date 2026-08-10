@@ -45,21 +45,43 @@ class PipelineBase {
     protected String jobId;
     protected Map<String, Object> checkpoint;
     protected int resumedStages;
+    protected List<String> invalidatedStages;
+    protected final Path registryRoot;
+    protected final Map<String,Object> registryIndex;
     protected PipelineBase(Path schemaDir, Path workDir, Path distDir, String repositoryCommit) {
+        this(schemaDir, workDir, distDir, repositoryCommit, null, null);
+    }
+    protected PipelineBase(Path schemaDir, Path workDir, Path distDir, String repositoryCommit, Path registryRoot, Map<String,Object> registryIndex) {
         this.schemaDir = schemaDir.toAbsolutePath().normalize();
         this.workDir = workDir.toAbsolutePath().normalize();
         this.distDir = distDir.toAbsolutePath().normalize();
         this.repositoryCommit = repositoryCommit == null || repositoryCommit.isBlank() ? "UNPINNED" : repositoryCommit;
+        this.registryRoot = registryRoot == null ? null : registryRoot.toAbsolutePath().normalize();
+        this.registryIndex = registryIndex == null ? null : deepCopyMap(registryIndex);
     }
 
     protected Object stage(String stageName, String fileName, Supplier<Object> compute) {
         Path path = jobDir.resolve(fileName);
+        Object computed = compute.get();
+        Map<String, Object> completed = map(checkpoint.get("completed"));
+        boolean hadRecord = completed.get(stageName) instanceof Map<?, ?>;
         Object cached = cachedStage(stageName, path);
-        if (cached != null) { resumedStages++; return cached; }
-        Object value = compute.get();
-        FileOps.writeJson(path, value);
+        if (cached != null) {
+            try {
+                if (Json.canonical(cached).equals(Json.canonical(computed))) {
+                    resumedStages++;
+                    return cached;
+                }
+            } catch (IllegalArgumentException ignored) {
+                // fall through and replace the invalid cached projection
+            }
+            invalidatedStages.add(stageName + ": cached projection differs from deterministic re-derivation");
+        } else if (hadRecord) {
+            invalidatedStages.add(stageName + ": checkpoint hash/file validation failed; stage recomputed");
+        }
+        FileOps.writeJson(path, computed);
         markStage(stageName, path);
-        return value;
+        return computed;
     }
 
     protected Object cachedStage(String stageName, Path path) {
@@ -95,6 +117,33 @@ class PipelineBase {
         cp.put("jobId", jobId);
         cp.put("completed", new LinkedHashMap<String, Object>());
         return cp;
+    }
+
+    protected byte[] verifiedRegistryBytes(String locator) {
+        if (registryRoot == null || registryIndex == null) {
+            throw new IllegalArgumentException("registry:// evidence requires a verified registry-aware manufacture context: " + locator);
+        }
+        if (!locator.startsWith("registry://")) throw new IllegalArgumentException("Not a registry locator: " + locator);
+        String remainder = locator.substring("registry://".length());
+        int slash = remainder.indexOf('/');
+        if (slash <= 0 || slash == remainder.length() - 1) throw new IllegalArgumentException("Invalid registry source locator: " + locator);
+        String packageId = remainder.substring(0, slash);
+        String relative = remainder.substring(slash + 1);
+        Map<String,Object> packageRecord = null;
+        for (Object raw : list(registryIndex.get("packages"), "registry packages")) {
+            Map<String,Object> record = map(raw);
+            if (packageId.equals(record.get("packageId"))) { packageRecord = record; break; }
+        }
+        if (packageRecord == null) throw new IllegalArgumentException("Registry source references unknown package: " + packageId);
+        Path packageRoot = registryRoot.resolve("packages").resolve(packageId).normalize();
+        if (!packageRoot.startsWith(registryRoot)) throw new IllegalArgumentException("Registry package path escapes registry root: " + packageId);
+        String expectedDigest = string(packageRecord.get("packageDigest"), "registry packageDigest");
+        if (!expectedDigest.equals(FileOps.treeHash(packageRoot))) throw new IllegalArgumentException("Registry package digest changed before evidence custody: " + packageId);
+        Path path = packageRoot.resolve(relative).normalize();
+        if (!path.startsWith(packageRoot)) throw new IllegalArgumentException("Registry source path escapes immutable package: " + locator);
+        if (!Files.isRegularFile(path)) throw new IllegalArgumentException("Registry source file does not exist: " + locator);
+        try { return Files.readAllBytes(path); }
+        catch (Exception ex) { throw new IllegalArgumentException("Unable to read registry evidence " + locator + ": " + ex.getMessage(), ex); }
     }
 
     protected void validate(Object value, String schemaFile, String label) {

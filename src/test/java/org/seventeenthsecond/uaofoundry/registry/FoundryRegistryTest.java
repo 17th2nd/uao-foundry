@@ -98,6 +98,47 @@ class FoundryRegistryTest {
         assertEquals(Boolean.TRUE, verification.get("passed"));
     }
 
+
+    @Test
+    void semanticKeyCollisionIsRejectedTransactionally() {
+        PipelineResult granite = manufacture("granite", "material-granite.json", "continuity-seed");
+        Path registryRoot = temp.resolve("continuity-registry");
+        FoundryRegistry registry = new FoundryRegistry(registryRoot, SCHEMAS);
+        registry.register(granite.packagePath());
+        String before = FileOps.treeHash(registryRoot);
+
+        @SuppressWarnings("unchecked") Map<String,Object> bundle = (Map<String,Object>) FileOps.readJson(FIXTURES.resolve("material-granite.json"));
+        Map<String,Object> candidates = Json.object(bundle.get("candidates"), "candidates");
+        List<Object> identities = Json.array(candidates.get("identities"), "identities");
+        Map<String,Object> root = identities.stream().map(v -> Json.object(v, "identity")).filter(v -> Boolean.TRUE.equals(v.get("root"))).findFirst().orElseThrow();
+        root.put("label", "asbestos insulation board"); root.put("aliases", List.of("asbestos"));
+        Path collisionFixture = temp.resolve("collision-fixture.json"); FileOps.writeJson(collisionFixture, bundle);
+        RequestLoader loader = new RequestLoader(SCHEMAS.resolve("manufacturing-request.schema.json"));
+        ManufacturingRequest request = loader.fromSeed("granite", "en", "experimental");
+        PipelineResult collision = new FoundryPipeline(SCHEMAS, temp.resolve("work-collision"), temp.resolve("dist-collision"), "test-sha")
+                .manufacture(request, new FixtureProvider(collisionFixture, SCHEMAS), false);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> registry.register(collision.packagePath()));
+        assertTrue(ex.getMessage().contains("continuity") || ex.getMessage().contains("semantic merge"));
+        assertEquals(before, FileOps.treeHash(registryRoot), "failed admission must leave registry byte-for-byte unchanged");
+        assertTrue(registry.verify().passed());
+    }
+
+    @Test
+    void searchFailsClosedOnTamperedStoredIndex() {
+        PipelineResult granite = manufacture("granite", "material-granite.json", "index-tamper");
+        Path registryRoot = temp.resolve("index-registry");
+        FoundryRegistry registry = new FoundryRegistry(registryRoot, SCHEMAS);
+        registry.register(granite.packagePath());
+        Map<String,Object> index = Json.object(FileOps.readJson(registryRoot.resolve("index.json")), "index");
+        Map<String,Object> identity = Json.object(Json.array(index.get("identities"), "identities").getFirst(), "identity");
+        @SuppressWarnings("unchecked") List<Object> labels = (List<Object>) identity.get("canonicalLabels");
+        labels.add("FORGED LABEL INJECTED INTO INDEX");
+        FileOps.writeJson(registryRoot.resolve("index.json"), index);
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> registry.search("FORGED LABEL INJECTED INTO INDEX"));
+        assertTrue(ex.getMessage().contains("does not match verified immutable package contents"));
+    }
+
     private PipelineResult manufacture(String seed, String fixture, String suffix) {
         RequestLoader loader = new RequestLoader(SCHEMAS.resolve("manufacturing-request.schema.json"));
         ManufacturingRequest request = loader.fromSeed(seed, "en", "experimental");

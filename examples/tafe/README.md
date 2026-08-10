@@ -1,9 +1,12 @@
 # TAFE Demonstration — Cumulative UAO Manufacture
 
-**Status:** non-authoritative demonstration guide  
+**Status:** PAUSED for persistent-registry demonstration pending independent remediation re-audit and ASA#29 relationship authority
 **Core dependency:** generic UAO Foundry only; no TAFE-specific production code
 
 This guide demonstrates the commercial/educational point that governed knowledge can be manufactured once and then reused in later manufacturing runs.
+
+
+> **Current gate (2026-08-10):** Do not populate a persistent TAFE demonstration registry yet. Independent adversarial audit showed that realistic qualification structure is relationship-heavy; while ASA#29 remains unresolved those relationships correctly fail closed, making the package `EVIDENCE_INCOMPLETE`. Use disposable experiments only until the remediation candidate is independently re-audited and the relationship demonstration is explicitly scoped.
 
 The demonstration deliberately uses the same generic Foundry executable and Claude provider used for any other identity.
 
@@ -16,7 +19,7 @@ bash scripts/preflight-live.sh
 rm -rf demo-work demo-dist demo-registry
 ```
 
-For a persistent demonstration registry, omit the `rm -rf demo-registry` line on later runs.
+Persistent-registry use is currently gated. Keep `demo-registry` disposable until the independent remediation re-audit clears the integrity/identity controls and the URO limitation is deliberately handled.
 
 ## 2. Manufacture the first knowledge package
 
@@ -97,14 +100,14 @@ A useful meeting explanation is:
 
 > The first request manufactures a governed knowledge package. When a later request overlaps with knowledge the Foundry has already verified and registered, the new job begins by discovering that existing knowledge. It can reuse the stable identities and their immutable provenance, then concentrate acquisition on the semantic delta instead of starting from zero.
 
-This is stronger than simply caching generated text:
+When the remediation and authority gates permit this demo, this is stronger than simply caching generated text because:
 
 - reused items retain stable UAO identity;
 - prior evidence remains in its original immutable package;
 - registry evidence is content-hash checked;
 - the new package records exactly what was reused versus newly manufactured;
 - provider output remains intermediate and non-authoritative;
-- package verification is independent of the provider call.
+- package verification is independent of the provider call **as a structural/content-integrity check**; it does not certify external factual correctness.
 
 ## 5. Current relationship limitation
 

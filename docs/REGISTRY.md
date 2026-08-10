@@ -36,7 +36,7 @@ Packages are copied as immutable evidence-bearing artifacts. The index is comple
 2. manifest/checksum/source/provider-snapshot integrity passes;
 3. the publication decision has `eligible: true`.
 
-If a package ID already exists with byte-identical content, registration is idempotent. If the same package ID names different content, admission is rejected.
+If a package ID already exists with byte-identical content, registration is idempotent. If the same package ID names different content, admission is rejected. Admission also checks stable-key lexical name continuity and is transactional: a rejected identity collision leaves neither package bytes nor a changed index behind.
 
 ## Index model
 
@@ -125,14 +125,14 @@ This is the basis for the next integration step: give the provider registry cont
 
 ## Verification
 
-`RegistryApplication verify` rebuilds the expected index from all registered packages and re-runs package verification. It fails if:
+Every registry read used for search/discovery first rebuilds the expected index from verified immutable packages and compares it with stored `index.json`. `RegistryApplication verify` exposes the same check explicitly. It fails if:
 
 - a package has been altered;
 - a package checksum/source snapshot/provider snapshot fails;
 - a package is no longer reuse-eligible;
 - the stored index differs from the rebuildable deterministic index.
 
-`index.json` is therefore a cache/derived view, not the authority surface. The immutable verified packages are its evidence base.
+`index.json` is therefore a cache/derived view, not the authority surface, and a tampered cache is never used for discovery. The immutable verified packages are its evidence base.
 
 ## Relationship-authority boundary
 

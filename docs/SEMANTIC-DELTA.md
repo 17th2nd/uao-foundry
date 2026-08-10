@@ -50,7 +50,7 @@ A provider can identify prior evidence with:
 registry://<package-id>/<relative-path>
 ```
 
-The prefix alone is not trusted. The Foundry resolves the locator inside the already-verified immutable package, rejects path escape/unknown packages, hashes the prior file and requires that SHA-256 to equal the new source record's content hash. Only then is the source counted as registry evidence.
+The prefix alone is not trusted. Core source acquisition requires a verified registry context for every `registry://` locator, resolves the locator inside the immutable package, checks the package tree digest, rejects path escape/unknown packages, and snapshots the exact registered bytes. `ReuseAnalyzer` independently re-resolves/hash-checks that evidence after manufacture. Plain manufacture without verified registry context rejects `registry://` evidence outright.
 
 The normal source acquisition stage still snapshots the content into the new package, so reused evidence remains provenance-bearing.
 
@@ -89,10 +89,12 @@ Controls include `--provider-timeout-seconds`, `--catalog-limit`, `--work-dir`, 
 
 1. prior verified UAOs are discoverable before acquisition;
 2. registry state participates in transaction identity;
-3. stable UAO IDs determine reused versus new identities after canonicalisation;
+3. exact canonical `resolutionKey` continuity derives stable UAO IDs used for reused/new accounting, with conservative registry name-continuity collision rejection;
 4. a claimed registry source is cryptographically checked against prior immutable evidence;
 5. the reuse report is package evidence, not a console-only claim;
 6. successful output can re-enter the registry for cumulative manufacture.
+
+These properties prove deterministic reuse accounting under the Foundry identity discipline; they do **not** prove universal semantic equivalence between arbitrary concepts or the factual correctness of provider knowledge.
 
 The pipeline intentionally still validates provider candidates even when a stable identity exists. Reuse does not bypass validation or provenance. Future performance optimisation may avoid unnecessary candidate reconstruction only if these guarantees remain intact.
 

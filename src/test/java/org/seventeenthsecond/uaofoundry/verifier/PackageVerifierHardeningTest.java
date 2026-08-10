@@ -3,6 +3,7 @@ package org.seventeenthsecond.uaofoundry.verifier;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.seventeenthsecond.uaofoundry.io.RequestLoader;
+import org.seventeenthsecond.uaofoundry.identifiers.StableIdentifiers;
 import org.seventeenthsecond.uaofoundry.json.Json;
 import org.seventeenthsecond.uaofoundry.model.ManufacturingRequest;
 import org.seventeenthsecond.uaofoundry.pipeline.FoundryPipeline;
@@ -72,6 +73,55 @@ class PackageVerifierHardeningTest {
         assertFalse(result.passed());
         assertTrue(result.errors().stream().anyMatch(e -> e.contains("deterministic resolution_key derivation")), result.errors().toString());
         assertFalse(result.errors().stream().anyMatch(e -> e.startsWith("Checksum mismatch")), "negative control must prove failure after valid checksum rewrite");
+    }
+
+
+    @Test
+    void rehashedConsistentAssertionForgeryFailsSemanticReconstruction() throws Exception {
+        Path packageDir = manufacture("cow", "consistent-forgery");
+        String forged = "FORGED SAFETY ASSERTION THAT DOES NOT EXIST IN THE PROVIDER CANDIDATE SET";
+        List<Object> canonical = Json.array(FileOps.readJson(packageDir.resolve("canonical-identities.json")), "canonical identities");
+        Map<String,Object> first = Json.object(canonical.getFirst(), "uao");
+        Json.object(Json.array(first.get("assertions"), "assertions").getFirst(), "assertion").put("statement", forged);
+        FileOps.writeJson(packageDir.resolve("canonical-identities.json"), canonical);
+        Map<String,Object> manufactured = Json.object(FileOps.readJson(packageDir.resolve("manufactured-package.json")), "manufactured");
+        List<Object> manufacturedUaos = Json.array(manufactured.get("uaos"), "uaos");
+        Json.object(Json.array(Json.object(manufacturedUaos.getFirst(), "uao").get("assertions"), "assertions").getFirst(), "assertion").put("statement", forged);
+        FileOps.writeJson(packageDir.resolve("manufactured-package.json"), manufactured);
+        rewriteChecksums(packageDir);
+
+        PackageVerifier.Result result = new PackageVerifier(SCHEMAS).verify(packageDir);
+        assertFalse(result.passed());
+        assertTrue(result.errors().stream().anyMatch(e -> e.contains("contentDigest") || e.contains("Canonical assertions")), result.errors().toString());
+    }
+
+    @Test
+    void relationshipIncompletePackageCannotBeRehashedIntoExperimental() throws Exception {
+        Path relationshipFixture = Path.of("src/test/resources/fixtures/relationship-bearing-cow.json");
+        RequestLoader loader = new RequestLoader(SCHEMAS.resolve("manufacturing-request.schema.json"));
+        ManufacturingRequest request = loader.fromSeed("cow", "en", "experimental");
+        PipelineResult produced = new FoundryPipeline(SCHEMAS, temp.resolve("work-elevation"), temp.resolve("dist-elevation"), "hardening-test-sha")
+                .manufacture(request, new FixtureProvider(relationshipFixture, SCHEMAS), false);
+        assertTrue("EVIDENCE_INCOMPLETE".equals(produced.publicationStatus()));
+        Path packageDir = produced.packagePath();
+
+        Map<String,Object> decision = Json.object(FileOps.readJson(packageDir.resolve("publication-decision.json")), "decision");
+        decision.put("status", "EXPERIMENTAL"); decision.put("eligible", true);
+        FileOps.writeJson(packageDir.resolve("publication-decision.json"), decision);
+        Map<String,Object> manufactured = Json.object(FileOps.readJson(packageDir.resolve("manufactured-package.json")), "manufactured");
+        manufactured.put("publicationDecision", decision);
+        FileOps.writeJson(packageDir.resolve("manufactured-package.json"), manufactured);
+        Map<String,Object> manifest = Json.object(FileOps.readJson(packageDir.resolve("manifest.json")), "manifest");
+        manifest.put("publicationStatus", "EXPERIMENTAL");
+        String contentDigest = PackageContentDigest.compute(packageDir);
+        manifest.put("contentDigest", contentDigest);
+        manifest.put("packageId", StableIdentifiers.forText("pkg", 16, contentDigest));
+        FileOps.writeJson(packageDir.resolve("manifest.json"), manifest);
+        rewriteChecksums(packageDir);
+
+        PackageVerifier.Result result = new PackageVerifier(SCHEMAS).verify(packageDir);
+        assertFalse(result.passed());
+        assertTrue(result.errors().stream().anyMatch(e -> e.contains("Publication decision cannot be reconstructed")), result.errors().toString());
     }
 
     private Path manufacture(String seed, String suffix) {

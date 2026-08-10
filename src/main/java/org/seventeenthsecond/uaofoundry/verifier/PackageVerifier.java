@@ -1,6 +1,7 @@
 package org.seventeenthsecond.uaofoundry.verifier;
 
 import org.seventeenthsecond.uaofoundry.identifiers.StableIdentifiers;
+import org.seventeenthsecond.uaofoundry.identifiers.ResolutionKeys;
 import org.seventeenthsecond.uaofoundry.json.Json;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
 import org.seventeenthsecond.uaofoundry.util.Hashes;
@@ -43,6 +44,14 @@ public final class PackageVerifier {
         Map<String, Object> request = readObject(packageDir.resolve("manufacturing-request.json"), "manufacturing-request", errors);
         Map<String, Object> publication = readObject(packageDir.resolve("publication-decision.json"), "publication-decision", errors);
         Map<String, Object> verification = readObject(packageDir.resolve("verification-report.json"), "verification-report", errors);
+        Map<String, Object> scope = readObject(packageDir.resolve("scope-resolution.json"), "scope-resolution", errors);
+        Map<String, Object> resolution = readObject(packageDir.resolve("identity-resolution.json"), "identity-resolution", errors);
+        Map<String, Object> coverage = readObject(packageDir.resolve("coverage-report.json"), "coverage-report", errors);
+        Object candidateClaims = readValue(packageDir.resolve("candidate-claims.json"), "candidate-claims", errors);
+        Object candidateRelationships = readValue(packageDir.resolve("candidate-relationships.json"), "candidate-relationships", errors);
+        Object quarantine = readValue(packageDir.resolve("candidate-quarantine.json"), "candidate-quarantine", errors);
+        Object provenanceLedger = readValue(packageDir.resolve("provenance-ledger.json"), "provenance-ledger", errors);
+        Object unresolvedItems = readValue(packageDir.resolve("unresolved-items.json"), "unresolved-items", errors);
 
         if (manifest != null) {
             errors.addAll(prefix(validator.validate(manifest, schemaDir.resolve("release-manifest.schema.json")).errors(), "manifest: "));
@@ -60,6 +69,11 @@ public final class PackageVerifier {
         checks.add("PACKAGE_CROSS_FILE_CONSISTENCY");
         verifyCanonicalIdentityDerivations(manifest, canonicalIdentities, errors);
         checks.add("UAO_IDENTITY_DERIVATION");
+        verifyContentAddress(packageDir, manifest, errors);
+        checks.add("CONTENT_ADDRESSED_PACKAGE_ID");
+        verifySemanticProjections(canonicalIdentities, canonicalRelationships, candidateClaims, candidateRelationships,
+                quarantine, provenanceLedger, unresolvedItems, resolution, scope, coverage, verification, publication, errors);
+        checks.add("SEMANTIC_PROJECTION_RECONSTRUCTION");
 
         Path providerSnapshot = packageDir.resolve("provider-snapshot.json");
         if (!Files.isRegularFile(providerSnapshot)) {
@@ -152,6 +166,8 @@ public final class PackageVerifier {
                 continue;
             }
 
+            try { ResolutionKeys.requireCanonical(resolutionKey); }
+            catch (IllegalArgumentException ex) { errors.add("Canonical UAO resolution_key is not canonical: " + ex.getMessage()); }
             String expected = StableIdentifiers.forText("uao", 12, resolutionKey);
             if (!uid.equals(expected)) {
                 errors.add("Canonical UAO uid does not match deterministic resolution_key derivation: " + uid + " expected " + expected + ".");
@@ -162,6 +178,102 @@ public final class PackageVerifier {
             }
         }
         if (manifestRoot != null && !rootPresent) errors.add("Manifest rootUaoId is absent from canonical-identities.json.");
+    }
+
+    private void verifyContentAddress(Path packageDir, Map<String,Object> manifest, List<String> errors) {
+        if (manifest == null) return;
+        Object rawDigest = manifest.get("contentDigest");
+        if (!(rawDigest instanceof String expected) || !expected.matches("[a-f0-9]{64}")) return;
+        try {
+            String actual = PackageContentDigest.compute(packageDir);
+            if (!expected.equals(actual)) errors.add("Manifest contentDigest differs from meaning-bearing package content.");
+            String packageId = manifest.get("packageId") instanceof String s ? s : "";
+            String derived = StableIdentifiers.forText("pkg", 16, actual);
+            if (!packageId.equals(derived)) errors.add("Manifest packageId does not match contentDigest derivation: expected " + derived + ".");
+        } catch (IllegalArgumentException ex) {
+            errors.add("Unable to compute package contentDigest: " + ex.getMessage());
+        }
+    }
+
+    private void verifySemanticProjections(
+            Object canonicalIdentities, Object canonicalRelationships, Object candidateClaims, Object candidateRelationships,
+            Object quarantine, Object provenanceLedger, Object unresolvedItems, Map<String,Object> resolution,
+            Map<String,Object> scope, Map<String,Object> coverage, Map<String,Object> verification,
+            Map<String,Object> publication, List<String> errors) {
+        if (!(canonicalIdentities instanceof List<?> uaos) || !(candidateClaims instanceof List<?> claims)
+                || !(provenanceLedger instanceof List<?> ledger) || resolution == null) return;
+        Map<String,Object> candidateToUao = object(resolution.get("candidateToUao"), "identity-resolution.candidateToUao", errors);
+        if (candidateToUao == null) return;
+
+        Map<String,List<String>> expectedStatements = new LinkedHashMap<>();
+        Map<String,Map<String,Object>> claimById = new LinkedHashMap<>();
+        for (Object raw : claims) {
+            Map<String,Object> claim = object(raw, "candidate claim", errors); if (claim == null) continue;
+            Object cidRaw = claim.get("candidateId"), subjectRaw = claim.get("subjectIdentityRef"), statementRaw = claim.get("statement");
+            if (!(cidRaw instanceof String cid) || !(subjectRaw instanceof String subject) || !(statementRaw instanceof String statement)) continue;
+            claimById.put(cid, claim);
+            Object uidRaw = candidateToUao.get(subject);
+            if (!(uidRaw instanceof String uid)) { errors.add("Candidate claim maps to no resolved UAO: " + cid); continue; }
+            expectedStatements.computeIfAbsent(uid, ignored -> new ArrayList<>()).add(statement);
+        }
+        for (List<String> values : expectedStatements.values()) values.sort(String::compareTo);
+        for (Object raw : uaos) {
+            Map<String,Object> uao = object(raw, "canonical UAO", errors); if (uao == null) continue;
+            Object uidRaw = uao.get("uid"); if (!(uidRaw instanceof String uid)) continue;
+            List<String> actual = new ArrayList<>();
+            Object assertionsRaw = uao.get("assertions");
+            if (assertionsRaw instanceof List<?> assertions) for (Object ar : assertions) {
+                Map<String,Object> assertion = object(ar, "canonical assertion", errors);
+                if (assertion != null && assertion.get("statement") instanceof String statement) actual.add(statement);
+            }
+            actual.sort(String::compareTo);
+            if (!actual.equals(expectedStatements.getOrDefault(uid, List.of()))) {
+                errors.add("Canonical assertions do not reconstruct from candidate claims for UAO " + uid + ".");
+            }
+        }
+
+        Set<String> ledgerIds = new LinkedHashSet<>();
+        for (Object raw : ledger) {
+            Map<String,Object> entry = object(raw, "provenance ledger entry", errors); if (entry == null) continue;
+            Object cidRaw = entry.get("candidateId"); if (!(cidRaw instanceof String cid)) continue;
+            if (!ledgerIds.add(cid)) errors.add("Duplicate provenance ledger candidateId: " + cid);
+            Map<String,Object> claim = claimById.get(cid);
+            if (claim == null) { errors.add("Provenance ledger references unknown candidate claim: " + cid); continue; }
+            if (!java.util.Objects.equals(entry.get("statement"), claim.get("statement"))) errors.add("Provenance ledger statement differs from candidate claim: " + cid);
+            Object mapped = candidateToUao.get(claim.get("subjectIdentityRef"));
+            if (!java.util.Objects.equals(entry.get("uaoId"), mapped)) errors.add("Provenance ledger uaoId differs from identity resolution: " + cid);
+            if (!java.util.Objects.equals(entry.get("sourceRefs"), claim.get("sourceRefs"))) errors.add("Provenance ledger sourceRefs differ from candidate claim: " + cid);
+        }
+        if (!ledgerIds.equals(claimById.keySet())) errors.add("Provenance ledger candidate set differs from candidate claims.");
+
+        if (candidateRelationships instanceof List<?> relationships && unresolvedItems instanceof List<?> unresolved) {
+            Set<String> relationshipIds = new LinkedHashSet<>();
+            for (Object raw : relationships) {
+                Map<String,Object> rel = object(raw, "candidate relationship", errors);
+                if (rel != null && rel.get("candidateId") instanceof String id) relationshipIds.add(id);
+            }
+            Set<String> unresolvedIds = new LinkedHashSet<>();
+            for (Object raw : unresolved) {
+                Map<String,Object> item = object(raw, "unresolved item", errors); if (item == null) continue;
+                if (item.get("candidateId") instanceof String id) unresolvedIds.add(id);
+                if (!"URO_TYPE_AUTHORITY_UNAVAILABLE".equals(item.get("code"))) errors.add("Unexpected unresolved relationship code: " + item.get("code"));
+            }
+            if (!relationshipIds.equals(unresolvedIds)) errors.add("Unresolved relationship set does not equal candidate relationship set while ASA type-role authority is unavailable.");
+            if (canonicalRelationships instanceof List<?> uros && !uros.isEmpty()) errors.add("Canonical UROs are present while Relationship Type role authority remains unavailable.");
+        }
+
+        if (publication != null && scope != null && coverage != null && verification != null && quarantine instanceof List<?> q && unresolvedItems instanceof List<?> unresolved) {
+            String expectedStatus; boolean expectedEligible;
+            if ("REQUIRES_SELECTION".equals(scope.get("scopeStatus"))) { expectedStatus="INTERPRETATION_UNRESOLVED"; expectedEligible=false; }
+            else if (!Boolean.TRUE.equals(verification.get("passed"))) { expectedStatus="FAILED"; expectedEligible=false; }
+            else if (!q.isEmpty()) { expectedStatus="QUARANTINED"; expectedEligible=false; }
+            else if (!unresolved.isEmpty()) { expectedStatus="EVIDENCE_INCOMPLETE"; expectedEligible=false; }
+            else if (!Boolean.TRUE.equals(coverage.get("complete"))) { expectedStatus="EVIDENCE_INCOMPLETE"; expectedEligible=false; }
+            else { expectedStatus="EXPERIMENTAL"; expectedEligible=true; }
+            if (!expectedStatus.equals(publication.get("status")) || !java.util.Objects.equals(expectedEligible, publication.get("eligible"))) {
+                errors.add("Publication decision cannot be reconstructed from scope/quarantine/URO/coverage/verification state; expected " + expectedStatus + "/" + expectedEligible + ".");
+            }
+        }
     }
 
     private void verifyChecksums(Path packageDir, Path checksumFile, List<String> errors) {
