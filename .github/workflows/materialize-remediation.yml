@@ -1,0 +1,38 @@
+name: Materialize audit remediation candidate
+
+on:
+  push:
+    branches:
+      - "transport/uao-remediation-r1-20260810"
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: contains(github.event.head_commit.message, 'transport: materialize audit remediation payload')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout transport payload
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify and reconstruct exact tested candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .transport/payload.* > /tmp/remediation.b64
+          base64 -d /tmp/remediation.b64 > /tmp/remediation.patch.xz
+          echo 'e383504e8a6686c619a87ddf6458a70764c5f3ab4c118f090cb995f5baebb5f3  /tmp/remediation.patch.xz' | sha256sum -c -
+          xz -d -c /tmp/remediation.patch.xz > /tmp/remediation.patch
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch --detach cb20687d0b0790622e5b20dd2a530fc9c03aa2cb
+          git switch -c materialized-candidate
+          git apply --index --binary /tmp/remediation.patch
+          git diff --cached --check
+          test "$(git diff --cached --name-only | wc -l)" -eq 33
+          git commit -m 'foundry: remediate independent adversarial audit findings'
+          git push --force origin HEAD:refs/heads/sprint/2026-08-10-audit-remediation-r1
