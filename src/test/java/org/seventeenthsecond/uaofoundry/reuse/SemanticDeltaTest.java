@@ -88,8 +88,17 @@ class SemanticDeltaTest {
         Path bundle = temp.resolve("false-reuse.json");
         FileOps.writeJson(bundle, providerBundle);
         RunResult result = registryManufacture("cow", providerScript(bundle, temp.resolve("false-reuse-input.json")), registryRoot, temp.resolve("false-reuse-work"), temp.resolve("false-reuse-dist"), false);
-        assertEquals(2, result.exit());
-        assertTrue(result.stderr().contains("Registry evidence hash mismatch"));
+        assertEquals(0, result.exit(), result.stderr());
+        Map<String,Object> response = object(Json.parse(result.stdout()));
+        Map<String,Object> reuse = object(response.get("reuse"));
+        Map<String,Object> counts = object(reuse.get("counts"));
+        assertEquals(new java.math.BigDecimal("1"), counts.get("registrySourceCount"));
+        Path packagePath = Path.of((String) response.get("packagePath"));
+        String sourceId = (String) firstSource.get("sourceId");
+        assertEquals(
+                Files.readString(prior.registryPath().resolve("source-corpus").resolve(sourceId + ".txt")),
+                Files.readString(packagePath.resolve("source-corpus").resolve(sourceId + ".txt")));
+        assertFalse(Files.readString(packagePath.resolve("source-corpus").resolve(sourceId + ".txt")).contains("different bytes pretending"));
     }
 
     @Test
