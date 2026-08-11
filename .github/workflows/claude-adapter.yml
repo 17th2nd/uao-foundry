@@ -82,7 +82,7 @@ jobs:
           cd /tmp/uao-foundry-recovery
 
           git -C "$GITHUB_WORKSPACE" update-ref refs/heads/recovery-main "$MAIN_SHA"
-          git -C "$GITHUB_WORKSPACE" bundle create "uao-foundry-main-${MAIN_SHA}.bundle" refs/heads/recovery-main
+          git -C "$GITHUB_WORKSPACE" bundle create "$(pwd)/uao-foundry-main-${MAIN_SHA}.bundle" refs/heads/recovery-main
           git -C "$GITHUB_WORKSPACE" bundle verify "$(pwd)/uao-foundry-main-${MAIN_SHA}.bundle" > BUNDLE-VERIFY.txt 2>&1
           git -C "$GITHUB_WORKSPACE" archive --format=tar.gz --prefix="uao-foundry-${MAIN_SHA}/" -o "$(pwd)/uao-foundry-source-${MAIN_SHA}.tar.gz" "$MAIN_SHA"
 
