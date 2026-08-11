@@ -48,7 +48,9 @@ class FoundryApplicationTest {
             PipelineResult result = run(item.seed(), item.fixture(), work, dist, false);
             assertEquals("EXPERIMENTAL", result.publicationStatus());
             assertTrue(result.verificationPassed());
-            assertTrue(new PackageVerifier(SCHEMAS).verify(result.packagePath()).passed());
+            PackageVerifier.Result standalone = new PackageVerifier(SCHEMAS).verify(result.packagePath());
+            assertTrue(standalone.passed(), standalone.errors().toString());
+            assertTrue(standalone.checks().contains("PROVIDER_PROJECTION_RECONCILIATION"));
             assertTrue(Files.isRegularFile(result.packagePath().resolve("provider-snapshot.json")));
             rootIds.add(result.rootUaoId());
 

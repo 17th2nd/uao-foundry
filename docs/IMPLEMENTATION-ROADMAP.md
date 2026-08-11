@@ -46,7 +46,7 @@ This sprint adds release/readiness surfaces without changing the UAO→USI termi
 - stale provider/semantic-delta CI JAR-name correction;
 - sprint execution and independent-audit handoff documentation.
 
-The sprint remains incomplete until all workflows pass on the exact final PR head and the execution/audit packet is committed.
+The release-readiness sprint was independently audited and R1 received a `CONDITIONAL PASS`. The same draft lane, `sprint/2026-08-10-audit-remediation-r1`, now carries bounded R2 remediation for provider-projection reconciliation and unresolved semantic variants. No persistent real-knowledge registry or external demonstration is authorised until the exact R2 head passes all five workflows and bounded independent re-audit.
 
 ## Bounded upstream dependency
 
@@ -59,11 +59,13 @@ Tracking:
 
 The authority sweep confirmed this is a genuine source/governance gap rather than a misplaced Foundry file. See `UPSTREAM-DEPENDENCIES.md`.
 
-## Remaining path after this sprint
+## Remaining path after audit remediation
 
-1. **Real workstation Claude smoke:** run one authenticated Claude Code manufacture outside CI, verify the package and preserve its provider snapshot; CI intentionally uses a fake Claude executable and therefore cannot prove real account/model/network operation.
-2. **TAFE demonstration manufacture:** manufacture the selected qualification/topic pair against a persistent demo registry and show the actual `reuse-report.json`, not a predicted reuse claim.
-3. **ASA#29:** independently establish and adopt the governed Relationship Type source edition required for arbitrary URO role validation; only then integrate URO publication in a separately reviewed Foundry sprint.
-4. **Consumer APIs:** expose verified package/registry consumption to ALA and other downstream systems without folding learner/application logic into the Foundry.
-5. **Release freeze:** after independent audit and real-provider smoke, decide whether `v0.1.0` is ready for an immutable release/tag and formal demonstration baseline.
-6. **Later clean migration:** when the programme migrates to a clean university/research/partnership repository, execute the already-recorded UAO → USI terminology review rather than renaming this prototype in place.
+1. **Exact-head R2 CI:** run all five required workflows on one exact R2 SHA.
+2. **Bounded independent R2 re-audit:** replay N-1 claim/relationship/accounting attacks and N-2 same/different-variant and automatic-reuse attacks. Earlier cleared surfaces need re-attack only if the R2 differential materially regresses them.
+3. **Disposable real-Claude smoke:** only after re-audit, run one authenticated Claude Code manufacture in a disposable registry and preserve the provider/CLI evidence.
+4. **ASA#29 relationship authority:** a realistic qualification is relationship-heavy and currently becomes `EVIDENCE_INCOMPLETE`; establish the governed Relationship Type source edition before presenting a full qualification structure as manufactured knowledge.
+5. **TAFE demonstration redesign:** once the integrity and relationship gates permit it, manufacture the selected qualification/topic pair against a clean persistent demo registry and show actual `reuse-report.json` rather than predicted reuse.
+6. **Consumer APIs:** expose verified package/registry consumption to ALA and other downstream systems without folding learner/application logic into the Foundry.
+7. **Release freeze:** after independent audit and real-provider smoke, decide whether `v0.1.0` is ready for an immutable release/tag and formal demonstration baseline.
+8. **Later clean migration:** when the programme migrates to a clean university/research/partnership repository, execute the already-recorded UAO → USI terminology review rather than renaming this prototype in place.

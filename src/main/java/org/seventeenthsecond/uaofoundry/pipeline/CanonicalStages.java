@@ -28,6 +28,7 @@ import java.util.function.Supplier;
 /** Canonical UAO assembly, completeness, verification and publication-decision stages. */
 class CanonicalStages extends AcquisitionStages {
     protected CanonicalStages(Path schemaDir, Path workDir, Path distDir, String repositoryCommit) { super(schemaDir, workDir, distDir, repositoryCommit); }
+    protected CanonicalStages(Path schemaDir, Path workDir, Path distDir, String repositoryCommit, Path registryRoot, Map<String,Object> registryIndex) { super(schemaDir, workDir, distDir, repositoryCommit, registryRoot, registryIndex); }
 
     protected Map<String, Object> canonicalBuild(
             ManufacturingRequest request, FoundryProvider provider, Map<String, Object> sourceRegistry,

@@ -30,7 +30,7 @@ Claude does not write canonical UAOs or UROs.
 ## Requirements
 
 - Python 3.11+
-- Claude Code installed and authenticated
+- Claude Code **v2.1.205 or later** installed and authenticated
 - Java 21 and Maven for the Foundry
 
 The current Claude Code CLI supports non-interactive `-p/--print`, structured `--output-format json`, `--json-schema`, tool availability/permission controls, `--no-session-persistence`, model selection and turn limits. The adapter uses those surfaces rather than interactive automation.
@@ -42,10 +42,13 @@ For manufacturing calls the adapter starts Claude Code with:
 - `--bare`;
 - `--no-session-persistence`;
 - `--no-chrome`;
+- `--strict-mcp-config` and explicit `mcp__*` denial;
 - `--tools WebSearch,WebFetch` to restrict built-in tool availability;
 - `--permission-mode dontAsk`;
 - allowed tools: `WebSearch`, `WebFetch`;
-- explicitly disallowed defense-in-depth entries: `Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Agent`, `Skill`.
+- explicitly disallowed defense-in-depth entries: `Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Agent`, `Skill`, `mcp__*`;
+- fail-closed CLI version parsing before any research invocation;
+- a bounded environment allowlist instead of copying unrelated process secrets.
 
 The model therefore receives the manufacturing request, bounded registry discovery context and bounded immutable registry evidence through stdin. It is not given general repository filesystem or shell capability by this adapter.
 
@@ -66,7 +69,7 @@ Optional environment variables:
 | `UAO_FOUNDRY_REGISTRY_EVIDENCE_BYTES` | `1000000` | maximum registry evidence bytes placed in the Claude prompt |
 | `UAO_FOUNDRY_REGISTRY_EVIDENCE_FILES` | `8` | maximum registry evidence files placed in the Claude prompt |
 
-Credentials remain owned by Claude Code. Do not commit OAuth tokens, API keys or credential files into this repository.
+Credentials remain owned by Claude Code. The adapter passes at most one direct Anthropic credential environment variable (OAuth preferred over API key), while retaining `HOME` for normal Claude credential files. Unrelated CI/cloud secrets are not inherited. If `ANTHROPIC_BASE_URL` is intentionally used, the base URL (never its token) is recorded in `sourceStrategy.authorityNotes`.
 
 ## Stable semantic identity policy
 
@@ -80,7 +83,7 @@ New live keys outside `ext:*` or `foundry:v0.1:*` fail closed.
 
 Keys that appear to contain UUID/session/model/timestamp material also fail closed. Model/session/turn identity is not semantic identity.
 
-This is an adapter discipline for repeatable manufacturing; it does not claim to solve all future cross-domain identity equivalence questions. See [`../../docs/STABLE-SEMANTIC-IDENTITY.md`](../../docs/STABLE-SEMANTIC-IDENTITY.md).
+This is an adapter early check only. The Java Foundry now independently requires canonical `resolutionKey` grammar and the registry refuses same-key occurrences with no lexical name continuity. These conservative controls prevent demonstrated collisions/divergence; they do not claim to solve universal semantic equivalence. See [`../../docs/STABLE-SEMANTIC-IDENTITY.md`](../../docs/STABLE-SEMANTIC-IDENTITY.md).
 
 ## Relationship authority
 
@@ -107,7 +110,7 @@ For each matched immutable registry occurrence the adapter may provide Claude wi
 }
 ```
 
-If Claude cites a `registry://` source, the model-supplied content is discarded. The adapter restores the exact verified registry bytes before returning the provider bundle. The Foundry later hashes those bytes again and `ReuseAnalyzer` verifies the locator against the immutable package.
+If Claude cites a `registry://` source, the model-supplied content is discarded. The adapter restores the bounded bytes it supplied to Claude, **and the Java core acquisition stage independently resolves the locator against a verified registry context and replaces the source with the immutable package bytes**. `ReuseAnalyzer` performs an additional post-manufacture check.
 
 A model cannot make changed text become registered evidence merely by retaining a `registry://` prefix.
 
@@ -133,4 +136,4 @@ Adapter-only tests:
 python3 -m unittest discover -s adapters/claude-code/tests -p 'test_*.py' -v
 ```
 
-The sprint CI also runs the adapter through the Java registry-aware manufacturing entry point with a fake Claude executable so that no live Claude credentials are required in GitHub Actions.
+CI runs the adapter through the Java registry-aware manufacturing entry point with a fake Claude executable. The fake asserts the containment argv **before** emitting provider data, and unit tests mutate required flags/tool rules to prove weakened containment fails closed. No live Claude credentials are required in GitHub Actions.

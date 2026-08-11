@@ -2,14 +2,47 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "UAO Foundry Release Manifest",
   "type": "object",
-  "required": ["packageId", "packageVersion", "rootUaoId", "publicationStatus", "jobId", "files"],
+  "required": [
+    "packageId",
+    "packageVersion",
+    "rootUaoId",
+    "publicationStatus",
+    "jobId",
+    "contentDigest",
+    "files"
+  ],
   "properties": {
-    "packageId": {"type": "string", "pattern": "^pkg-[a-f0-9]{16}$"},
-    "packageVersion": {"type": "string", "minLength": 1},
-    "rootUaoId": {"type": "string", "pattern": "^uao-[a-f0-9]{12}$"},
-    "publicationStatus": {"type": "string", "minLength": 1},
-    "jobId": {"type": "string", "pattern": "^job-[a-f0-9]{16}$"},
-    "files": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+    "packageId": {
+      "type": "string",
+      "pattern": "^pkg-[a-f0-9]{16}$"
+    },
+    "packageVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rootUaoId": {
+      "type": "string",
+      "pattern": "^uao-[a-f0-9]{12}$"
+    },
+    "publicationStatus": {
+      "type": "string",
+      "minLength": 1
+    },
+    "jobId": {
+      "type": "string",
+      "pattern": "^job-[a-f0-9]{16}$"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "contentDigest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
   },
   "additionalProperties": false
 }

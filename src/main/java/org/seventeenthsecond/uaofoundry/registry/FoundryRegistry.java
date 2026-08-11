@@ -6,6 +6,7 @@ import org.seventeenthsecond.uaofoundry.verifier.PackageVerifier;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -44,6 +45,8 @@ public final class FoundryRegistry {
         Path destination = packageRoot.resolve(packageId).normalize();
         if (!destination.startsWith(packageRoot)) throw new IllegalArgumentException("Package id escapes registry package root.");
 
+        Map<String,Object> before = index(); // verified read; tampered indexes fail before mutation
+        validateIdentityContinuity(packageDir, before);
         boolean alreadyPresent = Files.isDirectory(destination);
         if (alreadyPresent) {
             String existingDigest = FileOps.treeHash(destination);
@@ -54,11 +57,16 @@ public final class FoundryRegistry {
             FileOps.copyTree(packageDir, destination);
         }
 
-        Map<String,Object> index = rebuildIndex();
-        FileOps.writeJson(indexPath, index);
-        return new RegistrationResult(packageId, digest, destination, alreadyPresent,
-                array(index.get("packages"), "index packages").size(),
-                array(index.get("identities"), "index identities").size());
+        try {
+            Map<String,Object> rebuilt = rebuildIndex();
+            FileOps.writeJson(indexPath, rebuilt);
+            return new RegistrationResult(packageId, digest, destination, alreadyPresent,
+                    array(rebuilt.get("packages"), "index packages").size(),
+                    array(rebuilt.get("identities"), "index identities").size());
+        } catch (RuntimeException ex) {
+            if (!alreadyPresent) FileOps.deleteTree(destination);
+            throw ex;
+        }
     }
 
     public VerificationResult verify() {
@@ -87,8 +95,20 @@ public final class FoundryRegistry {
     }
 
     public Map<String,Object> index() {
-        if (!Files.isRegularFile(indexPath)) return emptyIndex();
-        return object(FileOps.readJson(indexPath), "registry index");
+        if (!Files.isRegularFile(indexPath)) {
+            if (Files.isDirectory(packageRoot)) {
+                try (var stream = Files.list(packageRoot)) {
+                    if (stream.findAny().isPresent()) throw new IllegalArgumentException("Registry has packages but no verified index; rebuild explicitly.");
+                } catch (java.io.IOException ex) { throw new IllegalArgumentException("Unable to inspect registry packages: " + ex.getMessage(), ex); }
+            }
+            return emptyIndex();
+        }
+        Map<String,Object> stored = object(FileOps.readJson(indexPath), "registry index");
+        Map<String,Object> rebuilt = buildIndex();
+        if (!Json.canonical(stored).equals(Json.canonical(rebuilt))) {
+            throw new IllegalArgumentException("Registry index does not match verified immutable package contents.");
+        }
+        return stored;
     }
 
     public Map<String,Object> rebuildAndPersist() {
@@ -145,6 +165,31 @@ public final class FoundryRegistry {
         return out;
     }
 
+    private void validateIdentityContinuity(Path packageDir, Map<String,Object> currentIndex) {
+        Map<String,Set<String>> knownNames = new LinkedHashMap<>();
+        for (Object raw : array(currentIndex.get("identities"), "registry identities")) {
+            Map<String,Object> identity = object(raw, "registry identity");
+            String key = string(identity.get("resolutionKey"), "resolutionKey");
+            Set<String> names = new LinkedHashSet<>();
+            strings(identity.get("canonicalLabels"), "canonicalLabels").forEach(v -> names.add(normalize(v)));
+            strings(identity.get("aliases"), "aliases").forEach(v -> names.add(normalize(v)));
+            knownNames.put(key, names);
+        }
+        for (Object raw : array(FileOps.readJson(packageDir.resolve("canonical-identities.json")), "canonical identities")) {
+            Map<String,Object> uao = object(raw, "canonical UAO");
+            Map<String,Object> fi = object(object(uao.get("internal_state"), "internal_state").get("foundry_identity"), "foundry_identity");
+            String key = string(fi.get("resolution_key"), "resolution_key");
+            Set<String> existing = knownNames.get(key);
+            if (existing == null || existing.isEmpty()) continue;
+            Set<String> proposed = new LinkedHashSet<>();
+            proposed.add(normalize(string(fi.get("canonical_label"), "canonical_label")));
+            strings(fi.get("aliases"), "aliases").forEach(v -> proposed.add(normalize(v)));
+            if (java.util.Collections.disjoint(existing, proposed)) {
+                throw new IllegalArgumentException("Stable resolutionKey has no lexical name continuity with registered identity; refusing semantic merge: " + key);
+            }
+        }
+    }
+
     private void requireReusablePackage(Path packageDir) {
         PackageVerifier.Result result = verifier.verify(packageDir);
         if (!result.passed()) throw new IllegalArgumentException("Package verification failed; registry admission denied: " + String.join("; ", result.errors()));
@@ -187,7 +232,9 @@ public final class FoundryRegistry {
                         String resolutionKey = string(foundryIdentity.get("resolution_key"), "resolution_key");
                         List<String> aliases = strings(foundryIdentity.get("aliases"), "aliases");
                         identities.computeIfAbsent(uid, ignored -> new IdentityAggregate(uid, resolutionKey))
-                                .addOccurrence(label, aliases, packageId, "packages/" + packageId + "/canonical-identities.json");
+                                .addOccurrence(label, aliases, packageId,
+                                        "packages/" + packageId + "/canonical-identities.json",
+                                        SemanticVariants.digest(uao));
                     }
                 }
             } catch (java.io.IOException ex) {
@@ -234,7 +281,7 @@ public final class FoundryRegistry {
         return 4;
     }
 
-    private static String normalize(String value) { return value == null ? "" : value.strip().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT); }
+    private static String normalize(String value) { return value == null ? "" : Normalizer.normalize(value, Normalizer.Form.NFKC).strip().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT); }
     private static Object deepCopy(Object value) { return Json.parse(Json.canonical(value)); }
     @SuppressWarnings("unchecked") private static Map<String,Object> object(Object value, String label) {
         if (!(value instanceof Map<?,?> map)) throw new IllegalArgumentException(label + " must be an object.");
@@ -271,21 +318,36 @@ public final class FoundryRegistry {
         private final Set<String> aliases = new LinkedHashSet<>();
         private final List<Occurrence> occurrences = new ArrayList<>();
         private IdentityAggregate(String uid, String resolutionKey) { this.uid = uid; this.resolutionKey = resolutionKey; }
-        private void addOccurrence(String label, List<String> aliasValues, String packageId, String path) {
-            if (!resolutionKey.equals(this.resolutionKey)) throw new IllegalArgumentException("Resolution-key conflict for stable UAO " + uid);
-            labels.add(label); aliases.addAll(aliasValues); occurrences.add(new Occurrence(packageId, path));
+        private void addOccurrence(String label, List<String> aliasValues, String packageId, String path, String semanticVariantDigest) {
+            Set<String> priorNames = new LinkedHashSet<>();
+            labels.forEach(v -> priorNames.add(normalize(v))); aliases.forEach(v -> priorNames.add(normalize(v)));
+            Set<String> nextNames = new LinkedHashSet<>(); nextNames.add(normalize(label)); aliasValues.forEach(v -> nextNames.add(normalize(v)));
+            if (!priorNames.isEmpty() && java.util.Collections.disjoint(priorNames, nextNames)) {
+                throw new IllegalArgumentException("Stable UAO name-continuity conflict for resolutionKey " + resolutionKey + " (uid " + uid + ")");
+            }
+            labels.add(label); aliases.addAll(aliasValues); occurrences.add(new Occurrence(packageId, path, semanticVariantDigest));
             occurrences.sort(Comparator.comparing(Occurrence::packageId));
         }
         private Map<String,Object> toMap() {
+            Set<String> variants = new LinkedHashSet<>();
+            occurrences.forEach(v -> variants.add(v.semanticVariantDigest()));
             Map<String,Object> out = new LinkedHashMap<>();
             out.put("uid", uid); out.put("resolutionKey", resolutionKey);
             out.put("canonicalLabels", labels.stream().sorted().toList()); out.put("aliases", aliases.stream().sorted().toList());
+            out.put("semanticVariantStatus", variants.size() > 1
+                    ? SemanticVariants.MULTIPLE_UNRECONCILED_VARIANTS : SemanticVariants.SINGLE_VARIANT);
             out.put("occurrences", occurrences.stream().map(Occurrence::toMap).toList()); return out;
         }
     }
 
-    private record Occurrence(String packageId, String path) {
-        Map<String,Object> toMap() { return Map.of("packageId", packageId, "canonicalPath", path); }
+    private record Occurrence(String packageId, String path, String semanticVariantDigest) {
+        Map<String,Object> toMap() {
+            Map<String,Object> out = new LinkedHashMap<>();
+            out.put("packageId", packageId);
+            out.put("canonicalPath", path);
+            out.put("semanticVariantDigest", semanticVariantDigest);
+            return out;
+        }
     }
 
     public record RegistrationResult(String packageId, String packageDigest, Path registryPath, boolean alreadyPresent,

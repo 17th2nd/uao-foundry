@@ -9,6 +9,7 @@ import org.seventeenthsecond.uaofoundry.util.Hashes;
 import org.seventeenthsecond.uaofoundry.validation.SchemaValidator;
 import org.seventeenthsecond.uaofoundry.validation.ValidationResult;
 import org.seventeenthsecond.uaofoundry.verifier.PackageVerifier;
+import org.seventeenthsecond.uaofoundry.verifier.PackageContentDigest;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -28,6 +29,7 @@ import java.util.function.Supplier;
 /** Deterministic package assembly and post-package verification stage. */
 class PackageStages extends CanonicalStages {
     protected PackageStages(Path schemaDir, Path workDir, Path distDir, String repositoryCommit) { super(schemaDir, workDir, distDir, repositoryCommit); }
+    protected PackageStages(Path schemaDir, Path workDir, Path distDir, String repositoryCommit, Path registryRoot, Map<String,Object> registryIndex) { super(schemaDir, workDir, distDir, repositoryCommit, registryRoot, registryIndex); }
 
     protected Map<String, Object> packageManufacture(
             ManufacturingRequest request, FoundryProvider provider, Map<String, Object> job, Map<String, Object> seed,
@@ -39,9 +41,9 @@ class PackageStages extends CanonicalStages {
         String label = string(scope.get("canonicalWorkingLabel"), "canonicalWorkingLabel");
         String status = string(publication.get("status"), "publication status");
         String slug = slug(label);
-        Path packageDir = distDir.resolve("UAO-" + slug + "-v" + request.requestedVersion() + "-" + status.toLowerCase(Locale.ROOT).replace('_','-'));
+        Path packageDir = distDir.resolve(".staging-" + jobId);
         FileOps.deleteTree(packageDir);
-        try { Files.createDirectories(packageDir); } catch (Exception ex) { throw new IllegalArgumentException("Unable to create package: " + ex.getMessage(), ex); }
+        try { Files.createDirectories(packageDir); } catch (Exception ex) { throw new IllegalArgumentException("Unable to create package staging directory: " + ex.getMessage(), ex); }
 
         Map<String, Object> finalJob = deepCopyMap(job);
         Map<String, Object> stageStatus = map(finalJob.get("stageStatus"));
@@ -87,7 +89,8 @@ class PackageStages extends CanonicalStages {
         validate(manufactured, "manufactured-package.schema.json", "Manufactured package");
         FileOps.writeJson(packageDir.resolve("manufactured-package.json"), manufactured);
 
-        String packageId = StableIdentifiers.forJson("pkg", 16, Map.of("jobId", jobId, "rootUaoId", canonical.get("rootUaoId"), "status", status));
+        String contentDigest = PackageContentDigest.compute(packageDir);
+        String packageId = StableIdentifiers.forText("pkg", 16, contentDigest);
         List<String> fileNames = new ArrayList<>(packageFiles(packageDir, false));
         fileNames.add("manifest.json");
         fileNames = fileNames.stream().distinct().sorted().toList();
@@ -97,6 +100,7 @@ class PackageStages extends CanonicalStages {
         manifest.put("rootUaoId", canonical.get("rootUaoId"));
         manifest.put("publicationStatus", status);
         manifest.put("jobId", jobId);
+        manifest.put("contentDigest", contentDigest);
         manifest.put("files", new ArrayList<>(fileNames));
         validate(manifest, "release-manifest.schema.json", "Release manifest");
         FileOps.writeJson(packageDir.resolve("manifest.json"), manifest);
@@ -106,9 +110,21 @@ class PackageStages extends CanonicalStages {
         if (!packageVerification.passed()) {
             throw new IllegalArgumentException("Packaged artifact failed checksum/schema verification: " + String.join("; ", packageVerification.errors()));
         }
+        Path finalPackageDir = distDir.resolve("UAO-" + slug + "-v" + request.requestedVersion() + "-"
+                + status.toLowerCase(Locale.ROOT).replace('_','-') + "-" + packageId);
+        if (Files.exists(finalPackageDir)) {
+            if (!FileOps.treeHash(finalPackageDir).equals(FileOps.treeHash(packageDir))) {
+                throw new IllegalArgumentException("Package output collision: existing path has different content: " + finalPackageDir);
+            }
+            FileOps.deleteTree(packageDir);
+        } else {
+            try { Files.move(packageDir, finalPackageDir); }
+            catch (Exception ex) { throw new IllegalArgumentException("Unable to finalize package directory: " + ex.getMessage(), ex); }
+        }
         Map<String, Object> out = new LinkedHashMap<>();
-        out.put("packagePath", packageDir.toString());
+        out.put("packagePath", finalPackageDir.toString());
         out.put("packageId", packageId);
+        out.put("contentDigest", contentDigest);
         out.put("checksumVerification", "PASSED");
         out.put("publicationStatus", status);
         Path stageFile = jobDir.resolve("16-package-manufacture.json");

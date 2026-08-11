@@ -166,6 +166,10 @@ and is therefore covered by:
 
 This preserves the actual interpretation/planning/acquisition input that preceded canonicalisation.
 
+Standalone package verification treats this snapshot as an independently checked upstream projection. For candidate identities, claims, relationships and evidence, it re-runs the checked-in candidate schemas and reconstructs the exact accepted arrays plus deterministic quarantine envelopes. Accepted records are not semantically normalised: their canonical JSON must equal the provider record exactly. A quarantine envelope may add only its category, original zero-based index, deterministic validation errors and an exact copy of the provider record. Optional states, events and language mappings must also remain exact pass-through projections.
+
+Consequently, provider candidates cannot disappear, move category, change candidate ID, appear in both accepted and quarantined output, or be injected without provider origin while `verify` still passes.
+
 ## 8. Resume semantics
 
 `resume` never invokes the original external provider.

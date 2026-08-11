@@ -35,12 +35,12 @@ The canonical SHA-256 of the registry context is injected into the validated pro
 
 ## Foundry-computed reuse
 
-After canonical build, the Foundry compares each resulting stable UAO UID against the **pre-manufacture** registry index.
+After canonical build, the Foundry compares each resulting stable UAO UID and deterministic semantic-variant digest against the **pre-manufacture** registry index.
 
-- `reusedUaos`: the same stable UID existed before the transaction; prior immutable package occurrences are preserved.
+- `reusedUaos`: the same stable UID/key and same single semantic variant existed before the transaction; prior immutable package occurrences are preserved.
 - `newUaos`: the stable UID was absent before the transaction.
 
-No confidence, significance or model score decides this classification.
+An existing identity already marked `MULTIPLE_UNRECONCILED_VARIANTS` is refused before a matched provider acquisition. A newly encountered digest that differs from the prior single variant is not counted as reused and fails closed with `SEMANTIC_VARIANT_DIVERGENCE`. No confidence, significance, recency or model score decides this classification.
 
 ## Evidence reuse
 
@@ -50,7 +50,7 @@ A provider can identify prior evidence with:
 registry://<package-id>/<relative-path>
 ```
 
-The prefix alone is not trusted. The Foundry resolves the locator inside the already-verified immutable package, rejects path escape/unknown packages, hashes the prior file and requires that SHA-256 to equal the new source record's content hash. Only then is the source counted as registry evidence.
+The prefix alone is not trusted. Core source acquisition requires a verified registry context for every `registry://` locator, resolves the locator inside the immutable package, checks the package tree digest, rejects path escape/unknown packages, and snapshots the exact registered bytes. `ReuseAnalyzer` independently re-resolves/hash-checks that evidence after manufacture. Plain manufacture without verified registry context rejects `registry://` evidence outright.
 
 The normal source acquisition stage still snapshots the content into the new package, so reused evidence remains provenance-bearing.
 
@@ -62,6 +62,7 @@ The schema-validated report records:
 - pre-transaction registry index hash;
 - reused UAOs and prior occurrences;
 - new UAOs;
+- the current semantic-variant digest for every reused/new UAO;
 - verified registry evidence sources;
 - newly acquired sources;
 - deterministic counts.
@@ -89,10 +90,12 @@ Controls include `--provider-timeout-seconds`, `--catalog-limit`, `--work-dir`, 
 
 1. prior verified UAOs are discoverable before acquisition;
 2. registry state participates in transaction identity;
-3. stable UAO IDs determine reused versus new identities after canonicalisation;
+3. exact canonical `resolutionKey` continuity derives stable UAO IDs, while exact semantic-variant continuity is separately required before an existing identity is counted as automatically reused;
 4. a claimed registry source is cryptographically checked against prior immutable evidence;
 5. the reuse report is package evidence, not a console-only claim;
 6. successful output can re-enter the registry for cumulative manufacture.
+
+These properties prove deterministic reuse accounting under the Foundry identity/variant discipline; they do **not** prove universal semantic equivalence, infer contradiction between arbitrary assertion sets, reconcile divergent variants, or establish factual correctness of provider knowledge.
 
 The pipeline intentionally still validates provider candidates even when a stable identity exists. Reuse does not bypass validation or provenance. Future performance optimisation may avoid unnecessary candidate reconstruction only if these guarantees remain intact.
 

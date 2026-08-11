@@ -2,15 +2,51 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "UAO Foundry Candidate Identity",
   "type": "object",
-  "required": ["candidateId", "label", "resolutionKey", "root", "sourceRefs"],
+  "required": [
+    "candidateId",
+    "label",
+    "resolutionKey",
+    "root",
+    "sourceRefs"
+  ],
   "properties": {
-    "candidateId": {"type": "string", "pattern": "^cid-[a-z0-9._-]+$"},
-    "label": {"type": "string", "minLength": 1},
-    "resolutionKey": {"type": "string", "minLength": 1},
-    "root": {"type": "boolean"},
-    "aliases": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
-    "sourceRefs": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^src-[a-z0-9._-]+$"}, "uniqueItems": true},
-    "externalIdentifiers": {"type": "object", "additionalProperties": {"type": "string"}}
+    "candidateId": {
+      "type": "string",
+      "pattern": "^cid-[a-z0-9._-]+$"
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1
+    },
+    "resolutionKey": {
+      "type": "string",
+      "pattern": "^(?:fixture:[a-z0-9._-]+:[a-z0-9._-]+|foundry:v0\\.1:[a-z0-9._-]+:[a-z0-9._-]+|ext:[a-z][a-z0-9._-]*:[^\\\\s]+)$"
+    },
+    "root": {
+      "type": "boolean"
+    },
+    "aliases": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "sourceRefs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^src-[a-z0-9._-]+$"
+      },
+      "uniqueItems": true
+    },
+    "externalIdentifiers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
   },
   "additionalProperties": false
 }

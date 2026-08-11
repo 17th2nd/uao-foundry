@@ -49,12 +49,47 @@ jobs:
           cat > /tmp/fake-claude <<'PY'
           #!/usr/bin/env python3
           import json
+          import os
           import re
           import sys
 
           if "--version" in sys.argv:
               print("2.1.999-ci-fake")
               raise SystemExit(0)
+
+          def fail(message):
+              print("containment assertion failed: " + message, file=sys.stderr)
+              raise SystemExit(97)
+
+          args = sys.argv[1:]
+          for flag in ("--bare", "--no-session-persistence", "--no-chrome", "--strict-mcp-config"):
+              if flag not in args:
+                  fail("missing " + flag)
+          def value(flag):
+              try: return args[args.index(flag) + 1]
+              except (ValueError, IndexError): fail("missing value for " + flag)
+          if value("--tools") != "WebSearch,WebFetch": fail("--tools")
+          if value("--permission-mode") != "dontAsk": fail("--permission-mode")
+          if value("--output-format") != "json": fail("--output-format")
+          turns = int(value("--max-turns"))
+          if not 1 <= turns <= 100: fail("--max-turns")
+          schema = json.loads(value("--json-schema"))
+          with open("schemas/fixture-bundle.schema.json", encoding="utf-8") as fh:
+              if schema != json.load(fh): fail("--json-schema")
+          def multi(flag):
+              try: i = args.index(flag) + 1
+              except ValueError: fail("missing " + flag)
+              out = []
+              while i < len(args) and not args[i].startswith("--"):
+                  out.append(args[i]); i += 1
+              return out
+          if multi("--allowedTools") != ["WebSearch", "WebFetch"]: fail("--allowedTools")
+          denied = set(multi("--disallowedTools"))
+          required = {"Bash","Read","Write","Edit","Glob","Grep","Agent","Skill","mcp__*"}
+          if not required.issubset(denied): fail("--disallowedTools")
+          for secret in ("GITHUB_TOKEN", "AWS_SECRET_ACCESS_KEY", "NPM_TOKEN"):
+              if secret in os.environ: fail("secret inherited: " + secret)
+          if os.environ.get("CLAUDE_CODE_SKIP_PROMPT_HISTORY") != "1": fail("prompt history")
 
           prompt = sys.stdin.read()
           match = re.search(r"BEGIN_FOUNDRY_ENVELOPE_JSON\n(.*?)\nEND_FOUNDRY_ENVELOPE_JSON", prompt, re.S)

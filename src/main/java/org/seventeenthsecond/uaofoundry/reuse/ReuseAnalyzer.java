@@ -1,6 +1,7 @@
 package org.seventeenthsecond.uaofoundry.reuse;
 
 import org.seventeenthsecond.uaofoundry.json.Json;
+import org.seventeenthsecond.uaofoundry.registry.SemanticVariants;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
 import org.seventeenthsecond.uaofoundry.util.Hashes;
 import org.seventeenthsecond.uaofoundry.verifier.PackageVerifier;
@@ -39,9 +40,40 @@ public final class ReuseAnalyzer {
             Map<String,Object> item = new LinkedHashMap<>();
             item.put("uid", uid);
             Map<String,Object> foundryIdentity = object(object(uao.get("internal_state"), "internal_state").get("foundry_identity"), "foundry_identity");
-            item.put("resolutionKey", foundryIdentity.get("resolution_key"));
+            String resolutionKey = string(foundryIdentity.get("resolution_key"), "resolution_key");
+            String semanticVariantDigest = SemanticVariants.digest(uao);
+            item.put("resolutionKey", resolutionKey);
             item.put("canonicalLabel", foundryIdentity.get("canonical_label"));
+            item.put("semanticVariantDigest", semanticVariantDigest);
             if (prior != null) {
+                String priorKey = string(prior.get("resolutionKey"), "registry identity resolutionKey");
+                if (!resolutionKey.equals(priorKey)) {
+                    throw new IllegalArgumentException("REGISTRY_IDENTITY_MISMATCH: stable UAO " + uid
+                            + " has resolutionKey " + priorKey + " but candidate package uses " + resolutionKey + ".");
+                }
+                String status = string(prior.get("semanticVariantStatus"), "registry identity semanticVariantStatus");
+                if (SemanticVariants.MULTIPLE_UNRECONCILED_VARIANTS.equals(status)) {
+                    throw new IllegalArgumentException("MULTIPLE_UNRECONCILED_VARIANTS: automatic reuse refused for uid "
+                            + uid + " resolutionKey " + resolutionKey + ".");
+                }
+                Set<String> priorVariants = new LinkedHashSet<>();
+                for (Object occurrenceRaw : array(prior.get("occurrences"), "registry identity occurrences")) {
+                    Map<String,Object> occurrence = object(occurrenceRaw, "registry identity occurrence");
+                    String digest = string(occurrence.get("semanticVariantDigest"), "occurrence semanticVariantDigest");
+                    if (!digest.matches("[a-f0-9]{64}")) {
+                        throw new IllegalArgumentException("REGISTRY_VARIANT_INDEX_INVALID: invalid semantic variant digest for uid " + uid + ".");
+                    }
+                    priorVariants.add(digest);
+                }
+                if (!SemanticVariants.SINGLE_VARIANT.equals(status) || priorVariants.size() != 1) {
+                    throw new IllegalArgumentException("REGISTRY_VARIANT_INDEX_INVALID: inconsistent semantic variant status for uid " + uid + ".");
+                }
+                if (!priorVariants.contains(semanticVariantDigest)) {
+                    throw new IllegalArgumentException("SEMANTIC_VARIANT_DIVERGENCE: automatic reuse refused for uid "
+                            + uid + " resolutionKey " + resolutionKey + "; candidatePackage="
+                            + packageDir.toAbsolutePath().normalize()
+                            + "; explicit registry admission may preserve the new immutable occurrence for future reconciliation.");
+                }
                 item.put("priorOccurrences", deepCopy(prior.get("occurrences")));
                 reused.add(item);
             } else {

@@ -10,6 +10,7 @@ import org.seventeenthsecond.uaofoundry.pipeline.PipelineResult;
 import org.seventeenthsecond.uaofoundry.provider.FixtureProvider;
 import org.seventeenthsecond.uaofoundry.registry.FoundryRegistry;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
+import org.seventeenthsecond.uaofoundry.util.Hashes;
 import org.seventeenthsecond.uaofoundry.verifier.PackageVerifier;
 
 import java.io.ByteArrayOutputStream;
@@ -88,8 +89,17 @@ class SemanticDeltaTest {
         Path bundle = temp.resolve("false-reuse.json");
         FileOps.writeJson(bundle, providerBundle);
         RunResult result = registryManufacture("cow", providerScript(bundle, temp.resolve("false-reuse-input.json")), registryRoot, temp.resolve("false-reuse-work"), temp.resolve("false-reuse-dist"), false);
-        assertEquals(2, result.exit());
-        assertTrue(result.stderr().contains("Registry evidence hash mismatch"));
+        assertEquals(0, result.exit(), result.stderr());
+        Map<String,Object> response = object(Json.parse(result.stdout()));
+        Map<String,Object> reuse = object(response.get("reuse"));
+        Map<String,Object> counts = object(reuse.get("counts"));
+        assertEquals(new java.math.BigDecimal("1"), counts.get("registrySourceCount"));
+        Path packagePath = Path.of((String) response.get("packagePath"));
+        String sourceId = (String) firstSource.get("sourceId");
+        assertEquals(
+                Files.readString(prior.registryPath().resolve("source-corpus").resolve(sourceId + ".txt")),
+                Files.readString(packagePath.resolve("source-corpus").resolve(sourceId + ".txt")));
+        assertFalse(Files.readString(packagePath.resolve("source-corpus").resolve(sourceId + ".txt")).contains("different bytes pretending"));
     }
 
     @Test
@@ -105,11 +115,83 @@ class SemanticDeltaTest {
         assertFalse(Files.exists(capture));
     }
 
+    @Test
+    void automaticDiscoveryRefusesMultipleUnreconciledVariantsWithoutRegistryMutation() throws Exception {
+        Path registryRoot = temp.resolve("unreconciled-registry");
+        FoundryRegistry registry = new FoundryRegistry(registryRoot, SCHEMAS);
+        registry.register(manufactureFixture("granite", "material-granite.json", "unreconciled-original").packagePath());
+        Path variantBundle = semanticVariantBundle("Unreconciled alternate statement for the same stable granite identity.", "unreconciled");
+        registry.register(manufactureFixture("granite", variantBundle, "unreconciled-variant").packagePath());
+        String before = FileOps.treeHash(registryRoot);
+
+        Path capture = temp.resolve("unreconciled-provider-must-not-run.json");
+        RunResult result = registryManufacture("granite", providerScript(FIXTURES.resolve("material-granite.json"), capture),
+                registryRoot, temp.resolve("unreconciled-work"), temp.resolve("unreconciled-dist"), false);
+        assertEquals(2, result.exit());
+        assertTrue(result.stderr().contains("MULTIPLE_UNRECONCILED_VARIANTS"), result.stderr());
+        assertFalse(Files.exists(capture), "ambiguous matched identity must be refused before provider acquisition");
+        assertEquals(before, FileOps.treeHash(registryRoot), "failed automatic reuse must not mutate the registry");
+        assertTrue(registry.verify().passed());
+    }
+
+    @Test
+    void automaticReuseRefusesAFirstDifferingSemanticVariantWithoutCountingItAsReused() throws Exception {
+        Path registryRoot = temp.resolve("variant-divergence-registry");
+        FoundryRegistry registry = new FoundryRegistry(registryRoot, SCHEMAS);
+        registry.register(manufactureFixture("granite", "material-granite.json", "variant-divergence-original").packagePath());
+        String before = FileOps.treeHash(registryRoot);
+        Path variantBundle = semanticVariantBundle("A newly encountered divergent statement for the stable granite identity.", "divergence");
+        Path capture = temp.resolve("variant-divergence-provider-input.json");
+
+        RunResult result = registryManufacture("granite", providerScript(variantBundle, capture), registryRoot,
+                temp.resolve("variant-divergence-work"), temp.resolve("variant-divergence-dist"), true);
+        assertEquals(2, result.exit());
+        assertTrue(result.stderr().contains("SEMANTIC_VARIANT_DIVERGENCE"), result.stderr());
+        assertTrue(Files.isRegularFile(capture), "provider may create a new immutable candidate package before divergence is known");
+        assertTrue(result.stdout().isBlank(), "divergent identity must not be reported as safely reused");
+        assertEquals(before, FileOps.treeHash(registryRoot), "failed reuse and requested registration must leave registry unchanged");
+        assertTrue(registry.verify().passed());
+    }
+
+    @Test
+    void reuseAnalyzerDirectlyRejectsRegistryEvidenceHashMismatch() {
+        Path registryRoot = temp.resolve("analyzer-hash-registry");
+        FoundryRegistry registry = new FoundryRegistry(registryRoot, SCHEMAS);
+        FoundryRegistry.RegistrationResult prior = registry.register(
+                manufactureFixture("cow", "biological-cow.json", "analyzer-hash-prior").packagePath());
+        PipelineResult candidate = manufactureFixture("cow", "biological-cow.json", "analyzer-hash-candidate");
+        Map<String,Object> sourceRegistry = object(FileOps.readJson(candidate.packagePath().resolve("source-registry.json")));
+        Map<String,Object> source = object(array(sourceRegistry.get("sources")).getFirst());
+        String sourceId = (String) source.get("sourceId");
+        source.put("locator", "registry://" + prior.packageId() + "/source-corpus/" + sourceId + ".txt");
+        source.put("sha256", "0".repeat(64));
+        FileOps.writeJson(candidate.packagePath().resolve("source-registry.json"), sourceRegistry);
+
+        Map<String,Object> index = registry.index();
+        String contextHash = Hashes.canonicalJson(registry.discoveryContext("cow", 5000));
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> new ReuseAnalyzer(SCHEMAS).analyze(index, registryRoot, candidate.packagePath(), contextHash));
+        assertTrue(ex.getMessage().contains("Registry evidence hash mismatch"), ex.getMessage());
+    }
+
     private PipelineResult manufactureFixture(String seed, String fixture, String suffix) {
+        return manufactureFixture(seed, FIXTURES.resolve(fixture), suffix);
+    }
+
+    private PipelineResult manufactureFixture(String seed, Path fixture, String suffix) {
         RequestLoader loader = new RequestLoader(SCHEMAS.resolve("manufacturing-request.schema.json"));
         ManufacturingRequest request = loader.fromSeed(seed, "en", "experimental");
-        FixtureProvider provider = new FixtureProvider(FIXTURES.resolve(fixture), SCHEMAS);
+        FixtureProvider provider = new FixtureProvider(fixture, SCHEMAS);
         return new FoundryPipeline(SCHEMAS, temp.resolve("fixture-work-" + suffix), temp.resolve("fixture-dist-" + suffix), "test-sha").manufacture(request, provider, false);
+    }
+
+    private Path semanticVariantBundle(String statement, String suffix) {
+        Map<String,Object> bundle = object(FileOps.readJson(FIXTURES.resolve("material-granite.json")));
+        Map<String,Object> candidates = object(bundle.get("candidates"));
+        object(array(candidates.get("claims")).getFirst()).put("statement", statement);
+        Path path = temp.resolve("semantic-variant-" + suffix + ".json");
+        FileOps.writeJson(path, bundle);
+        return path;
     }
 
     private RunResult registryManufacture(String seed, Path command, Path registry, Path work, Path dist, boolean register) {

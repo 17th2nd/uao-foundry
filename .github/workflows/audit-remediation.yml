@@ -1,0 +1,116 @@
+name: UAO Foundry independent-audit remediation
+
+on:
+  push:
+    branches:
+      - "sprint/**"
+  pull_request:
+    branches:
+      - "main"
+
+permissions:
+  contents: read
+
+jobs:
+  adversarial-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Full Java verification
+        run: mvn -B -ntp clean verify
+
+      - name: Package executable
+        run: mvn -B -ntp package -DskipTests
+
+      - name: Plain registry locator fails without verified custody
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAR=target/uao-foundry-0.1.0.jar
+          rm -rf /tmp/audit-reg /tmp/audit-seed-work /tmp/audit-seed-dist /tmp/audit-plain-work /tmp/audit-plain-dist
+          seed="$(java -jar "$JAR" manufacture granite --fixture src/test/resources/fixtures/material-granite.json --work-dir /tmp/audit-seed-work --dist-dir /tmp/audit-seed-dist --repository-commit "$GITHUB_SHA")"
+          package="$(printf '%s' "$seed" | jq -r .packagePath)"
+          registration="$(java -cp "$JAR" org.seventeenthsecond.uaofoundry.registry.RegistryApplication register "$package" --registry /tmp/audit-reg)"
+          package_id="$(printf '%s' "$registration" | jq -r .packageId)"
+          python3 - "$package_id" <<'PY'
+          import json, pathlib, sys
+          d=json.load(open('src/test/resources/fixtures/material-granite.json'))
+          src=d['sources'][0]
+          src['locator']=f"registry://{sys.argv[1]}/source-corpus/{src['sourceId']}.txt"
+          src['content']='FABRICATED REGISTRY CONTENT — MUST NEVER BE ADMITTED'
+          pathlib.Path('/tmp/fabricated-registry.json').write_text(json.dumps(d,sort_keys=True,separators=(',',':'))+'\n')
+          PY
+          set +e
+          java -jar "$JAR" manufacture granite --fixture /tmp/fabricated-registry.json --work-dir /tmp/audit-plain-work --dist-dir /tmp/audit-plain-dist --repository-commit "$GITHUB_SHA" >/tmp/plain.out 2>/tmp/plain.err
+          rc=$?
+          set -e
+          test "$rc" -ne 0
+          grep -F 'requires a verified registry-aware manufacture context' /tmp/plain.err
+
+      - name: Checkpoint forgery is re-derived and surfaced
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAR=target/uao-foundry-0.1.0.jar
+          rm -rf /tmp/check-work /tmp/check-dist
+          first="$(java -jar "$JAR" manufacture granite --fixture src/test/resources/fixtures/material-granite.json --work-dir /tmp/check-work --dist-dir /tmp/check-dist --repository-commit "$GITHUB_SHA")"
+          job="$(printf '%s' "$first" | jq -r .jobId)"
+          python3 - "/tmp/check-work/$job/12-canonical-build.json" "/tmp/check-work/$job/checkpoint.json" <<'PY'
+          import hashlib, json, pathlib, sys
+          stage=pathlib.Path(sys.argv[1]); checkpoint=pathlib.Path(sys.argv[2])
+          d=json.load(open(stage)); d['provenanceLedger'][0]['statement']='CHECKPOINT FORGERY'
+          stage.write_text(json.dumps(d,sort_keys=True,separators=(',',':'))+'\n')
+          cp=json.load(open(checkpoint)); cp['completed']['12_CANONICAL_BUILD']['sha256']=hashlib.sha256(stage.read_bytes()).hexdigest()
+          checkpoint.write_text(json.dumps(cp,sort_keys=True,separators=(',',':'))+'\n')
+          PY
+          resumed="$(java -jar "$JAR" resume "$job" --work-dir /tmp/check-work --dist-dir /tmp/check-dist --repository-commit "$GITHUB_SHA")"
+          printf '%s\n' "$resumed" | jq -e '.invalidatedStages | any(contains("12_CANONICAL_BUILD"))'
+          package="$(printf '%s' "$resumed" | jq -r .packagePath)"
+          ! grep -R -F 'CHECKPOINT FORGERY' "$package"
+
+      - name: Same-label distinct jobs do not overwrite
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAR=target/uao-foundry-0.1.0.jar
+          rm -rf /tmp/collision-work-a /tmp/collision-work-b /tmp/collision-dist
+          python3 - <<'PY'
+          import json, pathlib
+          d=json.load(open('src/test/resources/fixtures/material-granite.json'))
+          d['candidates']['claims'][0]['statement'] += ' Variant evidence projection.'
+          pathlib.Path('/tmp/granite-variant.json').write_text(json.dumps(d,sort_keys=True,separators=(',',':'))+'\n')
+          PY
+          a="$(java -jar "$JAR" manufacture granite --fixture src/test/resources/fixtures/material-granite.json --work-dir /tmp/collision-work-a --dist-dir /tmp/collision-dist --repository-commit "$GITHUB_SHA")"
+          b="$(java -jar "$JAR" manufacture granite --fixture /tmp/granite-variant.json --work-dir /tmp/collision-work-b --dist-dir /tmp/collision-dist --repository-commit "$GITHUB_SHA")"
+          pa="$(printf '%s' "$a" | jq -r .packagePath)"; pb="$(printf '%s' "$b" | jq -r .packagePath)"
+          test "$pa" != "$pb"
+          test -d "$pa" && test -d "$pb"
+
+      - name: Relationship-bearing manufacture remains fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAR=target/uao-foundry-0.1.0.jar
+          rm -rf /tmp/rel-work /tmp/rel-dist
+          set +e
+          output="$(java -jar "$JAR" manufacture cow --fixture src/test/resources/fixtures/relationship-bearing-cow.json --work-dir /tmp/rel-work --dist-dir /tmp/rel-dist --repository-commit "$GITHUB_SHA")"
+          rc=$?
+          set -e
+          test "$rc" -eq 4
+          printf '%s\n' "$output" | jq -e '.publicationStatus == "EVIDENCE_INCOMPLETE" and .verificationPassed == true'
+          package="$(printf '%s' "$output" | jq -r .packagePath)"
+          candidate_count="$(jq 'length' "$package/candidate-relationships.json")"
+          unresolved_count="$(jq 'length' "$package/unresolved-items.json")"
+          test "$candidate_count" -gt 0
+          test "$candidate_count" -eq "$unresolved_count"
+          jq -e 'length == 0' "$package/canonical-relationships.json"
+          jq -e 'all(.[]; .code == "URO_TYPE_AUTHORITY_UNAVAILABLE")' "$package/unresolved-items.json"
