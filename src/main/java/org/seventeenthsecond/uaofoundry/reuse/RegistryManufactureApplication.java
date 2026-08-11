@@ -6,6 +6,7 @@ import org.seventeenthsecond.uaofoundry.model.ManufacturingRequest;
 import org.seventeenthsecond.uaofoundry.pipeline.FoundryPipeline;
 import org.seventeenthsecond.uaofoundry.pipeline.PipelineResult;
 import org.seventeenthsecond.uaofoundry.registry.FoundryRegistry;
+import org.seventeenthsecond.uaofoundry.registry.SemanticVariants;
 import org.seventeenthsecond.uaofoundry.util.Hashes;
 import org.seventeenthsecond.uaofoundry.validation.SchemaValidator;
 
@@ -40,6 +41,7 @@ public final class RegistryManufactureApplication {
             RequestLoader loader = new RequestLoader(schemaDir.resolve("manufacturing-request.schema.json"));
             ManufacturingRequest request = loader.fromSeed(parsed.identity(), parsed.language(), parsed.profile(), "live");
             Map<String,Object> registryContext = registry.discoveryContext(request.identitySeed(), parsed.catalogLimit());
+            refuseUnreconciledMatchedVariants(registryContext);
             String registryContextHash = Hashes.canonicalJson(registryContext);
             RegistryAwareCommandProvider provider = new RegistryAwareCommandProvider(
                     parsed.providerCommand(), request, schemaDir, Duration.ofSeconds(parsed.timeoutSeconds()), registryContext, parsed.registry());
@@ -89,6 +91,17 @@ public final class RegistryManufactureApplication {
         }
         FoundryRegistry.VerificationResult verification = registry.verify();
         if (!verification.passed()) throw new IllegalArgumentException("Registry verification failed before manufacture: " + String.join("; ", verification.errors()));
+    }
+
+    private void refuseUnreconciledMatchedVariants(Map<String,Object> registryContext) {
+        for (Object raw : Json.array(registryContext.get("matches"), "registry context matches")) {
+            Map<String,Object> hit = Json.object(raw, "registry context match");
+            Map<String,Object> identity = Json.object(hit.get("identity"), "registry context matched identity");
+            if (SemanticVariants.MULTIPLE_UNRECONCILED_VARIANTS.equals(identity.get("semanticVariantStatus"))) {
+                throw new IllegalArgumentException("MULTIPLE_UNRECONCILED_VARIANTS: automatic discovery/reuse refused for uid "
+                        + identity.get("uid") + " resolutionKey " + identity.get("resolutionKey") + ".");
+            }
+        }
     }
 
     private Parsed parse(String[] args) {

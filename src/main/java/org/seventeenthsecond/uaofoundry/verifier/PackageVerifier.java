@@ -6,15 +6,19 @@ import org.seventeenthsecond.uaofoundry.json.Json;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
 import org.seventeenthsecond.uaofoundry.util.Hashes;
 import org.seventeenthsecond.uaofoundry.validation.SchemaValidator;
+import org.seventeenthsecond.uaofoundry.validation.ValidationResult;
 
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 public final class PackageVerifier {
     private final Path schemaDir;
@@ -47,11 +51,17 @@ public final class PackageVerifier {
         Map<String, Object> scope = readObject(packageDir.resolve("scope-resolution.json"), "scope-resolution", errors);
         Map<String, Object> resolution = readObject(packageDir.resolve("identity-resolution.json"), "identity-resolution", errors);
         Map<String, Object> coverage = readObject(packageDir.resolve("coverage-report.json"), "coverage-report", errors);
+        Object candidateIdentities = readValue(packageDir.resolve("candidate-identities.json"), "candidate-identities", errors);
         Object candidateClaims = readValue(packageDir.resolve("candidate-claims.json"), "candidate-claims", errors);
         Object candidateRelationships = readValue(packageDir.resolve("candidate-relationships.json"), "candidate-relationships", errors);
+        Object candidateEvidence = readValue(packageDir.resolve("candidate-evidence.json"), "candidate-evidence", errors);
+        Object candidateStates = readValue(packageDir.resolve("candidate-states.json"), "candidate-states", errors);
+        Object candidateEvents = readValue(packageDir.resolve("candidate-events.json"), "candidate-events", errors);
+        Object candidateLanguageMappings = readValue(packageDir.resolve("candidate-language-mappings.json"), "candidate-language-mappings", errors);
         Object quarantine = readValue(packageDir.resolve("candidate-quarantine.json"), "candidate-quarantine", errors);
         Object provenanceLedger = readValue(packageDir.resolve("provenance-ledger.json"), "provenance-ledger", errors);
         Object unresolvedItems = readValue(packageDir.resolve("unresolved-items.json"), "unresolved-items", errors);
+        Object providerSnapshot = readValue(packageDir.resolve("provider-snapshot.json"), "provider-snapshot", errors);
 
         if (manifest != null) {
             errors.addAll(prefix(validator.validate(manifest, schemaDir.resolve("release-manifest.schema.json")).errors(), "manifest: "));
@@ -69,28 +79,98 @@ public final class PackageVerifier {
         checks.add("PACKAGE_CROSS_FILE_CONSISTENCY");
         verifyCanonicalIdentityDerivations(manifest, canonicalIdentities, errors);
         checks.add("UAO_IDENTITY_DERIVATION");
+
+        if (providerSnapshot != null) {
+            errors.addAll(prefix(validator.validate(providerSnapshot, schemaDir.resolve("fixture-bundle.schema.json")).errors(), "provider-snapshot: "));
+        }
+        checks.add("PROVIDER_SNAPSHOT_SCHEMA");
+        Map<String,Object> packagedCandidates = new LinkedHashMap<>();
+        packagedCandidates.put("identities", candidateIdentities);
+        packagedCandidates.put("claims", candidateClaims);
+        packagedCandidates.put("relationships", candidateRelationships);
+        packagedCandidates.put("evidence", candidateEvidence);
+        packagedCandidates.put("states", candidateStates);
+        packagedCandidates.put("events", candidateEvents);
+        packagedCandidates.put("languageMappings", candidateLanguageMappings);
+        verifyProviderProjectionReconciliation(providerSnapshot, packagedCandidates, quarantine, errors);
+        checks.add("PROVIDER_PROJECTION_RECONCILIATION");
+
+        verifySemanticProjections(canonicalIdentities, canonicalRelationships, candidateIdentities, candidateClaims,
+                candidateRelationships, candidateEvidence, quarantine, provenanceLedger, unresolvedItems,
+                resolution, scope, coverage, verification, publication, errors);
+        checks.add("SEMANTIC_PROJECTION_RECONSTRUCTION");
         verifyContentAddress(packageDir, manifest, errors);
         checks.add("CONTENT_ADDRESSED_PACKAGE_ID");
-        verifySemanticProjections(canonicalIdentities, canonicalRelationships, candidateClaims, candidateRelationships,
-                quarantine, provenanceLedger, unresolvedItems, resolution, scope, coverage, verification, publication, errors);
-        checks.add("SEMANTIC_PROJECTION_RECONSTRUCTION");
-
-        Path providerSnapshot = packageDir.resolve("provider-snapshot.json");
-        if (!Files.isRegularFile(providerSnapshot)) {
-            errors.add("provider-snapshot.json is missing");
-        } else {
-            try {
-                Object snapshot = FileOps.readJson(providerSnapshot);
-                errors.addAll(prefix(validator.validate(snapshot, schemaDir.resolve("fixture-bundle.schema.json")).errors(), "provider-snapshot: "));
-                checks.add("PROVIDER_SNAPSHOT_SCHEMA");
-            } catch (IllegalArgumentException ex) {
-                errors.add("provider-snapshot: " + ex.getMessage());
-            }
-        }
 
         verifySourceSnapshots(packageDir, errors);
         checks.add("SOURCE_SNAPSHOT_HASHES");
         return new Result(errors.isEmpty(), List.copyOf(errors), List.copyOf(checks));
+    }
+
+    /**
+     * Reconstructs the exact Foundry candidate-validation projection from the recorded provider input.
+     * Accepted records are byte-semantically unchanged canonical JSON. The only quarantine transform is
+     * the deterministic category/index/errors envelope around the exact provider record.
+     */
+    private void verifyProviderProjectionReconciliation(
+            Object rawProviderSnapshot, Map<String,Object> packagedCandidates, Object rawQuarantine, List<String> errors) {
+        Map<String,Object> snapshot = object(rawProviderSnapshot, "provider-snapshot", errors);
+        if (snapshot == null) return;
+        Map<String,Object> providerCandidates = object(snapshot.get("candidates"), "provider-snapshot.candidates", errors);
+        if (providerCandidates == null) return;
+
+        Map<String,String> validationSchemas = new LinkedHashMap<>();
+        validationSchemas.put("identities", "candidate-identity.schema.json");
+        validationSchemas.put("claims", "candidate-claim.schema.json");
+        validationSchemas.put("relationships", "candidate-relationship.schema.json");
+        validationSchemas.put("evidence", "candidate-evidence.schema.json");
+
+        List<Object> expectedQuarantine = new ArrayList<>();
+        for (Map.Entry<String,String> entry : validationSchemas.entrySet()) {
+            String category = entry.getKey();
+            Object providerValue = providerCandidates.get(category);
+            if (!(providerValue instanceof List<?> providerRecords)) {
+                errors.add("Provider projection reconciliation cannot read provider candidate category: " + category + ".");
+                continue;
+            }
+            List<Object> expectedAccepted = new ArrayList<>();
+            for (int index = 0; index < providerRecords.size(); index++) {
+                Object providerRecord = providerRecords.get(index);
+                ValidationResult validation = validator.validate(providerRecord, schemaDir.resolve(entry.getValue()));
+                if (validation.valid()) {
+                    expectedAccepted.add(Json.parse(Json.canonical(providerRecord)));
+                } else {
+                    Map<String,Object> quarantine = new LinkedHashMap<>();
+                    quarantine.put("category", category);
+                    quarantine.put("index", BigDecimal.valueOf(index));
+                    quarantine.put("errors", new ArrayList<>(validation.errors()));
+                    quarantine.put("record", Json.parse(Json.canonical(providerRecord)));
+                    expectedQuarantine.add(quarantine);
+                }
+            }
+            if (!canonicalEquals(expectedAccepted, packagedCandidates.get(category))) {
+                errors.add("Provider projection reconciliation failed for " + category
+                        + ": packaged accepted candidates are not the exact validated projection of provider-snapshot input.");
+            }
+        }
+
+        for (String category : List.of("states", "events", "languageMappings")) {
+            Object providerValue = providerCandidates.get(category);
+            Object expected = providerValue == null ? List.of() : providerValue;
+            if (!canonicalEquals(expected, packagedCandidates.get(category))) {
+                errors.add("Provider projection reconciliation failed for " + category
+                        + ": packaged candidates are not the exact provider-snapshot projection.");
+            }
+        }
+        if (!canonicalEquals(expectedQuarantine, rawQuarantine)) {
+            errors.add("Provider projection reconciliation failed for candidate-quarantine.json: category, index, validation errors, or exact provider record differs.");
+        }
+    }
+
+    private boolean canonicalEquals(Object left, Object right) {
+        if (left == null || right == null) return left == right;
+        try { return Json.canonical(left).equals(Json.canonical(right)); }
+        catch (IllegalArgumentException ex) { return false; }
     }
 
     private void verifyCrossFileConsistency(
@@ -196,69 +276,119 @@ public final class PackageVerifier {
     }
 
     private void verifySemanticProjections(
-            Object canonicalIdentities, Object canonicalRelationships, Object candidateClaims, Object candidateRelationships,
-            Object quarantine, Object provenanceLedger, Object unresolvedItems, Map<String,Object> resolution,
+            Object canonicalIdentities, Object canonicalRelationships, Object candidateIdentities, Object candidateClaims,
+            Object candidateRelationships, Object candidateEvidence, Object quarantine, Object provenanceLedger,
+            Object unresolvedItems, Map<String,Object> resolution,
             Map<String,Object> scope, Map<String,Object> coverage, Map<String,Object> verification,
             Map<String,Object> publication, List<String> errors) {
-        if (!(canonicalIdentities instanceof List<?> uaos) || !(candidateClaims instanceof List<?> claims)
+        if (!(canonicalIdentities instanceof List<?> uaos) || !(candidateIdentities instanceof List<?> identities)
+                || !(candidateClaims instanceof List<?> claims) || !(candidateEvidence instanceof List<?> evidence)
                 || !(provenanceLedger instanceof List<?> ledger) || resolution == null) return;
-        Map<String,Object> candidateToUao = object(resolution.get("candidateToUao"), "identity-resolution.candidateToUao", errors);
+
+        Map<String,Object> expectedResolution = reconstructIdentityResolution(identities, errors);
+        if (expectedResolution == null) return;
+        if (!canonicalEquals(expectedResolution, resolution)) {
+            errors.add("Identity resolution does not reconstruct exactly from accepted candidate identities.");
+        }
+        Map<String,Object> candidateToUao = object(expectedResolution.get("candidateToUao"), "reconstructed candidateToUao", errors);
         if (candidateToUao == null) return;
 
-        Map<String,List<String>> expectedStatements = new LinkedHashMap<>();
-        Map<String,Map<String,Object>> claimById = new LinkedHashMap<>();
+        Map<String,List<Map<String,Object>>> claimsByUao = new TreeMap<>();
         for (Object raw : claims) {
             Map<String,Object> claim = object(raw, "candidate claim", errors); if (claim == null) continue;
-            Object cidRaw = claim.get("candidateId"), subjectRaw = claim.get("subjectIdentityRef"), statementRaw = claim.get("statement");
-            if (!(cidRaw instanceof String cid) || !(subjectRaw instanceof String subject) || !(statementRaw instanceof String statement)) continue;
-            claimById.put(cid, claim);
+            Object cidRaw = claim.get("candidateId"), subjectRaw = claim.get("subjectIdentityRef");
+            if (!(cidRaw instanceof String cid) || !(subjectRaw instanceof String subject)) continue;
             Object uidRaw = candidateToUao.get(subject);
-            if (!(uidRaw instanceof String uid)) { errors.add("Candidate claim maps to no resolved UAO: " + cid); continue; }
-            expectedStatements.computeIfAbsent(uid, ignored -> new ArrayList<>()).add(statement);
+            if (!(uidRaw instanceof String uid)) { errors.add("Candidate claim maps to no reconstructed UAO: " + cid); continue; }
+            claimsByUao.computeIfAbsent(uid, ignored -> new ArrayList<>()).add(claim);
         }
-        for (List<String> values : expectedStatements.values()) values.sort(String::compareTo);
+        claimsByUao.values().forEach(v -> v.sort(Comparator.comparing(c -> String.valueOf(c.get("candidateId")))));
+
+        Map<String,List<Map<String,Object>>> evidenceByCandidate = new TreeMap<>();
+        for (Object raw : evidence) {
+            Map<String,Object> item = object(raw, "candidate evidence", errors); if (item == null) continue;
+            if (item.get("supportsCandidateRef") instanceof String candidateRef) {
+                evidenceByCandidate.computeIfAbsent(candidateRef, ignored -> new ArrayList<>()).add(item);
+            }
+        }
+
+        Map<String,Map<String,Object>> actualByUid = new LinkedHashMap<>();
         for (Object raw : uaos) {
             Map<String,Object> uao = object(raw, "canonical UAO", errors); if (uao == null) continue;
-            Object uidRaw = uao.get("uid"); if (!(uidRaw instanceof String uid)) continue;
-            List<String> actual = new ArrayList<>();
-            Object assertionsRaw = uao.get("assertions");
-            if (assertionsRaw instanceof List<?> assertions) for (Object ar : assertions) {
-                Map<String,Object> assertion = object(ar, "canonical assertion", errors);
-                if (assertion != null && assertion.get("statement") instanceof String statement) actual.add(statement);
-            }
-            actual.sort(String::compareTo);
-            if (!actual.equals(expectedStatements.getOrDefault(uid, List.of()))) {
-                errors.add("Canonical assertions do not reconstruct from candidate claims for UAO " + uid + ".");
+            if (uao.get("uid") instanceof String uid && actualByUid.putIfAbsent(uid, uao) != null) {
+                errors.add("Duplicate canonical UAO during semantic reconstruction: " + uid);
             }
         }
 
-        Set<String> ledgerIds = new LinkedHashSet<>();
-        for (Object raw : ledger) {
-            Map<String,Object> entry = object(raw, "provenance ledger entry", errors); if (entry == null) continue;
-            Object cidRaw = entry.get("candidateId"); if (!(cidRaw instanceof String cid)) continue;
-            if (!ledgerIds.add(cid)) errors.add("Duplicate provenance ledger candidateId: " + cid);
-            Map<String,Object> claim = claimById.get(cid);
-            if (claim == null) { errors.add("Provenance ledger references unknown candidate claim: " + cid); continue; }
-            if (!java.util.Objects.equals(entry.get("statement"), claim.get("statement"))) errors.add("Provenance ledger statement differs from candidate claim: " + cid);
-            Object mapped = candidateToUao.get(claim.get("subjectIdentityRef"));
-            if (!java.util.Objects.equals(entry.get("uaoId"), mapped)) errors.add("Provenance ledger uaoId differs from identity resolution: " + cid);
-            if (!java.util.Objects.equals(entry.get("sourceRefs"), claim.get("sourceRefs"))) errors.add("Provenance ledger sourceRefs differ from candidate claim: " + cid);
+        List<Object> expectedLedger = new ArrayList<>();
+        Set<String> expectedUids = new LinkedHashSet<>();
+        for (Object raw : Json.array(expectedResolution.get("resolvedIdentities"), "reconstructed resolved identities")) {
+            Map<String,Object> identity = object(raw, "reconstructed resolved identity", errors); if (identity == null) continue;
+            String uid = String.valueOf(identity.get("uaoId"));
+            expectedUids.add(uid);
+            Map<String,Object> actual = actualByUid.get(uid);
+            if (actual == null) { errors.add("Reconstructed UAO is absent from canonical identities: " + uid); continue; }
+
+            Map<String,Object> expectedFoundryIdentity = new LinkedHashMap<>();
+            expectedFoundryIdentity.put("canonical_label", identity.get("label"));
+            expectedFoundryIdentity.put("aliases", identity.get("aliases"));
+            expectedFoundryIdentity.put("resolution_key", identity.get("resolutionKey"));
+            expectedFoundryIdentity.put("source_refs", identity.get("sourceRefs"));
+            Map<String,Object> actualInternal = object(actual.get("internal_state"), "canonical UAO internal_state", errors);
+            Map<String,Object> actualFoundryIdentity = actualInternal == null ? null
+                    : object(actualInternal.get("foundry_identity"), "canonical UAO foundry_identity", errors);
+            if (!canonicalEquals(expectedFoundryIdentity, actualFoundryIdentity)) {
+                errors.add("Canonical Foundry identity does not reconstruct from candidate identities for UAO " + uid + ".");
+            }
+
+            List<Object> expectedAssertions = new ArrayList<>();
+            for (Map<String,Object> claim : claimsByUao.getOrDefault(uid, List.of())) {
+                Map<String,Object> assertion = new LinkedHashMap<>();
+                assertion.put("statement", claim.get("statement"));
+                assertion.put("epistemic_class", "DEFERRED_ON_RECORD");
+                Object rawChannels = claim.get("channels");
+                List<?> channels = rawChannels instanceof List<?> list ? list : List.of();
+                assertion.put("channels", channels.isEmpty() ? List.of("foundry") : Json.parse(Json.canonical(channels)));
+                expectedAssertions.add(assertion);
+
+                String candidateId = String.valueOf(claim.get("candidateId"));
+                Map<String,Object> provenance = new LinkedHashMap<>();
+                provenance.put("candidateId", candidateId);
+                provenance.put("uaoId", uid);
+                provenance.put("statement", claim.get("statement"));
+                provenance.put("sourceRefs", claim.get("sourceRefs"));
+                List<Object> evidenceRefs = new ArrayList<>();
+                for (Map<String,Object> item : evidenceByCandidate.getOrDefault(candidateId, List.of())) {
+                    evidenceRefs.add(item.get("evidenceId"));
+                }
+                provenance.put("evidenceRefs", evidenceRefs);
+                expectedLedger.add(provenance);
+            }
+            if (!canonicalEquals(expectedAssertions, actual.get("assertions"))) {
+                errors.add("Canonical assertions do not reconstruct exactly from candidate claims for UAO " + uid + ".");
+            }
+            if (!canonicalEquals(List.of(), actual.get("relationship_references"))) {
+                errors.add("Canonical UAO relationship references are non-empty while Relationship Type role authority remains unavailable: " + uid + ".");
+            }
         }
-        if (!ledgerIds.equals(claimById.keySet())) errors.add("Provenance ledger candidate set differs from candidate claims.");
+        if (!actualByUid.keySet().equals(expectedUids)) errors.add("Canonical UAO set differs from reconstructed candidate identities.");
+        expectedLedger.sort(Comparator.comparing(v -> String.valueOf(object(v, "expected provenance", errors).get("candidateId"))));
+        if (!canonicalEquals(expectedLedger, ledger)) {
+            errors.add("Provenance ledger does not reconstruct exactly from candidate claims and evidence.");
+        }
 
         if (candidateRelationships instanceof List<?> relationships && unresolvedItems instanceof List<?> unresolved) {
-            Set<String> relationshipIds = new LinkedHashSet<>();
+            List<Object> expectedUnresolved = new ArrayList<>();
             for (Object raw : relationships) {
                 Map<String,Object> rel = object(raw, "candidate relationship", errors);
-                if (rel != null && rel.get("candidateId") instanceof String id) relationshipIds.add(id);
+                if (rel == null) continue;
+                Map<String,Object> item = new LinkedHashMap<>();
+                item.put("candidateId", rel.get("candidateId"));
+                item.put("code", "URO_TYPE_AUTHORITY_UNAVAILABLE");
+                item.put("description", "Current ASA CSS defines URO structure but the Foundry has no current authoritative domain Relationship Type role registry to validate this candidate. Publication of this URO is fail-closed.");
+                expectedUnresolved.add(item);
             }
-            Set<String> unresolvedIds = new LinkedHashSet<>();
-            for (Object raw : unresolved) {
-                Map<String,Object> item = object(raw, "unresolved item", errors); if (item == null) continue;
-                if (item.get("candidateId") instanceof String id) unresolvedIds.add(id);
-                if (!"URO_TYPE_AUTHORITY_UNAVAILABLE".equals(item.get("code"))) errors.add("Unexpected unresolved relationship code: " + item.get("code"));
-            }
-            if (!relationshipIds.equals(unresolvedIds)) errors.add("Unresolved relationship set does not equal candidate relationship set while ASA type-role authority is unavailable.");
+            if (!canonicalEquals(expectedUnresolved, unresolved)) errors.add("Unresolved relationship projection does not reconstruct exactly from candidate relationships while ASA type-role authority is unavailable.");
             if (canonicalRelationships instanceof List<?> uros && !uros.isEmpty()) errors.add("Canonical UROs are present while Relationship Type role authority remains unavailable.");
         }
 
@@ -274,6 +404,62 @@ public final class PackageVerifier {
                 errors.add("Publication decision cannot be reconstructed from scope/quarantine/URO/coverage/verification state; expected " + expectedStatus + "/" + expectedEligible + ".");
             }
         }
+    }
+
+    private Map<String,Object> reconstructIdentityResolution(List<?> identities, List<String> errors) {
+        Map<String,List<Map<String,Object>>> groups = new TreeMap<>();
+        for (Object raw : identities) {
+            Map<String,Object> candidate = object(raw, "candidate identity", errors); if (candidate == null) continue;
+            Object keyRaw = candidate.get("resolutionKey");
+            if (!(keyRaw instanceof String key)) continue;
+            try { ResolutionKeys.requireCanonical(key); }
+            catch (IllegalArgumentException ex) { errors.add("Candidate identity resolutionKey is not canonical during reconstruction: " + ex.getMessage()); continue; }
+            groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(candidate);
+        }
+        if (groups.isEmpty()) { errors.add("No candidate identities are available for identity-resolution reconstruction."); return null; }
+
+        Map<String,Object> candidateToUao = new TreeMap<>();
+        List<Object> resolved = new ArrayList<>();
+        Set<String> issued = new LinkedHashSet<>();
+        int roots = 0;
+        String rootUao = null;
+        for (Map.Entry<String,List<Map<String,Object>>> entry : groups.entrySet()) {
+            List<Map<String,Object>> group = new ArrayList<>(entry.getValue());
+            group.sort(Comparator.comparing(v -> String.valueOf(v.get("candidateId"))));
+            String uaoId = StableIdentifiers.forText("uao", 12, entry.getKey());
+            if (!issued.add(uaoId)) errors.add("Stable UAO identifier collision during identity-resolution reconstruction: " + uaoId);
+            boolean root = group.stream().anyMatch(v -> Boolean.TRUE.equals(v.get("root")));
+            if (root) { roots++; rootUao = uaoId; }
+
+            Set<String> aliases = new LinkedHashSet<>();
+            Set<String> sources = new LinkedHashSet<>();
+            List<Object> candidateRefs = new ArrayList<>();
+            for (Map<String,Object> candidate : group) {
+                Object candidateId = candidate.get("candidateId");
+                candidateRefs.add(candidateId);
+                candidateToUao.put(String.valueOf(candidateId), uaoId);
+                if (candidate.get("label") instanceof String label) aliases.add(label);
+                if (candidate.get("aliases") instanceof List<?> values) for (Object value : values) aliases.add(String.valueOf(value));
+                if (candidate.get("sourceRefs") instanceof List<?> values) for (Object value : values) sources.add(String.valueOf(value));
+            }
+            String label = String.valueOf(group.getFirst().get("label"));
+            aliases.remove(label);
+            Map<String,Object> item = new LinkedHashMap<>();
+            item.put("uaoId", uaoId);
+            item.put("candidateRefs", candidateRefs);
+            item.put("label", label);
+            item.put("resolutionKey", entry.getKey());
+            item.put("root", root);
+            item.put("aliases", new ArrayList<>(aliases));
+            item.put("sourceRefs", new ArrayList<>(sources));
+            resolved.add(item);
+        }
+        if (roots != 1) errors.add("Identity-resolution reconstruction requires exactly one resolved root; found " + roots + ".");
+        Map<String,Object> out = new LinkedHashMap<>();
+        out.put("rootUaoId", rootUao);
+        out.put("candidateToUao", candidateToUao);
+        out.put("resolvedIdentities", resolved);
+        return out;
     }
 
     private void verifyChecksums(Path packageDir, Path checksumFile, List<String> errors) {

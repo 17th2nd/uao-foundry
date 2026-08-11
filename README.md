@@ -1,7 +1,7 @@
 # UAO Foundry
 
 **Release target:** `v0.1.0`  
-**Status:** functional deterministic manufacturing core under independent-audit remediation. Package verification now targets content-addressed structural integrity/self-consistency; it does **not** certify external knowledge truth or authorship. Arbitrary-domain URO publication remains fail-closed pending current ASA Relationship Type role authority.
+**Status:** functional deterministic manufacturing core under independent-audit remediation. Package verification checks content-addressed structural consistency and exact reconciliation from the recorded provider candidate input through accepted/quarantined and canonical projections; it does **not** certify external knowledge truth or authorship. Arbitrary-domain URO publication remains fail-closed pending current ASA Relationship Type role authority.
 
 UAO Foundry is the domain-independent Java 21 manufacturing system for **Universal ASA Objects (UAOs)**. It transforms a minimally specified identity expression into a governed JSON package through explicit interpretation, scope, planning, evidence, candidate, resolution, canonicalisation, completeness, verification and publication stages.
 
@@ -29,7 +29,13 @@ verified immutable registry
 
 Provider output is intermediate. Providers do not acquire canonical-write or publication authority.
 
-`verify` proves that a package is structurally consistent with its recorded Foundry inputs and content address. It does **not** establish that an external claim is factually correct, nor does a self-contained package provide third-party authenticity without an external trust anchor.
+`verify` distinguishes five bounded properties:
+
+- **structural consistency:** schemas, duplicated package views, identity derivation and publication state reconstruct consistently;
+- **recorded provider-input reconciliation:** every provider candidate is reproduced exactly once as accepted or as a deterministic quarantine entry, and accepted candidates reconstruct the canonical projection;
+- **content-addressed identity:** meaning-bearing package projections determine `contentDigest` and `packageId`;
+- **immutable provenance:** after registry admission, the complete verified package occurrence is preserved and hash-checked on read;
+- **external authenticity and factual correctness:** neither is established by a self-contained package. They require external trust/authorship evidence and independent evaluation of the researched claims.
 
 The checked-in `schemas/asa/*` files are **validation projections**, not independent ASA authority. Their upstream evidence lock is in [`config/upstream-authority-lock.json`](config/upstream-authority-lock.json).
 
@@ -67,7 +73,7 @@ Every stage writes an inspectable checkpoint artifact. Resume re-derives cached 
 - evidence snapshots and provenance hashes;
 - candidate quarantine without silent repair;
 - canonical UAO construction aligned to the reviewed ASA surface;
-- structural verification, independently reconstructed publication decision, content digest, manifest and SHA-256 inventory;
+- structural verification, exact provider-to-candidate/quarantine reconciliation, independently reconstructed canonical/publication projections, content digest, manifest and SHA-256 inventory;
 - checkpoint/status/resume/verify/inspect lifecycle;
 - byte-determinism and tamper negative controls.
 
@@ -81,7 +87,7 @@ See [`docs/PROVIDER-PROTOCOL.md`](docs/PROVIDER-PROTOCOL.md).
 
 Publication-eligible packages can be copied into a Foundry-owned immutable registry. The registry re-verifies packages, preserves every package occurrence and maintains a deterministic rebuildable index over stable UAO UID, resolution key, labels and aliases.
 
-The registry is a discovery/reuse surface, **not** an alternative ASA semantic authority.
+Each registry occurrence carries a deterministic semantic-variant digest. Repeated occurrences with the same digest remain automatically reusable. Differing digests under one stable UID/key are preserved, exposed as `MULTIPLE_UNRECONCILED_VARIANTS`, and excluded from automatic reuse pending future governed reconciliation. The registry does not choose, union or discard variants and is **not** an alternative ASA semantic authority.
 
 See [`docs/REGISTRY.md`](docs/REGISTRY.md).
 
@@ -96,7 +102,7 @@ A checksum-covered `reuse-report.json` distinguishes:
 - exact `registry://` source evidence resolved from prior immutable packages;
 - newly acquired sources.
 
-The model/provider cannot simply declare canonical reuse. `registry://` evidence is admitted only through verified registry custody in the core acquisition stage and is SHA-256 checked against the prior immutable package. Reuse identity is exact canonical `resolutionKey` continuity with conservative name-conflict rejection; it is not a claim of universal semantic equivalence.
+The model/provider cannot simply declare canonical reuse. `registry://` evidence is admitted only through verified registry custody in the core acquisition stage and is SHA-256 checked against the prior immutable package. Reuse requires exact canonical `resolutionKey` continuity, lexical name continuity and the same deterministic semantic-variant digest. Differing or already-unreconciled variants fail closed; none is selected heuristically. This remains a bounded reuse discipline, not a claim of universal semantic equivalence.
 
 See [`docs/SEMANTIC-DELTA.md`](docs/SEMANTIC-DELTA.md).
 

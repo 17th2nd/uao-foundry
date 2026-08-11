@@ -46,7 +46,7 @@ This sprint adds release/readiness surfaces without changing the UAO→USI termi
 - stale provider/semantic-delta CI JAR-name correction;
 - sprint execution and independent-audit handoff documentation.
 
-The release-readiness sprint was independently audited and exposed integrity/identity defects. `sprint/2026-08-10-audit-remediation-r1` is the current candidate lane; no persistent real-knowledge registry or external demonstration is authorised until its exact final head passes CI and independent differential re-audit.
+The release-readiness sprint was independently audited and R1 received a `CONDITIONAL PASS`. The same draft lane, `sprint/2026-08-10-audit-remediation-r1`, now carries bounded R2 remediation for provider-projection reconciliation and unresolved semantic variants. No persistent real-knowledge registry or external demonstration is authorised until the exact R2 head passes all five workflows and bounded independent re-audit.
 
 ## Bounded upstream dependency
 
@@ -61,8 +61,8 @@ The authority sweep confirmed this is a genuine source/governance gap rather tha
 
 ## Remaining path after audit remediation
 
-1. **Exact-head CI:** run all pre-existing workflows plus the independent-audit remediation workflow and Claude containment C-1…C-17 on the exact candidate SHA.
-2. **Independent differential re-audit:** Claude replays the original forgery/custody/identity/checkpoint/index/containment attacks against that exact SHA.
+1. **Exact-head R2 CI:** run all five required workflows on one exact R2 SHA.
+2. **Bounded independent R2 re-audit:** replay N-1 claim/relationship/accounting attacks and N-2 same/different-variant and automatic-reuse attacks. Earlier cleared surfaces need re-attack only if the R2 differential materially regresses them.
 3. **Disposable real-Claude smoke:** only after re-audit, run one authenticated Claude Code manufacture in a disposable registry and preserve the provider/CLI evidence.
 4. **ASA#29 relationship authority:** a realistic qualification is relationship-heavy and currently becomes `EVIDENCE_INCOMPLETE`; establish the governed Relationship Type source edition before presenting a full qualification structure as manufactured knowledge.
 5. **TAFE demonstration redesign:** once the integrity and relationship gates permit it, manufacture the selected qualification/topic pair against a clean persistent demo registry and show actual `reuse-report.json` rather than predicted reuse.

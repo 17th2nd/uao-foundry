@@ -6,7 +6,7 @@
 This guide demonstrates the commercial/educational point that governed knowledge can be manufactured once and then reused in later manufacturing runs.
 
 
-> **Current gate (2026-08-10):** Do not populate a persistent TAFE demonstration registry yet. Independent adversarial audit showed that realistic qualification structure is relationship-heavy; while ASA#29 remains unresolved those relationships correctly fail closed, making the package `EVIDENCE_INCOMPLETE`. Use disposable experiments only until the remediation candidate is independently re-audited and the relationship demonstration is explicitly scoped.
+> **Current gate (2026-08-11):** Do not populate a persistent TAFE demonstration registry yet. Independent adversarial audit showed that realistic qualification structure is relationship-heavy; while ASA#29 remains unresolved those relationships correctly fail closed, making the package `EVIDENCE_INCOMPLETE`. R2 provider-reconciliation and semantic-variant controls also require bounded independent re-audit. Use disposable experiments only until both gates are explicitly cleared.
 
 The demonstration deliberately uses the same generic Foundry executable and Claude provider used for any other identity.
 
@@ -55,7 +55,7 @@ Inspect the response and package. In particular:
 - `verificationPassed` must be `true`;
 - `publicationStatus` must be publication-eligible for registry admission;
 - `reuse-report.json` records what was reused and what was newly manufactured;
-- `provider-snapshot.json` records the exact intermediate provider bundle that drove the job;
+- `provider-snapshot.json` records the intermediate provider bundle, and standalone verification reconciles its candidates exactly to accepted/quarantined projections;
 - `checksums.sha256` covers the package evidence.
 
 ## 3. Manufacture a related topic
@@ -98,7 +98,7 @@ The exact reuse observed is evidence-dependent. The demonstration must show the 
 
 A useful meeting explanation is:
 
-> The first request manufactures a governed knowledge package. When a later request overlaps with knowledge the Foundry has already verified and registered, the new job begins by discovering that existing knowledge. It can reuse the stable identities and their immutable provenance, then concentrate acquisition on the semantic delta instead of starting from zero.
+> The first request manufactures a governed package occurrence. When a later request overlaps with a registered stable identity whose semantic variant is settled and exactly matched, the new job can reuse that identity and its immutable package provenance, then concentrate acquisition on the semantic delta instead of starting from zero. Divergent variants are surfaced and refused rather than silently resolved.
 
 When the remediation and authority gates permit this demo, this is stronger than simply caching generated text because:
 
@@ -107,7 +107,7 @@ When the remediation and authority gates permit this demo, this is stronger than
 - registry evidence is content-hash checked;
 - the new package records exactly what was reused versus newly manufactured;
 - provider output remains intermediate and non-authoritative;
-- package verification is independent of the provider call **as a structural/content-integrity check**; it does not certify external factual correctness.
+- package verification independently checks structural consistency, recorded provider-candidate reconciliation and content addressing; registry custody preserves immutable provenance. None of these establishes external authenticity or factual correctness.
 
 ## 5. Current relationship limitation
 

@@ -9,7 +9,7 @@ The registry exists to make knowledge manufacture cumulative.
 
 A manufactured UAO package that has passed verification and has a reuse-eligible publication decision can be admitted as an immutable registry package. The registry then exposes stable UAO identifiers, resolution keys, labels, aliases and package occurrences for future discovery.
 
-The registry does **not** decide that one occurrence is the final truth, does not assign significance, and does not replace ASA CSS authority.
+The registry does **not** decide that one occurrence is the final truth, does not assign significance, and does not replace ASA CSS authority. It detects exact semantic-variant divergence but does not attempt to decide whether differing assertion sets contradict one another.
 
 ## Storage model
 
@@ -52,8 +52,12 @@ The deterministic index contains:
 - all observed canonical labels;
 - all observed aliases;
 - every immutable package occurrence containing that UAO.
+- a deterministic semantic-variant digest on every occurrence;
+- `SINGLE_VARIANT` or `MULTIPLE_UNRECONCILED_VARIANTS` status for the stable identity.
 
-Multiple verified package occurrences of the same stable UAO may coexist. Registry v0.1 preserves them rather than silently choosing a winner.
+The digest covers the stable UAO's meaning-bearing canonical projection: UID, lifecycle/successor state, Foundry identity metadata except source references, canonical assertions, relationship references and disclaimer. Assertion/reference/alias ordering is canonicalised. Package occurrence provenance, source references and source bytes are excluded so provenance-only repeats can share one variant.
+
+Multiple verified package occurrences of the same stable UAO may coexist. Same-digest occurrences are repeat/provenance occurrences and remain eligible for automatic reuse. Different digests are all preserved and deterministically mark the identity `MULTIPLE_UNRECONCILED_VARIANTS`. The registry does not choose a newest or highest-confidence occurrence, union assertions, declare one true, or delete either package.
 
 ## CLI
 
@@ -104,6 +108,8 @@ Match classes are ordered only by deterministic structural specificity:
 
 No `score`, `belief`, `stance` or `significance_value` is produced.
 
+Search and discovery expose each occurrence's package ID, canonical path and semantic-variant digest together with the identity-level variant status. This makes divergence inspectable without presenting it as reconciled knowledge.
+
 ## Provider discovery context
 
 `context` exposes provider-safe discovery material:
@@ -133,6 +139,8 @@ Every registry read used for search/discovery first rebuilds the expected index 
 - the stored index differs from the rebuildable deterministic index.
 
 `index.json` is therefore a cache/derived view, not the authority surface, and a tampered cache is never used for discovery. The immutable verified packages are its evidence base.
+
+Registry-aware automatic manufacture refuses a matched `MULTIPLE_UNRECONCILED_VARIANTS` identity before provider acquisition. If a newly manufactured occurrence differs from the registry's current single variant, `ReuseAnalyzer` refuses to count it as reused or register it automatically. An operator may separately admit the immutable package occurrence, after which the identity remains unresolved until a future governed reconciliation mechanism exists.
 
 ## Relationship-authority boundary
 
