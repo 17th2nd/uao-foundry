@@ -1,25 +1,22 @@
-name: UAO Foundry Claude Code adapter
+name: UAO Foundry post-remediation backup control
 
 on:
-  push:
-    branches:
-      - "sprint/**"
   pull_request:
     branches:
       - "main"
 
 permissions:
   contents: read
-
-env:
-  PYTHONDONTWRITEBYTECODE: "1"
+  actions: read
 
 jobs:
-  adapter:
+  accession-backup:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout control branch
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
@@ -28,252 +25,125 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Python adapter unit tests
-        run: python3 -m unittest discover -s adapters/claude-code/tests -p 'test_*.py' -v
-
-      - name: Existing Java tests
-        run: mvn -B -ntp clean verify
-
-      - name: Package executable
-        run: mvn -B -ntp package -DskipTests
-
-      - name: Install fake Claude Code executable
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat > /tmp/fake-claude <<'PY'
-          #!/usr/bin/env python3
-          import json
-          import os
-          import re
-          import sys
-
-          if "--version" in sys.argv:
-              print("2.1.999-ci-fake")
-              raise SystemExit(0)
-
-          def fail(message):
-              print("containment assertion failed: " + message, file=sys.stderr)
-              raise SystemExit(97)
-
-          args = sys.argv[1:]
-          for flag in ("--bare", "--no-session-persistence", "--no-chrome", "--strict-mcp-config"):
-              if flag not in args:
-                  fail("missing " + flag)
-          def value(flag):
-              try: return args[args.index(flag) + 1]
-              except (ValueError, IndexError): fail("missing value for " + flag)
-          if value("--tools") != "WebSearch,WebFetch": fail("--tools")
-          if value("--permission-mode") != "dontAsk": fail("--permission-mode")
-          if value("--output-format") != "json": fail("--output-format")
-          turns = int(value("--max-turns"))
-          if not 1 <= turns <= 100: fail("--max-turns")
-          schema = json.loads(value("--json-schema"))
-          with open("schemas/fixture-bundle.schema.json", encoding="utf-8") as fh:
-              if schema != json.load(fh): fail("--json-schema")
-          def multi(flag):
-              try: i = args.index(flag) + 1
-              except ValueError: fail("missing " + flag)
-              out = []
-              while i < len(args) and not args[i].startswith("--"):
-                  out.append(args[i]); i += 1
-              return out
-          if multi("--allowedTools") != ["WebSearch", "WebFetch"]: fail("--allowedTools")
-          denied = set(multi("--disallowedTools"))
-          required = {"Bash","Read","Write","Edit","Glob","Grep","Agent","Skill","mcp__*"}
-          if not required.issubset(denied): fail("--disallowedTools")
-          for secret in ("GITHUB_TOKEN", "AWS_SECRET_ACCESS_KEY", "NPM_TOKEN"):
-              if secret in os.environ: fail("secret inherited: " + secret)
-          if os.environ.get("CLAUDE_CODE_SKIP_PROMPT_HISTORY") != "1": fail("prompt history")
-
-          prompt = sys.stdin.read()
-          match = re.search(r"BEGIN_FOUNDRY_ENVELOPE_JSON\n(.*?)\nEND_FOUNDRY_ENVELOPE_JSON", prompt, re.S)
-          if not match:
-              print("missing Foundry envelope", file=sys.stderr)
-              raise SystemExit(10)
-          envelope = json.loads(match.group(1))
-          seed = envelope["request"]["identitySeed"]
-          slug = re.sub(r"[^a-z0-9]+", "-", seed.lower()).strip("-") or "identity"
-          context = envelope.get("registryContext") or {}
-          matches = context.get("matches") or []
-
-          if matches:
-              identity = matches[0]["identity"]
-              resolution = identity["resolutionKey"]
-              occurrence = identity["occurrences"][0]
-              package_id = occurrence["packageId"]
-              canonical_path = occurrence["canonicalPath"]
-              prefix = f"packages/{package_id}/"
-              if not canonical_path.startswith(prefix):
-                  print("invalid registry occurrence", file=sys.stderr)
-                  raise SystemExit(11)
-              locator = f"registry://{package_id}/{canonical_path[len(prefix):]}"
-              source_class = "foundry-registry"
-              source_content = "FAKE MODEL TRANSCRIPTION MUST BE REPLACED BY ADAPTER"
-              source_license = "FAKE-MODEL"
-          else:
-              resolution = f"foundry:v0.1:ci:{slug}"
-              locator = "https://example.invalid/uao-foundry-ci"
-              source_class = "synthetic-ci-reference"
-              source_content = f"Synthetic CI evidence for {seed}."
-              source_license = "TEST-SYNTHETIC"
-
-          bundle = {
-              "fixtureVersion": "0.1.0",
-              "identitySeed": seed,
-              "fixedClock": "2000-01-01T00:00:00Z",
-              "knowledgeHorizon": "2000-01-01T00:00:00Z",
-              "interpretations": [{
-                  "candidateId": "int-root",
-                  "label": seed,
-                  "definition": f"CI-selected interpretation of {seed}.",
-                  "semanticTypeProposal": "CIIdentity",
-                  "confidence": 0.9,
-                  "status": "SELECTED",
-                  "references": [locator]
-              }],
-              "scopeResolution": {
-                  "selectedInterpretation": "int-root",
-                  "scopeStatus": "MACHINE_SELECTED_EXPERIMENTAL",
-                  "canonicalWorkingLabel": seed,
-                  "includedBoundaries": ["CI identity scope"],
-                  "excludedBoundaries": [],
-                  "excludedInterpretations": [],
-                  "unresolvedQuestions": []
-              },
-              "manufacturingPlan": {
-                  "planVersion": "0.1.0",
-                  "selectedIdentity": seed,
-                  "dimensions": ["identity"],
-                  "neighbouringIdentities": [],
-                  "anticipatedSourceClasses": [source_class],
-                  "risks": [],
-                  "completionQuestions": [{
-                      "questionId": "q-identity",
-                      "prompt": "Is the selected identity evidenced?",
-                      "required": True
-                  }],
-                  "exclusions": []
-              },
-              "sourceStrategy": {
-                  "strategyVersion": "0.1.0",
-                  "sourceClasses": [{"classId": source_class, "purpose": "CI evidence", "priority": 1}],
-                  "authorityNotes": ["Fake Claude CI provider; non-authoritative."],
-                  "safetyConstraints": ["No external network call in CI fake."]
-              },
-              "sources": [{
-                  "sourceId": "src-root",
-                  "locator": locator,
-                  "sourceClass": source_class,
-                  "retrievedAt": "2000-01-01T00:00:00Z",
-                  "license": source_license,
-                  "content": source_content
-              }],
-              "candidates": {
-                  "identities": [{
-                      "candidateId": "cid-root",
-                      "label": seed,
-                      "resolutionKey": resolution,
-                      "root": True,
-                      "aliases": [],
-                      "sourceRefs": ["src-root"],
-                      "externalIdentifiers": {}
-                  }],
-                  "claims": [{
-                      "candidateId": "clm-root",
-                      "subjectIdentityRef": "cid-root",
-                      "statement": f"CI evidence-backed identity assertion for {seed}.",
-                      "channels": ["foundry"],
-                      "sourceRefs": ["src-root"]
-                  }],
-                  "relationships": [],
-                  "evidence": [{
-                      "evidenceId": "ev-root",
-                      "sourceRef": "src-root",
-                      "supportsCandidateRef": "clm-root",
-                      "extract": "Synthetic CI evidence.",
-                      "locatorWithinSource": "ci"
-                  }],
-                  "states": [],
-                  "events": [],
-                  "languageMappings": []
-              },
-              "coverageAnswers": {"q-identity": "covered"}
-          }
-          print(json.dumps({"type": "result", "structured_output": bundle}, separators=(",", ":")))
-          PY
-          chmod 700 /tmp/fake-claude
-          /tmp/fake-claude --version
-
-      - name: Registry-aware fake-Claude manufacture and semantic reuse
-        shell: bash
+      - name: Verify canonical main and native post-merge CI
         env:
-          UAO_FOUNDRY_CLAUDE_BIN: /tmp/fake-claude
-          UAO_FOUNDRY_FIXED_CLOCK: "2026-08-10T00:00:00Z"
-        run: |
-          set -euo pipefail
-          rm -rf /tmp/uao-sprint-registry /tmp/uao-sprint-work /tmp/uao-sprint-dist
-
-          first="$(bash scripts/manufacture-claude.sh \
-            "adapter integration identity" \
-            --registry /tmp/uao-sprint-registry \
-            --work-dir /tmp/uao-sprint-work \
-            --dist-dir /tmp/uao-sprint-dist \
-            --repository-commit "$GITHUB_SHA" \
-            --register)"
-          printf '%s\n' "$first" | jq .
-          printf '%s\n' "$first" | jq -e '
-            .verificationPassed == true and
-            .publicationStatus == "EXPERIMENTAL" and
-            .reuse.counts.newUaoCount == 1 and
-            .reuse.counts.reusedUaoCount == 0'
-
-          java -cp target/uao-foundry-0.1.0.jar \
-            org.seventeenthsecond.uaofoundry.registry.RegistryApplication \
-            verify --registry /tmp/uao-sprint-registry | jq -e '.passed == true'
-
-          second="$(bash scripts/manufacture-claude.sh \
-            "adapter integration identity" \
-            --registry /tmp/uao-sprint-registry \
-            --work-dir /tmp/uao-sprint-work \
-            --dist-dir /tmp/uao-sprint-dist \
-            --repository-commit "$GITHUB_SHA" \
-            --register)"
-          printf '%s\n' "$second" | jq .
-          printf '%s\n' "$second" | jq -e '
-            .verificationPassed == true and
-            .publicationStatus == "EXPERIMENTAL" and
-            .reuse.counts.reusedUaoCount >= 1 and
-            .reuse.counts.registrySourceCount >= 1'
-
-          package="$(printf '%s\n' "$second" | jq -r .packagePath)"
-          java -jar target/uao-foundry-0.1.0.jar verify "$package" | jq -e '.passed == true'
-          grep -F 'registry://' "$package/source-registry.json"
-          grep -F 'UAO-FOUNDRY-REGISTRY-SNAPSHOT' "$package/provider-snapshot.json"
-
-          java -cp target/uao-foundry-0.1.0.jar \
-            org.seventeenthsecond.uaofoundry.registry.RegistryApplication \
-            verify --registry /tmp/uao-sprint-registry | jq -e '.passed == true and .packageCount >= 2'
-
-      - name: TAFE demonstration terms remain outside production implementation
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          if grep -RniE '\b(Certificate III Electrotechnology|Electric Vehicle Maintenance)\b' src/main/java adapters/claude-code/claude_provider.py; then
-            echo 'TAFE demonstration identity leaked into generic implementation.' >&2
+          MAIN_SHA='2bc2871d2a7c36c9b4d67881d40827ff2e948d2e'
+          git fetch origin main --force
+          test "$(git rev-parse origin/main)" = "$MAIN_SHA"
+          git switch --detach "$MAIN_SHA"
+          test "$(git rev-parse HEAD)" = "$MAIN_SHA"
+
+          expected=("UAO Foundry CI" "UAO Foundry provider protocol" "UAO Foundry semantic delta")
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${MAIN_SHA}&per_page=100"
+          complete=0
+          for attempt in $(seq 1 36); do
+            curl -fsSL \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "$api" > /tmp/main-runs.json
+            complete=1
+            for name in "${expected[@]}"; do
+              count="$(jq --arg n "$name" --arg s "$MAIN_SHA" '[.workflow_runs[] | select(.event=="push" and .head_sha==$s and .name==$n and .status=="completed" and .conclusion=="success")] | length' /tmp/main-runs.json)"
+              if [ "$count" -lt 1 ]; then complete=0; fi
+            done
+            if [ "$complete" -eq 1 ]; then break; fi
+            sleep 10
+          done
+          if [ "$complete" -ne 1 ]; then
+            jq --arg s "$MAIN_SHA" '[.workflow_runs[] | select(.head_sha==$s) | {id,name,event,status,conclusion,head_sha}]' /tmp/main-runs.json >&2
+            echo 'Required native main push CI did not reach SUCCESS.' >&2
             exit 1
           fi
+          mkdir -p /tmp/accession-evidence
+          jq --arg s "$MAIN_SHA" '[.workflow_runs[] | select(.event=="push" and .head_sha==$s) | {id,name,event,status,conclusion,head_sha,run_number,created_at,updated_at,html_url}] | sort_by(.name)' /tmp/main-runs.json > /tmp/accession-evidence/NATIVE-MAIN-CI.json
 
-      - name: Python bytecode hygiene
+      - name: Independent exact-main Maven verification
         shell: bash
         run: |
           set -euo pipefail
-          if find adapters -type d -name __pycache__ -print -quit | grep -q .; then
-            echo '__pycache__ generated inside repository tree.' >&2
-            exit 1
-          fi
+          MAIN_SHA='2bc2871d2a7c36c9b4d67881d40827ff2e948d2e'
+          test "$(git rev-parse HEAD)" = "$MAIN_SHA"
+          mvn -B -ntp clean verify | tee /tmp/accession-evidence/MAVEN-VERIFY.log
+
+      - name: Build immutable recovery pack and prove restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          MAIN_SHA='2bc2871d2a7c36c9b4d67881d40827ff2e948d2e'
+          BACKUP_BRANCH='backup/main-2026-08-11-post-remediation-2bc2871d'
+          test "$(git rev-parse HEAD)" = "$MAIN_SHA"
+          TREE_SHA="$(git rev-parse "${MAIN_SHA}^{tree}")"
+          mkdir -p /tmp/uao-foundry-recovery
+          cd /tmp/uao-foundry-recovery
+
+          git -C "$GITHUB_WORKSPACE" update-ref refs/heads/recovery-main "$MAIN_SHA"
+          git -C "$GITHUB_WORKSPACE" bundle create "uao-foundry-main-${MAIN_SHA}.bundle" refs/heads/recovery-main
+          git -C "$GITHUB_WORKSPACE" bundle verify "$(pwd)/uao-foundry-main-${MAIN_SHA}.bundle" > BUNDLE-VERIFY.txt 2>&1
+          git -C "$GITHUB_WORKSPACE" archive --format=tar.gz --prefix="uao-foundry-${MAIN_SHA}/" -o "$(pwd)/uao-foundry-source-${MAIN_SHA}.tar.gz" "$MAIN_SHA"
+
+          cp /tmp/accession-evidence/NATIVE-MAIN-CI.json .
+          cp /tmp/accession-evidence/MAVEN-VERIFY.log .
+
+          cat > BACKUP-MANIFEST.txt <<EOF
+          UAO FOUNDRY POST-REMEDIATION RECOVERY MANIFEST
+          generated_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          repository=${GITHUB_REPOSITORY}
+          canonical_main_sha=${MAIN_SHA}
+          canonical_tree_sha=${TREE_SHA}
+          squash_pr=13
+          accepted_r2_head=92f9247fcc7f89ba8a1f10b8273fd7c2034ae2f9
+          permanent_backup_branch=${BACKUP_BRANCH}
+          authority_created_here=false
+          asa_relationship_type_role_authority=NOT_FOUND_IN_CURRENT_CSS_AUTHORITY_SURFACE
+          bundle_scope=history reachable from canonical main via refs/heads/recovery-main
+          source_archive_scope=exact canonical main tree
+          native_main_ci_evidence=NATIVE-MAIN-CI.json
+          exact_main_maven_evidence=MAVEN-VERIFY.log
+          recovery_proof=RECOVERY-VERIFICATION.txt
+          EOF
+
+          sha256sum \
+            "uao-foundry-main-${MAIN_SHA}.bundle" \
+            "uao-foundry-source-${MAIN_SHA}.tar.gz" \
+            BACKUP-MANIFEST.txt \
+            NATIVE-MAIN-CI.json \
+            MAVEN-VERIFY.log \
+            BUNDLE-VERIFY.txt > SHA256SUMS.txt
+
+          rm -rf /tmp/uao-foundry-clean-restore
+          git clone "uao-foundry-main-${MAIN_SHA}.bundle" /tmp/uao-foundry-clean-restore
+          git -C /tmp/uao-foundry-clean-restore checkout --detach "$MAIN_SHA"
+          RESTORED_SHA="$(git -C /tmp/uao-foundry-clean-restore rev-parse HEAD)"
+          RESTORED_TREE="$(git -C /tmp/uao-foundry-clean-restore rev-parse HEAD^{tree})"
+          test "$RESTORED_SHA" = "$MAIN_SHA"
+          test "$RESTORED_TREE" = "$TREE_SHA"
+          git -C /tmp/uao-foundry-clean-restore fsck --full
+
+          mkdir -p /tmp/source-restore
+          tar -xzf "uao-foundry-source-${MAIN_SHA}.tar.gz" -C /tmp/source-restore
+          test -f "/tmp/source-restore/uao-foundry-${MAIN_SHA}/README.md"
+
+          cat > RECOVERY-VERIFICATION.txt <<EOF
+          recovery_status=PASS
+          restored_commit=${RESTORED_SHA}
+          restored_tree=${RESTORED_TREE}
+          expected_commit=${MAIN_SHA}
+          expected_tree=${TREE_SHA}
+          git_fsck=PASS
+          source_archive_extract=PASS
+          EOF
+          sha256sum RECOVERY-VERIFICATION.txt >> SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
+
+      - name: Upload recovery artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uao-foundry-post-remediation-recovery-2bc2871d
+          path: /tmp/uao-foundry-recovery/
+          if-no-files-found: error
+          retention-days: 90
