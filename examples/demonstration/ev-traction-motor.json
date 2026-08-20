@@ -1,0 +1,295 @@
+{
+  "fixtureVersion": "0.1.0",
+  "identitySeed": "EV traction motor",
+  "fixedClock": "2026-08-20T00:00:00Z",
+  "knowledgeHorizon": "2026-08-20T00:00:00Z",
+  "interpretations": [
+    {
+      "candidateId": "int-ev-traction-motor",
+      "label": "EV traction motor as an engineered artefact class",
+      "definition": "A demonstration interpretation of 'EV traction motor' as an engineered artefact class.",
+      "semanticTypeProposal": "EngineeredArtefactClass",
+      "confidence": 0.97,
+      "status": "SELECTED",
+      "references": [
+        "fixture://src-motor"
+      ]
+    }
+  ],
+  "scopeResolution": {
+    "selectedInterpretation": "int-ev-traction-motor",
+    "scopeStatus": "FIXTURE_SELECTED",
+    "canonicalWorkingLabel": "EV traction motor",
+    "includedBoundaries": [
+      "artefact class",
+      "principal components"
+    ],
+    "excludedBoundaries": [
+      "individual manufactured units",
+      "commercial product listings"
+    ],
+    "excludedInterpretations": [],
+    "unresolvedQuestions": []
+  },
+  "manufacturingPlan": {
+    "planVersion": "0.1.0",
+    "selectedIdentity": "EV traction motor",
+    "dimensions": [
+      "operating-principle",
+      "principal-components",
+      "application-context"
+    ],
+    "neighbouringIdentities": [
+      "electric motor",
+      "drivetrain"
+    ],
+    "anticipatedSourceClasses": [
+      "engineering-reference",
+      "component-reference"
+    ],
+    "risks": [
+      "class-versus-instance ambiguity"
+    ],
+    "completionQuestions": [
+      {
+        "questionId": "q-principle",
+        "prompt": "Is principle represented?",
+        "required": true
+      },
+      {
+        "questionId": "q-components",
+        "prompt": "Is components represented?",
+        "required": true
+      },
+      {
+        "questionId": "q-application",
+        "prompt": "Is application represented?",
+        "required": true
+      }
+    ],
+    "exclusions": [
+      "individual units"
+    ]
+  },
+  "sourceStrategy": {
+    "strategyVersion": "0.1.0",
+    "sourceClasses": [
+      {
+        "classId": "engineering-reference",
+        "purpose": "principal artefact evidence",
+        "priority": 1
+      },
+      {
+        "classId": "component-reference",
+        "purpose": "component evidence",
+        "priority": 2
+      }
+    ],
+    "authorityNotes": [
+      "Demonstration evidence is synthetic and non-authoritative."
+    ],
+    "safetyConstraints": [
+      "No network access in fixture mode."
+    ]
+  },
+  "sources": [
+    {
+      "sourceId": "src-motor",
+      "locator": "fixture://src-motor",
+      "sourceClass": "engineering-reference",
+      "retrievedAt": "2026-08-20T00:00:00Z",
+      "license": "DEMONSTRATION-FIXTURE",
+      "content": "Demonstration source: an electric motor converts electrical energy into mechanical rotation."
+    },
+    {
+      "sourceId": "src-components",
+      "locator": "fixture://src-components",
+      "sourceClass": "component-reference",
+      "retrievedAt": "2026-08-20T00:00:00Z",
+      "license": "DEMONSTRATION-FIXTURE",
+      "content": "Demonstration source: the principal members of an electric motor are the rotor and the stator."
+    },
+    {
+      "sourceId": "src-traction",
+      "locator": "fixture://src-traction",
+      "sourceClass": "engineering-reference",
+      "retrievedAt": "2026-08-20T00:00:00Z",
+      "license": "DEMONSTRATION-FIXTURE",
+      "content": "Demonstration source: a traction motor drives the wheels of an electric vehicle."
+    }
+  ],
+  "candidates": {
+    "identities": [
+      {
+        "candidateId": "cid-traction",
+        "label": "EV traction motor",
+        "resolutionKey": "foundry:v0.1:machine:ev-traction-motor",
+        "root": true,
+        "aliases": [
+          "traction motor"
+        ],
+        "sourceRefs": [
+          "src-traction"
+        ],
+        "externalIdentifiers": {}
+      },
+      {
+        "candidateId": "cid-motor",
+        "label": "electric motor",
+        "resolutionKey": "foundry:v0.1:machine:electric-motor",
+        "root": false,
+        "aliases": [
+          "electrical motor"
+        ],
+        "sourceRefs": [
+          "src-motor"
+        ],
+        "externalIdentifiers": {
+          "wikidata": "Q53068"
+        }
+      },
+      {
+        "candidateId": "cid-rotor",
+        "label": "rotor",
+        "resolutionKey": "foundry:v0.1:component:rotor",
+        "root": false,
+        "aliases": [
+          "rotating assembly"
+        ],
+        "sourceRefs": [
+          "src-components"
+        ],
+        "externalIdentifiers": {}
+      },
+      {
+        "candidateId": "cid-stator",
+        "label": "stator",
+        "resolutionKey": "foundry:v0.1:component:stator",
+        "root": false,
+        "aliases": [
+          "stationary assembly"
+        ],
+        "sourceRefs": [
+          "src-components"
+        ],
+        "externalIdentifiers": {}
+      },
+      {
+        "candidateId": "cid-magnet",
+        "label": "permanent magnet",
+        "resolutionKey": "foundry:v0.1:component:permanent-magnet",
+        "root": false,
+        "aliases": [
+          "rotor magnet"
+        ],
+        "sourceRefs": [
+          "src-traction"
+        ],
+        "externalIdentifiers": {}
+      }
+    ],
+    "claims": [
+      {
+        "candidateId": "clm-traction",
+        "subjectIdentityRef": "cid-traction",
+        "statement": "An EV traction motor drives the wheels of an electric vehicle.",
+        "channels": [
+          "foundry"
+        ],
+        "sourceRefs": [
+          "src-traction"
+        ]
+      },
+      {
+        "candidateId": "clm-motor",
+        "subjectIdentityRef": "cid-motor",
+        "statement": "An electric motor converts electrical energy into mechanical rotation.",
+        "channels": [
+          "foundry"
+        ],
+        "sourceRefs": [
+          "src-motor"
+        ]
+      },
+      {
+        "candidateId": "clm-rotor",
+        "subjectIdentityRef": "cid-rotor",
+        "statement": "The rotor is the rotating member of an electric motor.",
+        "channels": [
+          "foundry"
+        ],
+        "sourceRefs": [
+          "src-components"
+        ]
+      },
+      {
+        "candidateId": "clm-stator",
+        "subjectIdentityRef": "cid-stator",
+        "statement": "The stator is the stationary member of an electric motor.",
+        "channels": [
+          "foundry"
+        ],
+        "sourceRefs": [
+          "src-components"
+        ]
+      },
+      {
+        "candidateId": "clm-magnet",
+        "subjectIdentityRef": "cid-magnet",
+        "statement": "A permanent magnet may be mounted on the rotor of a traction motor.",
+        "channels": [
+          "foundry"
+        ],
+        "sourceRefs": [
+          "src-traction"
+        ]
+      }
+    ],
+    "relationships": [],
+    "evidence": [
+      {
+        "evidenceId": "ev-traction",
+        "sourceRef": "src-traction",
+        "supportsCandidateRef": "clm-traction",
+        "extract": "Demonstration evidence for the traction application.",
+        "locatorWithinSource": "sentence-1"
+      },
+      {
+        "evidenceId": "ev-motor",
+        "sourceRef": "src-motor",
+        "supportsCandidateRef": "clm-motor",
+        "extract": "Demonstration evidence for the artefact class.",
+        "locatorWithinSource": "sentence-1"
+      },
+      {
+        "evidenceId": "ev-rotor",
+        "sourceRef": "src-components",
+        "supportsCandidateRef": "clm-rotor",
+        "extract": "Demonstration evidence for the rotor.",
+        "locatorWithinSource": "sentence-1"
+      },
+      {
+        "evidenceId": "ev-stator",
+        "sourceRef": "src-components",
+        "supportsCandidateRef": "clm-stator",
+        "extract": "Demonstration evidence for the stator.",
+        "locatorWithinSource": "sentence-1"
+      },
+      {
+        "evidenceId": "ev-magnet",
+        "sourceRef": "src-traction",
+        "supportsCandidateRef": "clm-magnet",
+        "extract": "Demonstration evidence for the magnet.",
+        "locatorWithinSource": "sentence-1"
+      }
+    ],
+    "states": [],
+    "events": [],
+    "languageMappings": []
+  },
+  "coverageAnswers": {
+    "q-principle": "covered",
+    "q-components": "covered",
+    "q-application": "covered"
+  }
+}

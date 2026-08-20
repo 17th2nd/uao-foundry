@@ -410,3 +410,61 @@ means someone asserted the relationship, not that ASA governs it.
 This phase is only possible because Phase 5 bound candidates to persistent uids; before that,
 candidates pointed at bundle-local handles and could not be checked against an expectation stated
 in persistent identity.
+
+---
+
+## Phase 8 — Functional manufacturer
+
+**Status:** COMPLETE
+**Tests:** 120/120 green (9 new). `BUILD SUCCESS`.
+
+### Built
+
+- `console/OperatorConsole.java` + `console/Options.java` — the §21 operator surface as a CLI:
+  `manufacture`, `search`, `identity`, `status`, with `--json` for machine use.
+- `examples/demonstration/` — three deterministic bundles for the §31 acceptance run.
+
+### DEFECT FOUND AND FIXED — cross-source reuse was broken
+
+Building the demonstration surfaced a real defect **I introduced in Phase 3**.
+
+`alias_provenance` was added inside `foundry_identity`, and `SemanticVariants.digest` strips only
+`source_refs`. So the meaning-bearing projection included candidate and source refs, and **the same
+identity acquired from a differently-named source produced a different semantic-variant digest** →
+`MULTIPLE_UNRECONCILED_VARIANTS` → automatic reuse refused.
+
+That defeats the programme's central claim: persistent identity exists precisely so one identity
+can be evidenced repeatedly from different places.
+
+The existing tests missed it because every reuse test re-manufactures from the *same* fixture, with
+identical candidate and source ids. Only building a realistic two-run demonstration exposed it.
+
+Fixed by stripping `alias_provenance` from the variant digest for the same stated reason as
+`source_refs`: both are provenance, not meaning, and the names themselves remain in
+`canonical_label` and `aliases`. Permanent regression test added
+(`oneIdentityEvidencedFromDifferentSourcesIsStillOneIdentity`), mutation-verified — restoring the
+defect makes exactly that test fail.
+
+### Acceptance demonstration (§31), disposable registry
+
+| Run | Reused | New | Verification | Admission |
+|---|---|---|---|---|
+| electric motor | 0 | 3 | PASS | REGISTERED |
+| EV traction motor | **3** | **2** | PASS | REGISTERED |
+| tidal barrage (unrelated domain) | 0 | 2 | PASS | REGISTERED |
+
+Rediscovery by `wikidata:Q53068` → `SAME` / `EXTERNAL_IDENTIFIER_CONTINUITY`. The reused motor
+identity holds two occurrences, two identity decisions and **one** state version.
+
+Registry verification PASS: 3 packages, 7 identities, 0 unreconciled, 0 non-active.
+
+### Reporting discipline
+
+Every number the console prints is **read back** from the manufactured package, the
+Foundry-computed reuse report or the verified registry index — never tallied as it goes. A counter
+maintained by the reporting layer can drift from the artefact it describes, and a demonstration
+showing numbers the packages do not support is worse than no demonstration. Asserted by
+`everyReportedNumberIsReadBackFromTheArtefactsRatherThanTallied`.
+
+With no registry, the report says so explicitly: "no registry was consulted, so every identity is
+reported as new. that is not evidence that none existed."

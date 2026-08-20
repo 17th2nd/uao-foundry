@@ -112,6 +112,36 @@ class PersistentIdentityKernelTest {
                 "a rename does change identity-bearing material, and must be visible as such");
     }
 
+    @Test
+    void oneIdentityEvidencedFromDifferentSourcesIsStillOneIdentity() {
+        // Regression. Adding alias_provenance to the kernel in Phase 3 put candidate and source
+        // refs inside the meaning-bearing projection, so the same identity acquired from a
+        // differently-named source was flagged MULTIPLE_UNRECONCILED_VARIANTS and refused for
+        // reuse -- defeating the whole point of persistent identity, which is that one identity
+        // may be evidenced repeatedly from different places. Provenance is not meaning.
+        PipelineResult first = manufacture("src-a", fixture -> {});
+        PipelineResult second = manufacture("src-b", fixture -> renameSource(fixture, "src-cow-bio", "src-cow-alt"));
+
+        String uid = rootUid(first);
+        assertEquals(uid, rootUid(second));
+        assertNotEquals(kernelOf(first, uid).get("alias_provenance"), kernelOf(second, uid).get("alias_provenance"),
+                "the provenance genuinely differs between the two manufactures");
+
+        FoundryRegistry registry = new FoundryRegistry(temp.resolve("registry"), SCHEMAS);
+        registry.register(first.packagePath());
+        registry.register(second.packagePath());
+
+        Map<String,Object> indexed = identityByUid(registry.index(), uid);
+        assertEquals(SemanticVariants.SINGLE_VARIANT, indexed.get("semanticVariantStatus"),
+                "differently-sourced evidence for one identity must not read as a semantic variant");
+        assertEquals(1, array(indexed.get("stateVersions")).size(), "one identity in one state, evidenced twice");
+        assertEquals(2, array(indexed.get("occurrences")).size());
+
+        assertEquals(IdentityDecision.SAME,
+                new IdentityResolver(registry.index()).resolve(IdentityReference.uid(uid)).decision(),
+                "and it must remain reusable");
+    }
+
     // ---------------------------------------------------------------- resemblance is not identity
 
     @Test
@@ -326,6 +356,15 @@ class PersistentIdentityKernelTest {
         ManufacturingRequest request = loader.fromSeed("cow", "en", "experimental");
         return new FoundryPipeline(SCHEMAS, temp.resolve("work-" + suffix), temp.resolve("dist-" + suffix), "test-sha")
                 .manufacture(request, new FixtureProvider(path, SCHEMAS), false);
+    }
+
+    /** Renames a source everywhere it is referenced, changing provenance without changing meaning. */
+    private static void renameSource(Map<String,Object> fixture, String from, String to) {
+        String canonical = Json.canonical(fixture)
+                .replace("\"" + from + "\"", "\"" + to + "\"")
+                .replace("fixture://" + from, "fixture://" + to);
+        fixture.clear();
+        fixture.putAll(object(Json.parse(canonical)));
     }
 
     private static Map<String,Object> identity(Map<String,Object> fixture, String candidateId) {
