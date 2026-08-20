@@ -52,6 +52,10 @@ def main():
         accumulate = int(sys.argv[sys.argv.index("--accumulate") + 1])
 
     if accumulate:
+        # Count the delta, not the total: this step may run against a store that already holds
+        # records from an earlier step. The property under test is that every attempt leaves its
+        # own record, which is a statement about the increase.
+        before = len(call(base, "/api/runs")["runs"])
         ids = set()
         for i in range(1, accumulate + 1):
             result = manufacture(base, demo, "electric motor", "electric-motor.json")
@@ -60,9 +64,9 @@ def main():
                 ids.add(result["packageId"])
         expect(len(ids) == 1, f"identical material keeps one package id after the second run ({ids})")
         expect(call(base, "/api/status")["registryVerification"] == "PASS", "registry still verifies")
-        runs = call(base, "/api/runs")["runs"]
-        expect(len(runs) == accumulate,
-               f"every attempt left its own run record ({len(runs)} of {accumulate})")
+        added = len(call(base, "/api/runs")["runs"]) - before
+        expect(added == accumulate,
+               f"every attempt left its own run record ({added} added for {accumulate} attempts)")
         return 0
 
     first = manufacture(base, demo, "electric motor", "electric-motor.json")
