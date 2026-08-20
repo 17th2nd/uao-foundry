@@ -368,3 +368,45 @@ making an unratified proposal part of the deterministic identity of real work.
 **Validity declarations are not modelled.** ASA lifecycle gives a *status*, not a validity
 interval; nothing records "valid from T1 to T2". This is the same missing time model as alias
 time-awareness — one absence surfacing twice.
+
+---
+
+## Phase 7 — Negative space
+
+**Status:** COMPLETE
+**Tests:** 111/111 green (9 new). `BUILD SUCCESS`.
+
+### Built
+
+`negativespace/ExpectedRelationship.java` (content-addressed `exp-<16 hex>`, mandatory rationale)
+and `negativespace/NegativeSpaceEvaluator.java`. Research-level: wired into no manufacturing,
+publication or admission path.
+
+### Closed
+
+- **G-14** — expected-relationship records and absence-state evaluation exist.
+
+### THE FINDING — absence over certified relationships is currently vacuous
+
+Canonical URO publication is fail-closed pending ASA#29, so the certified relationship set is empty
+**by authority**, not **by observation**. Every expectation evaluated against it would return
+"absent" — correctly, and meaninglessly, because a universe in which nothing can exist reports
+every absence identically.
+
+The evaluator therefore returns `SCOPE_VACUOUS`, not `ABSENT_WITHIN_SCOPE`. Reporting absence there
+would be technically true, trivially derived, and readable as though the Foundry had looked.
+
+**Consequence for Phase 9/10:** benchmark lane E (negative space) cannot show a genuine gain over
+*certified* relationships today. Any measured improvement would be an artefact of the empty set.
+Lane E must therefore either run over the *candidate* universe with results explicitly marked
+non-certifying, or be reported as blocked. This must not be quietly glossed when the benchmark runs.
+
+### Usable today
+
+The *candidate* universe — retained, identity-bound relationship candidates — is a real observation
+universe and evaluates properly. Every result is marked `certifying: false`: observing a candidate
+means someone asserted the relationship, not that ASA governs it.
+
+This phase is only possible because Phase 5 bound candidates to persistent uids; before that,
+candidates pointed at bundle-local handles and could not be checked against an expectation stated
+in persistent identity.
