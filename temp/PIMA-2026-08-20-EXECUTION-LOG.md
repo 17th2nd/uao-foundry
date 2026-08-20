@@ -224,3 +224,48 @@ UAO Foundry CI · independent-audit remediation · provider protocol · semantic
 Two tracked `.gitkeep` files (`dist/`, `work/`) were removed by the local `rm -rf work dist` CI
 replication and restored before proceeding. Python `__pycache__` directories produced by the
 adapter tests are untracked and were cleaned; they are not covered by `.gitignore`.
+
+---
+
+## Phase 4 — Merge / split / supersession / retirement
+
+**Status:** COMPLETE
+**Tests:** 83/83 green (15 new adversarial). `BUILD SUCCESS`.
+
+### Built
+
+- `identity/IdentityOperation.java` + `schemas/identity-operation.schema.json` — content-addressed
+  (`idop-<16 hex>`), shape-validated per kind, mandatory justification and reason codes.
+- Append-preserving journal at `<registry>/identity-operations/`, a **second immutable
+  content-addressed store** beside `packages/`, so the derived-index invariant is untouched.
+- Lifecycle derivation into the index (`lifecycleState`, `successorUids`, `lifecycleOperationId`).
+- Lifecycle refusal in `IdentityResolver`; reuse refusal in `ReuseAnalyzer`.
+- CLI: `supersede`, `retire`, `merge`, `split`, `operations`.
+
+### Closed
+
+- **G-10** — merge and split now exist, as a mapping layer above the uid derivation.
+- **G-11** — supersession and retirement are recorded (ASA-canonical *emission* still unused; noted).
+
+### Central design decision
+
+**Resolution is not redirected.** After `SUPERSEDE A → B`, asking for A yields
+`UNRESOLVED / IDENTITY_SUPERSEDED` naming B, not B itself. Silent redirection would change what a
+later manufacture produces without anyone requesting the change — the destructive rewrite §10
+forbids, arriving by the back door.
+
+### Two real bugs caught by the adversarial tests
+
+1. **False cycle on every merge.** A `MERGE` names its survivor among its subjects, and the
+   lifecycle walk treated the survivor as a link in a supersession chain pointing at itself. Fixed
+   by excluding subjects that are also targets of their own operation.
+2. **Lifecycle reason codes missing from the decision schema.** Manufacture against a registry
+   holding a retired identity failed schema validation. Fixed by extending the closed enum.
+
+Neither would have been found without writing the attacks first.
+
+### Deliberately not done
+
+No automatic semantic reconciliation. A recorded merge does not union, rank, choose or discard
+assertions and does not clear `MULTIPLE_UNRECONCILED_VARIANTS`. Relationship effects are deferred
+to Phase 5, when relationship candidates are bound to persistent uids.

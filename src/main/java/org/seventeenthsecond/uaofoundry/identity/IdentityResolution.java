@@ -35,6 +35,10 @@ public record IdentityResolution(
     public static final String NO_REGISTERED_MATCH = "NO_REGISTERED_MATCH";
     public static final String SEMANTIC_VARIANTS_UNRECONCILED = "SEMANTIC_VARIANTS_UNRECONCILED";
     public static final String EXTERNAL_IDENTIFIER_CROSS_KEY_MATCH = "EXTERNAL_IDENTIFIER_CROSS_KEY_MATCH";
+    public static final String IDENTITY_SUPERSEDED = "IDENTITY_SUPERSEDED";
+    public static final String IDENTITY_RETIRED = "IDENTITY_RETIRED";
+    public static final String IDENTITY_MERGED = "IDENTITY_MERGED";
+    public static final String IDENTITY_SPLIT = "IDENTITY_SPLIT";
     public static final String REGISTRY_UNAVAILABLE = "REGISTRY_UNAVAILABLE";
 
     public IdentityResolution {

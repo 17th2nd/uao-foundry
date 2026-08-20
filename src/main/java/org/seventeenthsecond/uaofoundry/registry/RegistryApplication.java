@@ -1,5 +1,6 @@
 package org.seventeenthsecond.uaofoundry.registry;
 
+import org.seventeenthsecond.uaofoundry.identity.IdentityOperation;
 import org.seventeenthsecond.uaofoundry.identity.IdentityReference;
 import org.seventeenthsecond.uaofoundry.json.Json;
 
@@ -34,6 +35,11 @@ public final class RegistryApplication {
                 case "register" -> register(registry, parsed);
                 case "search" -> search(registry, parsed);
                 case "identity" -> identity(registry, parsed);
+                case "supersede" -> operation(registry, parsed, IdentityOperation.Kind.SUPERSEDE);
+                case "retire" -> operation(registry, parsed, IdentityOperation.Kind.RETIRE);
+                case "merge" -> operation(registry, parsed, IdentityOperation.Kind.MERGE);
+                case "split" -> operation(registry, parsed, IdentityOperation.Kind.SPLIT);
+                case "operations" -> operations(registry, parsed);
                 case "list" -> list(registry, parsed);
                 case "verify" -> verify(registry, parsed);
                 case "context" -> context(registry, parsed);
@@ -92,6 +98,37 @@ public final class RegistryApplication {
     @SuppressWarnings("unchecked")
     private static Map<String,Object> object(Object value) { return (Map<String,Object>) value; }
 
+    /**
+     * Records an identity lifecycle operation.
+     *
+     * <p>{@code --reason} and {@code --justification} are mandatory rather than convenient: an
+     * identity operation without a stated reason is indistinguishable from a mistake once its
+     * author has moved on. {@code --recorded-at} is likewise explicit rather than defaulted to the
+     * wall clock, so a recorded operation is reproducible and testable.
+     */
+    private int operation(FoundryRegistry registry, Parsed parsed, IdentityOperation.Kind kind) {
+        List<String> subjects = parsed.subjects();
+        List<String> targets = parsed.targets();
+        if (subjects.isEmpty()) throw new IllegalArgumentException(kind + " requires at least one --subject.");
+        if (parsed.reasonCodes().isEmpty()) throw new IllegalArgumentException(kind + " requires at least one --reason.");
+        if (parsed.justification() == null) throw new IllegalArgumentException(kind + " requires --justification.");
+        if (parsed.recordedAt() == null) throw new IllegalArgumentException(kind + " requires --recorded-at (an explicit timestamp, not the wall clock).");
+        requirePositionals(parsed, 0, kind + " takes no positional arguments; use --subject and --target.");
+
+        IdentityOperation operation = IdentityOperation.create(kind, subjects, targets, parsed.reasonCodes(),
+                parsed.justification(), List.of(), parsed.authority(), parsed.recordedAt());
+        out.println(Json.canonical(registry.applyIdentityOperation(operation).toMap()));
+        return 0;
+    }
+
+    private int operations(FoundryRegistry registry, Parsed parsed) {
+        requirePositionals(parsed, 0, "operations accepts no positional arguments.");
+        Map<String,Object> response = new LinkedHashMap<>();
+        response.put("identityOperations", registry.index().get("identityOperations"));
+        out.println(Json.canonical(response));
+        return 0;
+    }
+
     private int list(FoundryRegistry registry, Parsed parsed) {
         requirePositionals(parsed, 0, "list accepts no positional arguments.");
         out.println(Json.canonical(registry.index())); return 0;
@@ -118,6 +155,12 @@ public final class RegistryApplication {
         Path schemaDir = Path.of("schemas");
         int catalogLimit = 5000;
         java.util.ArrayList<String> positionals = new java.util.ArrayList<>();
+        java.util.ArrayList<String> subjects = new java.util.ArrayList<>();
+        java.util.ArrayList<String> targets = new java.util.ArrayList<>();
+        java.util.ArrayList<String> reasonCodes = new java.util.ArrayList<>();
+        String justification = null;
+        String authority = null;
+        String recordedAt = null;
         for (int i=0;i<args.length;i++) {
             String token = args[i];
             if (!token.startsWith("--")) { positionals.add(token); continue; }
@@ -131,10 +174,17 @@ public final class RegistryApplication {
                     catch (NumberFormatException ex) { throw new IllegalArgumentException("--catalog-limit must be an integer."); }
                     if (catalogLimit < 1 || catalogLimit > 100000) throw new IllegalArgumentException("--catalog-limit must be between 1 and 100000.");
                 }
+                case "--subject" -> subjects.add(value);
+                case "--target" -> targets.add(value);
+                case "--reason" -> reasonCodes.add(value);
+                case "--justification" -> justification = value;
+                case "--authority" -> authority = value;
+                case "--recorded-at" -> recordedAt = value;
                 default -> throw new IllegalArgumentException("Unknown registry option: " + token);
             }
         }
-        return new Parsed(registry, schemaDir, catalogLimit, List.copyOf(positionals));
+        return new Parsed(registry, schemaDir, catalogLimit, List.copyOf(positionals),
+                List.copyOf(subjects), List.copyOf(targets), List.copyOf(reasonCodes), justification, authority, recordedAt);
     }
 
     private static void requirePositionals(Parsed parsed, int count, String message) {
@@ -151,7 +201,14 @@ public final class RegistryApplication {
         out.println("  ... RegistryApplication list");
         out.println("  ... RegistryApplication verify");
         out.println("  ... RegistryApplication rebuild");
+        out.println("  ... RegistryApplication supersede --subject <uid> --target <uid> --reason <CODE> --justification <text> --recorded-at <iso8601>");
+        out.println("  ... RegistryApplication retire    --subject <uid> --reason <CODE> --justification <text> --recorded-at <iso8601>");
+        out.println("  ... RegistryApplication merge     --subject <uid> --subject <uid> --target <uid> --reason <CODE> --justification <text> --recorded-at <iso8601>");
+        out.println("  ... RegistryApplication split     --subject <uid> --target <uid> --target <uid> --reason <CODE> --justification <text> --recorded-at <iso8601>");
+        out.println("  ... RegistryApplication operations");
     }
 
-    private record Parsed(Path registry, Path schemaDir, int catalogLimit, List<String> positionals) {}
+    private record Parsed(Path registry, Path schemaDir, int catalogLimit, List<String> positionals,
+                          List<String> subjects, List<String> targets, List<String> reasonCodes,
+                          String justification, String authority, String recordedAt) {}
 }

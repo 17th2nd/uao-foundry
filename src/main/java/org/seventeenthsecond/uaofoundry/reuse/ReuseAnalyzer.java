@@ -1,5 +1,6 @@
 package org.seventeenthsecond.uaofoundry.reuse;
 
+import org.seventeenthsecond.uaofoundry.identity.IdentityOperation;
 import org.seventeenthsecond.uaofoundry.json.Json;
 import org.seventeenthsecond.uaofoundry.registry.SemanticVariants;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
@@ -50,6 +51,14 @@ public final class ReuseAnalyzer {
                 if (!resolutionKey.equals(priorKey)) {
                     throw new IllegalArgumentException("REGISTRY_IDENTITY_MISMATCH: stable UAO " + uid
                             + " has resolutionKey " + priorKey + " but candidate package uses " + resolutionKey + ".");
+                }
+                // An identity that has been superseded, retired, merged or split is no longer
+                // automatically reusable. Reusing one would let a governed lifecycle decision be
+                // undone by the next manufacture that happened to propose the same key.
+                Object lifecycle = prior.get("lifecycleState");
+                if (lifecycle != null && !IdentityOperation.ACTIVE.equals(lifecycle)) {
+                    throw new IllegalArgumentException("IDENTITY_LIFECYCLE_NOT_ACTIVE: automatic reuse refused for uid "
+                            + uid + " resolutionKey " + resolutionKey + "; recorded lifecycle state is " + lifecycle + ".");
                 }
                 String status = string(prior.get("semanticVariantStatus"), "registry identity semanticVariantStatus");
                 if (SemanticVariants.MULTIPLE_UNRECONCILED_VARIANTS.equals(status)) {

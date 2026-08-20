@@ -109,6 +109,10 @@ public final class IdentityResolver {
                 return IdentityResolution.different(reference,
                         IdentityResolution.EXTERNAL_IDENTIFIER_CONTRADICTION, List.of(uid));
             }
+            String lifecycle = lifecycleRefusal(registered);
+            if (lifecycle != null) {
+                return IdentityResolution.unresolved(reference, lifecycle, lifecycleCandidates(uid, registered));
+            }
             if (unreconciled(registered)) {
                 return IdentityResolution.unresolved(reference,
                         IdentityResolution.SEMANTIC_VARIANTS_UNRECONCILED, List.of(uid));
@@ -143,6 +147,10 @@ public final class IdentityResolver {
     private IdentityResolution direct(IdentityReference reference, String uid, String reasonCode) {
         if (uid == null) return IdentityResolution.unresolved(reference, IdentityResolution.NO_REGISTERED_MATCH, List.of());
         Map<String,Object> identity = byUid.get(uid);
+        String lifecycle = lifecycleRefusal(identity);
+        if (lifecycle != null) {
+            return IdentityResolution.unresolved(reference, lifecycle, lifecycleCandidates(uid, identity));
+        }
         if (unreconciled(identity)) {
             return IdentityResolution.unresolved(reference, IdentityResolution.SEMANTIC_VARIANTS_UNRECONCILED, List.of(uid));
         }
@@ -159,6 +167,10 @@ public final class IdentityResolver {
         }
         String uid = hits.iterator().next();
         Map<String,Object> identity = byUid.get(uid);
+        String lifecycle = lifecycleRefusal(identity);
+        if (lifecycle != null) {
+            return IdentityResolution.unresolved(reference, lifecycle, lifecycleCandidates(uid, identity));
+        }
         if (unreconciled(identity)) {
             return IdentityResolution.unresolved(reference, IdentityResolution.SEMANTIC_VARIANTS_UNRECONCILED, List.of(uid));
         }
@@ -177,6 +189,39 @@ public final class IdentityResolver {
 
     private static boolean unreconciled(Map<String,Object> identity) {
         return SemanticVariants.MULTIPLE_UNRECONCILED_VARIANTS.equals(identity.get("semanticVariantStatus"));
+    }
+
+    /**
+     * A recorded lifecycle operation stops an identity resolving, and names what it became.
+     *
+     * <p>Resolution is deliberately not redirected to the successor. Silently returning B when
+     * asked for A would change what a later manufacture produces without anyone requesting the
+     * change — the destructive rewrite the append-preserving design exists to prevent. The caller
+     * is told the identity was superseded, retired, merged or split, and which identities resulted,
+     * and decides for itself.
+     *
+     * @return a refusal reason code, or {@code null} when the identity is still active
+     */
+    private static String lifecycleRefusal(Map<String,Object> identity) {
+        Object state = identity.get("lifecycleState");
+        if (state == null || IdentityOperation.ACTIVE.equals(state)) return null;
+        return switch (String.valueOf(state)) {
+            case IdentityOperation.SUPERSEDED -> IdentityResolution.IDENTITY_SUPERSEDED;
+            case IdentityOperation.RETIRED -> IdentityResolution.IDENTITY_RETIRED;
+            case IdentityOperation.MERGED -> IdentityResolution.IDENTITY_MERGED;
+            case IdentityOperation.SPLIT_STATE -> IdentityResolution.IDENTITY_SPLIT;
+            default -> throw new IllegalArgumentException("Unknown identity lifecycle state: " + state);
+        };
+    }
+
+    /** Identities a refused lifecycle points at, so the caller can follow the history deliberately. */
+    private static List<String> lifecycleCandidates(String uid, Map<String,Object> identity) {
+        List<String> out = new ArrayList<>();
+        out.add(uid);
+        if (identity.get("successorUids") instanceof List<?> values) {
+            for (Object value : values) out.add(String.valueOf(value));
+        }
+        return out;
     }
 
     private static Set<String> names(Map<String,Object> identity) {
