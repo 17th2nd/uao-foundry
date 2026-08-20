@@ -1,6 +1,7 @@
 package org.seventeenthsecond.uaofoundry.pipeline;
 
 import org.seventeenthsecond.uaofoundry.identifiers.StableIdentifiers;
+import org.seventeenthsecond.uaofoundry.identity.ExternalIdentifiers;
 import org.seventeenthsecond.uaofoundry.identifiers.ResolutionKeys;
 import org.seventeenthsecond.uaofoundry.json.Json;
 import org.seventeenthsecond.uaofoundry.model.ManufacturingRequest;
@@ -213,6 +214,7 @@ class AcquisitionStages extends PipelineBase {
             Set<String> aliases = new LinkedHashSet<>();
             Set<String> sources = new LinkedHashSet<>();
             List<Object> refs = new ArrayList<>();
+            Map<String, String> externalIdentifiers = new TreeMap<>();
             for (Map<String, Object> candidate : group) {
                 String cid = string(candidate.get("candidateId"), "candidateId");
                 candidateToUao.put(cid, uaoId);
@@ -220,7 +222,20 @@ class AcquisitionStages extends PipelineBase {
                 aliases.add(string(candidate.get("label"), "label"));
                 for (Object alias : listOrEmpty(candidate.get("aliases"))) aliases.add(string(alias, "alias"));
                 for (Object source : list(candidate.get("sourceRefs"), "sourceRefs")) sources.add(string(source, "sourceRef"));
+                // Candidates grouped under one resolution key must agree on durable external
+                // identity. Disagreement means the provider named two different objects with one
+                // address, which cannot be repaired here without inventing a winner.
+                Map<String, String> declared = ExternalIdentifiers.requireCanonical(
+                        candidate.get("externalIdentifiers"), "Candidate " + cid + " externalIdentifiers");
+                for (Map.Entry<String, String> external : declared.entrySet()) {
+                    String previous = externalIdentifiers.putIfAbsent(external.getKey(), external.getValue());
+                    if (previous != null && !previous.equals(external.getValue())) {
+                        throw new IllegalArgumentException("EXTERNAL_IDENTIFIER_CONTRADICTION: candidates sharing resolutionKey "
+                                + entry.getKey() + " declare conflicting " + external.getKey() + " identifiers.");
+                    }
+                }
             }
+            ExternalIdentifiers.requireConsistentWithResolutionKey(entry.getKey(), externalIdentifiers);
             String label = string(group.getFirst().get("label"), "label");
             aliases.remove(label);
             Map<String, Object> item = new LinkedHashMap<>();
@@ -228,8 +243,10 @@ class AcquisitionStages extends PipelineBase {
             item.put("candidateRefs", refs);
             item.put("label", label);
             item.put("resolutionKey", entry.getKey());
+            item.put("semanticType", ResolutionKeys.semanticType(entry.getKey()));
             item.put("root", root);
             item.put("aliases", new ArrayList<>(aliases));
+            item.put("externalIdentifiers", ExternalIdentifiers.toCanonicalMap(externalIdentifiers));
             item.put("sourceRefs", new ArrayList<>(sources));
             resolved.add(item);
         }

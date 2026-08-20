@@ -51,3 +51,51 @@ supplies a durable external identifier has that evidence silently discarded. Fai
 in an otherwise fail-closed codebase. Scheduled as the first Phase 1 increment.
 
 **Deliverables:** `research/UAO_USI/CURRENT_STATE.md`, `README.md`, `terminology/UAO_VS_USI.md`.
+
+---
+
+## Phase 1 — Identity kernel
+
+**Status:** COMPLETE
+**Tests:** 51/51 green (35 baseline preserved + 16 new). `BUILD SUCCESS`.
+
+### Built
+
+| Component | File |
+|---|---|
+| External identifier discipline | `identity/ExternalIdentifiers.java` |
+| Identity/state digest derivation | `identity/IdentityProjections.java` |
+| Kernel assembly | `identity/IdentityKernel.java` |
+| Decision space | `identity/IdentityDecision.java`, `IdentityResolution.java`, `IdentityReference.java` |
+| Resolution API | `identity/IdentityResolver.java` |
+| Kernel contract | `schemas/foundry-identity.schema.json` |
+| Semantic type extraction | `identifiers/ResolutionKeys.semanticType` |
+
+Wired through `AcquisitionStages.identityResolution`, `CanonicalStages.canonicalBuild`,
+`PackageVerifier` (independent re-derivation) and `FoundryRegistry` (index + lookup).
+
+### Closed
+
+- **G-1 / Finding P0-1** — `externalIdentifiers` now reaches the canonical package, the registry
+  index and search as the `EXTERNAL_IDENTIFIER` match kind.
+- **G-2** — resolution layer added above key derivation; derivation itself unchanged.
+- **G-3** — `identity_digest` / `state_version` materialise identity-vs-state separation.
+- **G-9** — external identifier lookup available in registry and resolver.
+
+### Deliberately not done
+
+`resolveCandidate` is implemented and tested but **not yet called during manufacture**. Wiring it
+would change manufacture behaviour, and any reuse it caused must be evidenced by an
+append-preserving decision record, which is Phase 2. Recorded rather than quietly deferred.
+
+### Evidence quality note
+
+All 16 new tests passed on first run, which alone is weak evidence. The two tests guarding the
+derived digests were mutation-tested: disabling the verifier's kernel reconstruction check made
+exactly those two fail, and no others. The check is therefore load-bearing rather than incidental.
+
+### Preserved
+
+`uao-7fde0894bfbc` for the cow fixture is byte-identical to the baseline, confirming the identity
+derivation was not disturbed. Fail-closed URO behaviour, forbidden-field rejection, content
+addressing, registry rebuild-and-compare and transactional admission are all untouched and green.

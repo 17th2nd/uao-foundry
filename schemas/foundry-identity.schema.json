@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://17th2nd.github.io/uao-foundry/schemas/foundry-identity.schema.json",
+  "$comment": "Foundry-owned persistent identity kernel carried inside internal_state.foundry_identity. Not ASA authority. The ASA UAO validation projection is a closed schema, so Foundry-owned identity material is carried here rather than as top-level UAO members. uid and lifecycle_status are deliberately absent: both are ASA-governed top-level members and are not restated.",
+  "title": "UAO Foundry Persistent Identity Kernel",
+  "type": "object",
+  "required": [
+    "canonical_label",
+    "aliases",
+    "resolution_key",
+    "semantic_type",
+    "external_identifiers",
+    "identity_digest",
+    "source_refs",
+    "state_version"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "canonical_label": {"type": "string", "minLength": 1},
+    "aliases": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "resolution_key": {
+      "type": "string",
+      "pattern": "^(?:fixture:[a-z0-9._-]+:[a-z0-9._-]+|foundry:v0\\.1:[a-z0-9._-]+:[a-z0-9._-]+|ext:[a-z][a-z0-9._-]*:[^\\s]+)$"
+    },
+    "semantic_type": {
+      "$comment": "Null is meaningful and required to be explicit: an ext: key names which object is meant without saying what kind of object it is. A guessed type would be indistinguishable from a declared one.",
+      "type": ["string", "null"],
+      "pattern": "^[a-z0-9._-]+$"
+    },
+    "external_identifiers": {
+      "$comment": "Durable third-party identifiers. Evidence about identity, never identity itself. Scheme grammar (^[a-z][a-z0-9._-]*$) is enforced by identity/ExternalIdentifiers rather than here, because the Foundry validator deliberately supports a small fixed keyword set and does not implement propertyNames. The Java discipline is the stricter of the two and the verifier re-derives it.",
+      "type": "object",
+      "additionalProperties": {"type": "string", "minLength": 1}
+    },
+    "identity_digest": {
+      "$comment": "Derived, never authored. Covers identity-bearing material only and is stable across state change.",
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "state_version": {
+      "$comment": "Derived, never authored. Covers state-bearing material only. Not a significance, confidence, ranking or priority value.",
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "source_refs": {"type": "array", "items": {"type": "string", "pattern": "^src-[a-z0-9._-]+$"}, "uniqueItems": true}
+  }
+}

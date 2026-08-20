@@ -1,6 +1,9 @@
 package org.seventeenthsecond.uaofoundry.verifier;
 
 import org.seventeenthsecond.uaofoundry.identifiers.StableIdentifiers;
+import org.seventeenthsecond.uaofoundry.identity.ExternalIdentifiers;
+import org.seventeenthsecond.uaofoundry.identity.IdentityKernel;
+import org.seventeenthsecond.uaofoundry.identity.IdentityProjections;
 import org.seventeenthsecond.uaofoundry.identifiers.ResolutionKeys;
 import org.seventeenthsecond.uaofoundry.json.Json;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
@@ -329,17 +332,10 @@ public final class PackageVerifier {
             Map<String,Object> actual = actualByUid.get(uid);
             if (actual == null) { errors.add("Reconstructed UAO is absent from canonical identities: " + uid); continue; }
 
-            Map<String,Object> expectedFoundryIdentity = new LinkedHashMap<>();
-            expectedFoundryIdentity.put("canonical_label", identity.get("label"));
-            expectedFoundryIdentity.put("aliases", identity.get("aliases"));
-            expectedFoundryIdentity.put("resolution_key", identity.get("resolutionKey"));
-            expectedFoundryIdentity.put("source_refs", identity.get("sourceRefs"));
+            Map<String,Object> expectedFoundryIdentity = IdentityKernel.build(identity);
             Map<String,Object> actualInternal = object(actual.get("internal_state"), "canonical UAO internal_state", errors);
             Map<String,Object> actualFoundryIdentity = actualInternal == null ? null
                     : object(actualInternal.get("foundry_identity"), "canonical UAO foundry_identity", errors);
-            if (!canonicalEquals(expectedFoundryIdentity, actualFoundryIdentity)) {
-                errors.add("Canonical Foundry identity does not reconstruct from candidate identities for UAO " + uid + ".");
-            }
 
             List<Object> expectedAssertions = new ArrayList<>();
             for (Map<String,Object> claim : claimsByUao.getOrDefault(uid, List.of())) {
@@ -369,6 +365,16 @@ public final class PackageVerifier {
             }
             if (!canonicalEquals(List.of(), actual.get("relationship_references"))) {
                 errors.add("Canonical UAO relationship references are non-empty while Relationship Type role authority remains unavailable: " + uid + ".");
+            }
+
+            // The identity kernel's two digests are derived, never authored. Re-derive both from
+            // the independently reconstructed identity and state projections so a package cannot
+            // carry an identity_digest or state_version that its own content does not support.
+            expectedFoundryIdentity.put("state_version", IdentityProjections.stateVersion(
+                    actual.get("lifecycle_status"), actual.get("successor_identity_ref"),
+                    expectedAssertions, List.of()));
+            if (!canonicalEquals(expectedFoundryIdentity, actualFoundryIdentity)) {
+                errors.add("Canonical Foundry identity kernel does not reconstruct from candidate identities for UAO " + uid + ".");
             }
         }
         if (!actualByUid.keySet().equals(expectedUids)) errors.add("Canonical UAO set differs from reconstructed candidate identities.");
@@ -434,6 +440,7 @@ public final class PackageVerifier {
             Set<String> aliases = new LinkedHashSet<>();
             Set<String> sources = new LinkedHashSet<>();
             List<Object> candidateRefs = new ArrayList<>();
+            Map<String,String> externalIdentifiers = new TreeMap<>();
             for (Map<String,Object> candidate : group) {
                 Object candidateId = candidate.get("candidateId");
                 candidateRefs.add(candidateId);
@@ -441,7 +448,22 @@ public final class PackageVerifier {
                 if (candidate.get("label") instanceof String label) aliases.add(label);
                 if (candidate.get("aliases") instanceof List<?> values) for (Object value : values) aliases.add(String.valueOf(value));
                 if (candidate.get("sourceRefs") instanceof List<?> values) for (Object value : values) sources.add(String.valueOf(value));
+                try {
+                    Map<String,String> declared = ExternalIdentifiers.requireCanonical(
+                            candidate.get("externalIdentifiers"), "Candidate " + candidateId + " externalIdentifiers");
+                    for (Map.Entry<String,String> external : declared.entrySet()) {
+                        String previous = externalIdentifiers.putIfAbsent(external.getKey(), external.getValue());
+                        if (previous != null && !previous.equals(external.getValue())) {
+                            errors.add("Candidates sharing resolutionKey " + entry.getKey()
+                                    + " declare conflicting " + external.getKey() + " identifiers during reconstruction.");
+                        }
+                    }
+                } catch (IllegalArgumentException ex) {
+                    errors.add("Candidate external identifier is not canonical during reconstruction: " + ex.getMessage());
+                }
             }
+            try { ExternalIdentifiers.requireConsistentWithResolutionKey(entry.getKey(), externalIdentifiers); }
+            catch (IllegalArgumentException ex) { errors.add(ex.getMessage()); }
             String label = String.valueOf(group.getFirst().get("label"));
             aliases.remove(label);
             Map<String,Object> item = new LinkedHashMap<>();
@@ -449,8 +471,10 @@ public final class PackageVerifier {
             item.put("candidateRefs", candidateRefs);
             item.put("label", label);
             item.put("resolutionKey", entry.getKey());
+            item.put("semanticType", ResolutionKeys.semanticType(entry.getKey()));
             item.put("root", root);
             item.put("aliases", new ArrayList<>(aliases));
+            item.put("externalIdentifiers", ExternalIdentifiers.toCanonicalMap(externalIdentifiers));
             item.put("sourceRefs", new ArrayList<>(sources));
             resolved.add(item);
         }

@@ -1,5 +1,6 @@
 package org.seventeenthsecond.uaofoundry.registry;
 
+import org.seventeenthsecond.uaofoundry.identity.ExternalIdentifiers;
 import org.seventeenthsecond.uaofoundry.json.Json;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
 import org.seventeenthsecond.uaofoundry.verifier.PackageVerifier;
@@ -131,6 +132,7 @@ public final class FoundryRegistry {
 
             if (normalize(uid).equals(normalized)) kinds.add("UID");
             if (normalize(resolutionKey).equals(normalized)) kinds.add("RESOLUTION_KEY");
+            if (externalIdentifierTokens(identity).contains(query.strip())) kinds.add("EXTERNAL_IDENTIFIER");
             if (labels.stream().map(FoundryRegistry::normalize).anyMatch(normalized::equals)) kinds.add("LABEL");
             if (aliases.stream().map(FoundryRegistry::normalize).anyMatch(normalized::equals)) kinds.add("ALIAS");
             if (kinds.isEmpty() && tokenMatch(normalized, uid, resolutionKey, labels, aliases)) kinds.add("TOKEN");
@@ -231,10 +233,14 @@ public final class FoundryRegistry {
                         String label = string(foundryIdentity.get("canonical_label"), "canonical_label");
                         String resolutionKey = string(foundryIdentity.get("resolution_key"), "resolution_key");
                         List<String> aliases = strings(foundryIdentity.get("aliases"), "aliases");
-                        identities.computeIfAbsent(uid, ignored -> new IdentityAggregate(uid, resolutionKey))
-                                .addOccurrence(label, aliases, packageId,
+                        IdentityAggregate aggregate = identities.computeIfAbsent(uid, ignored -> new IdentityAggregate(uid, resolutionKey));
+                        aggregate.setSemanticType(foundryIdentity.get("semantic_type") instanceof String t ? t : null);
+                        aggregate.addExternalIdentifiers(ExternalIdentifiers.requireCanonical(
+                                foundryIdentity.get("external_identifiers"), "Registered identity external_identifiers"));
+                        aggregate.addOccurrence(label, aliases, packageId,
                                         "packages/" + packageId + "/canonical-identities.json",
-                                        SemanticVariants.digest(uao));
+                                        SemanticVariants.digest(uao),
+                                        string(foundryIdentity.get("state_version"), "state_version"));
                     }
                 }
             } catch (java.io.IOException ex) {
@@ -276,9 +282,19 @@ public final class FoundryRegistry {
     private static int priority(Set<String> kinds) {
         if (kinds.contains("UID")) return 0;
         if (kinds.contains("RESOLUTION_KEY")) return 1;
-        if (kinds.contains("LABEL")) return 2;
-        if (kinds.contains("ALIAS")) return 3;
-        return 4;
+        if (kinds.contains("EXTERNAL_IDENTIFIER")) return 2;
+        if (kinds.contains("LABEL")) return 3;
+        if (kinds.contains("ALIAS")) return 4;
+        return 5;
+    }
+
+    /** Exact {@code scheme:identifier} tokens. Case-sensitive in the identifier half, matching the ext: key discipline. */
+    private static Set<String> externalIdentifierTokens(Map<String,Object> identity) {
+        Set<String> out = new LinkedHashSet<>();
+        if (identity.get("externalIdentifiers") instanceof Map<?,?> map) {
+            map.forEach((k, v) -> out.add(ExternalIdentifiers.token(String.valueOf(k), String.valueOf(v))));
+        }
+        return out;
     }
 
     private static String normalize(String value) { return value == null ? "" : Normalizer.normalize(value, Normalizer.Form.NFKC).strip().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT); }
@@ -316,36 +332,68 @@ public final class FoundryRegistry {
         private final String resolutionKey;
         private final Set<String> labels = new LinkedHashSet<>();
         private final Set<String> aliases = new LinkedHashSet<>();
+        private final Map<String,String> externalIdentifiers = new TreeMap<>();
+        private String semanticType;
+        private boolean semanticTypeSeen;
         private final List<Occurrence> occurrences = new ArrayList<>();
         private IdentityAggregate(String uid, String resolutionKey) { this.uid = uid; this.resolutionKey = resolutionKey; }
-        private void addOccurrence(String label, List<String> aliasValues, String packageId, String path, String semanticVariantDigest) {
+
+        /**
+         * Durable external identity is aggregated across occurrences and must not disagree. Two
+         * immutable packages naming one uid under contradicting third-party identifiers is a
+         * genuine conflict, not a semantic variant, and fails the index build closed.
+         */
+        private void addExternalIdentifiers(Map<String,String> declared) {
+            for (Map.Entry<String,String> entry : declared.entrySet()) {
+                String previous = externalIdentifiers.putIfAbsent(entry.getKey(), entry.getValue());
+                if (previous != null && !previous.equals(entry.getValue())) {
+                    throw new IllegalArgumentException("EXTERNAL_IDENTIFIER_CONTRADICTION: registry occurrences for uid "
+                            + uid + " declare conflicting " + entry.getKey() + " identifiers.");
+                }
+            }
+        }
+
+        private void setSemanticType(String value) {
+            if (semanticTypeSeen && !java.util.Objects.equals(semanticType, value)) {
+                throw new IllegalArgumentException("Registry occurrences for uid " + uid + " declare conflicting semantic types.");
+            }
+            semanticType = value; semanticTypeSeen = true;
+        }
+
+        private void addOccurrence(String label, List<String> aliasValues, String packageId, String path, String semanticVariantDigest, String stateVersion) {
             Set<String> priorNames = new LinkedHashSet<>();
             labels.forEach(v -> priorNames.add(normalize(v))); aliases.forEach(v -> priorNames.add(normalize(v)));
             Set<String> nextNames = new LinkedHashSet<>(); nextNames.add(normalize(label)); aliasValues.forEach(v -> nextNames.add(normalize(v)));
             if (!priorNames.isEmpty() && java.util.Collections.disjoint(priorNames, nextNames)) {
                 throw new IllegalArgumentException("Stable UAO name-continuity conflict for resolutionKey " + resolutionKey + " (uid " + uid + ")");
             }
-            labels.add(label); aliases.addAll(aliasValues); occurrences.add(new Occurrence(packageId, path, semanticVariantDigest));
+            labels.add(label); aliases.addAll(aliasValues); occurrences.add(new Occurrence(packageId, path, semanticVariantDigest, stateVersion));
             occurrences.sort(Comparator.comparing(Occurrence::packageId));
         }
         private Map<String,Object> toMap() {
             Set<String> variants = new LinkedHashSet<>();
             occurrences.forEach(v -> variants.add(v.semanticVariantDigest()));
+            Set<String> stateVersions = new java.util.TreeSet<>();
+            occurrences.forEach(v -> stateVersions.add(v.stateVersion()));
             Map<String,Object> out = new LinkedHashMap<>();
             out.put("uid", uid); out.put("resolutionKey", resolutionKey);
+            out.put("semanticType", semanticType);
             out.put("canonicalLabels", labels.stream().sorted().toList()); out.put("aliases", aliases.stream().sorted().toList());
+            out.put("externalIdentifiers", new LinkedHashMap<String,Object>(externalIdentifiers));
             out.put("semanticVariantStatus", variants.size() > 1
                     ? SemanticVariants.MULTIPLE_UNRECONCILED_VARIANTS : SemanticVariants.SINGLE_VARIANT);
+            out.put("stateVersions", new ArrayList<>(stateVersions));
             out.put("occurrences", occurrences.stream().map(Occurrence::toMap).toList()); return out;
         }
     }
 
-    private record Occurrence(String packageId, String path, String semanticVariantDigest) {
+    private record Occurrence(String packageId, String path, String semanticVariantDigest, String stateVersion) {
         Map<String,Object> toMap() {
             Map<String,Object> out = new LinkedHashMap<>();
             out.put("packageId", packageId);
             out.put("canonicalPath", path);
             out.put("semanticVariantDigest", semanticVariantDigest);
+            out.put("stateVersion", stateVersion);
             return out;
         }
     }
