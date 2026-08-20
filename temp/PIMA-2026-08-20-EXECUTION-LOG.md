@@ -558,7 +558,7 @@ and neither was worked around by weakening a control.
 
 ### Programme close
 
-12 commits from `2bc2871d`. 120/120 Java tests, 12/12 Python. CI 5/5 at both quarter gates.
+13 commits from `2bc2871d`. 120/120 Java tests, 12/12 Python. CI 5/5 at both quarter gates.
 `main` untouched; the draft PR is not merged and not mergeable by the operator.
 
 **The programme's own verdict on its subject: H7 is not refuted.** Persistent identity as built

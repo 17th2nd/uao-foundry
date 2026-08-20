@@ -11,7 +11,7 @@
 | Item | Value |
 |---|---|
 | Base SHA (canonical accepted main) | `2bc2871d2a7c36c9b4d67881d40827ff2e948d2e` |
-| Candidate SHA | `b9ba89bbe1009f8613bc29fcf4401c41ca686c22` |
+| Candidate SHA | `94ff28966b5e9c20abfe0c8b714b35b4d2278ffc` |
 | Branch | `programme/persistent-identity-manufacturing-alpha` |
 | Draft PR | `17th2nd/uao-foundry#15` — **not merged, not mergeable by the operator** |
 | `main` modified | **No** |
