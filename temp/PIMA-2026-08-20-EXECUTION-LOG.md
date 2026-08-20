@@ -140,3 +140,42 @@ claim to have reused a different registered identity.
 Manufacture stops on `EXTERNAL_IDENTIFIER_CONTRADICTION` — a candidate whose durable external
 identity contradicts what is registered under the same address. The complementary cross-key match
 is recorded as a merge candidate and explicitly not acted on.
+
+---
+
+## Phase 3 — Registry upgrade
+
+**Status:** COMPLETE
+**Tests:** 68/68 green. `BUILD SUCCESS`.
+
+### Built
+
+- **Identity history in the index.** Each identity now aggregates the decision records contributed
+  by every package occurrence — derivable from package content, so the rebuild-and-compare
+  invariant is untouched.
+- **`FoundryRegistry.identityRecord(IdentityReference)`** — exact persistent-identity addressing,
+  delegating resolution to `IdentityResolver` so a lookup obeys the same evidence rules as a
+  manufacture-time decision. The registry cannot become a back door to identity-by-name.
+- **`RegistryApplication identity <reference>`** — CLI surface; infers reference kind from shape;
+  exit 4 on a considered UNRESOLVED, distinct from success and from error.
+- **Alias provenance** (`alias_provenance`) — every name with the candidate and sources behind it,
+  reconstructed independently by the verifier. Closes G-7 except for time-awareness.
+
+### Incidental fix
+
+`RegistryApplication` usage text referenced `uao-foundry-0.1.0-SNAPSHOT.jar`; the built artifact is
+`uao-foundry-0.1.0.jar`. Same class of stale-JAR-name defect the 2026-08-10 sprint fixed in CI.
+
+### Closed
+
+- **G-8** — identity material that is *derivable* now lives in the index; non-derivable material
+  was avoided entirely rather than forced in.
+- **G-9** — external identifier lookup, at both resolver and registry-CLI level.
+- **G-7** — alias provenance (time-awareness remains open and is recorded as such).
+
+### Evidence note
+
+Adding `alias_provenance` initially broke 20 tests, because the verifier's independent
+reconstruction did not produce the new field. That is the reconstruction discipline working: the
+package could not carry identity material the verifier had not derived for itself. Mirroring the
+assembly in `PackageVerifier` restored green.

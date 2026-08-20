@@ -1,6 +1,9 @@
 package org.seventeenthsecond.uaofoundry.registry;
 
 import org.seventeenthsecond.uaofoundry.identity.ExternalIdentifiers;
+import org.seventeenthsecond.uaofoundry.identity.IdentityReference;
+import org.seventeenthsecond.uaofoundry.identity.IdentityResolution;
+import org.seventeenthsecond.uaofoundry.identity.IdentityResolver;
 import org.seventeenthsecond.uaofoundry.json.Json;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
 import org.seventeenthsecond.uaofoundry.verifier.PackageVerifier;
@@ -149,6 +152,43 @@ public final class FoundryRegistry {
         return out;
     }
 
+    /**
+     * Resolves one reference to a single registered identity and returns its complete record:
+     * kernel material, semantic-variant state, every state version, every package occurrence and
+     * the full decision history.
+     *
+     * <p>This is the persistent-identity addressing surface. {@link #search(String)} ranks possible
+     * matches for discovery, including by loose token overlap; this method instead answers "give me
+     * <em>that</em> identity" and therefore refuses anything short of an exact, unambiguous address.
+     *
+     * <p>The resolution itself is delegated to {@link IdentityResolver}, so a lookup obeys exactly
+     * the same evidence rules as a manufacture-time decision: an alias never resolves, an ambiguous
+     * external identifier never picks a winner, and an identity with unreconciled semantic variants
+     * refuses to resolve at all. The unresolved outcome is returned as data, not thrown, because a
+     * caller asking "do you know this?" is entitled to a considered "not well enough".
+     */
+    public Map<String,Object> identityRecord(IdentityReference reference) {
+        Map<String,Object> current = index();
+        IdentityResolution resolution = new IdentityResolver(current).resolve(reference);
+        Map<String,Object> out = new LinkedHashMap<>();
+        out.put("registryVersion", REGISTRY_VERSION);
+        out.put("resolution", resolution.toMap());
+        if (resolution.isSame()) {
+            for (Object raw : array(current.get("identities"), "registry identities")) {
+                Map<String,Object> identity = object(raw, "registry identity");
+                if (resolution.uid().equals(identity.get("uid"))) { out.put("identity", deepCopy(identity)); break; }
+            }
+        } else {
+            List<Object> candidates = new ArrayList<>();
+            for (Object raw : array(current.get("identities"), "registry identities")) {
+                Map<String,Object> identity = object(raw, "registry identity");
+                if (resolution.candidateUids().contains(String.valueOf(identity.get("uid")))) candidates.add(deepCopy(identity));
+            }
+            out.put("candidates", candidates);
+        }
+        return out;
+    }
+
     /** Provider-safe discovery material. No package source content or credentials are exposed here. */
     public Map<String,Object> discoveryContext(String query, int catalogLimit) {
         if (catalogLimit < 1) throw new IllegalArgumentException("catalogLimit must be positive.");
@@ -225,6 +265,18 @@ public final class FoundryRegistry {
                             "packages/" + packageId));
                     if (previous != null) throw new IllegalArgumentException("Duplicate package id in registry: " + packageId);
 
+                    Map<String,List<Map<String,Object>>> decisionsByUid = new LinkedHashMap<>();
+                    Path resolutionFile = dir.resolve("identity-resolution.json");
+                    if (Files.isRegularFile(resolutionFile)) {
+                        Object recorded = object(FileOps.readJson(resolutionFile), "identity resolution").get("identityDecisions");
+                        if (recorded instanceof List<?> list) {
+                            for (Object rawDecision : list) {
+                                Map<String,Object> decision = object(rawDecision, "identity decision");
+                                decisionsByUid.computeIfAbsent(string(decision.get("uaoId"), "decision uaoId"),
+                                        ignored -> new ArrayList<>()).add(decision);
+                            }
+                        }
+                    }
                     for (Object raw : array(FileOps.readJson(dir.resolve("canonical-identities.json")), "canonical identities")) {
                         Map<String,Object> uao = object(raw, "canonical UAO");
                         String uid = string(uao.get("uid"), "uid");
@@ -237,6 +289,9 @@ public final class FoundryRegistry {
                         aggregate.setSemanticType(foundryIdentity.get("semantic_type") instanceof String t ? t : null);
                         aggregate.addExternalIdentifiers(ExternalIdentifiers.requireCanonical(
                                 foundryIdentity.get("external_identifiers"), "Registered identity external_identifiers"));
+                        for (Map<String,Object> decision : decisionsByUid.getOrDefault(uid, List.of())) {
+                            aggregate.addDecision(packageId, decision);
+                        }
                         aggregate.addOccurrence(label, aliases, packageId,
                                         "packages/" + packageId + "/canonical-identities.json",
                                         SemanticVariants.digest(uao),
@@ -336,6 +391,7 @@ public final class FoundryRegistry {
         private String semanticType;
         private boolean semanticTypeSeen;
         private final List<Occurrence> occurrences = new ArrayList<>();
+        private final List<Object> decisionHistory = new ArrayList<>();
         private IdentityAggregate(String uid, String resolutionKey) { this.uid = uid; this.resolutionKey = resolutionKey; }
 
         /**
@@ -351,6 +407,23 @@ public final class FoundryRegistry {
                             + uid + " declare conflicting " + entry.getKey() + " identifiers.");
                 }
             }
+        }
+
+        /**
+         * Accumulates the identity decisions recorded by each immutable package occurrence. This is
+         * the identity's history: every determination ever made about it, in package order, none
+         * of them revisable. Later entries do not supersede earlier ones — they sit beside them.
+         */
+        private void addDecision(String packageId, Map<String,Object> decision) {
+            Map<String,Object> entry = new LinkedHashMap<>();
+            entry.put("packageId", packageId);
+            entry.put("decision", decision.get("decision"));
+            entry.put("reasonCodes", decision.get("reasonCodes"));
+            entry.put("reference", decision.get("reference"));
+            entry.put("candidateUids", decision.get("candidateUids"));
+            entry.put("sourceRefs", decision.get("sourceRefs"));
+            decisionHistory.add(entry);
+            decisionHistory.sort(Comparator.comparing(Json::canonical));
         }
 
         private void setSemanticType(String value) {
@@ -383,6 +456,7 @@ public final class FoundryRegistry {
             out.put("semanticVariantStatus", variants.size() > 1
                     ? SemanticVariants.MULTIPLE_UNRECONCILED_VARIANTS : SemanticVariants.SINGLE_VARIANT);
             out.put("stateVersions", new ArrayList<>(stateVersions));
+            out.put("decisionHistory", new ArrayList<>(decisionHistory));
             out.put("occurrences", occurrences.stream().map(Occurrence::toMap).toList()); return out;
         }
     }

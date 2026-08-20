@@ -219,13 +219,26 @@ class AcquisitionStages extends PipelineBase {
             Set<String> sources = new LinkedHashSet<>();
             List<Object> refs = new ArrayList<>();
             Map<String, String> externalIdentifiers = new TreeMap<>();
+            Map<String, Set<String>> nameCandidates = new TreeMap<>();
+            Map<String, Set<String>> nameSources = new TreeMap<>();
             for (Map<String, Object> candidate : group) {
                 String cid = string(candidate.get("candidateId"), "candidateId");
                 candidateToUao.put(cid, uaoId);
                 refs.add(cid);
-                aliases.add(string(candidate.get("label"), "label"));
-                for (Object alias : listOrEmpty(candidate.get("aliases"))) aliases.add(string(alias, "alias"));
-                for (Object source : list(candidate.get("sourceRefs"), "sourceRefs")) sources.add(string(source, "sourceRef"));
+                List<String> candidateSources = new ArrayList<>();
+                for (Object source : list(candidate.get("sourceRefs"), "sourceRefs")) candidateSources.add(string(source, "sourceRef"));
+                sources.addAll(candidateSources);
+                // Every name is recorded with the candidate that used it and the sources behind
+                // that candidate. A name without provenance cannot later be weighed against a
+                // competing name, which is what alias-driven ambiguity resolution will need.
+                List<String> names = new ArrayList<>();
+                names.add(string(candidate.get("label"), "label"));
+                for (Object alias : listOrEmpty(candidate.get("aliases"))) names.add(string(alias, "alias"));
+                for (String name : names) {
+                    aliases.add(name);
+                    nameCandidates.computeIfAbsent(name, ignored -> new LinkedHashSet<>()).add(cid);
+                    nameSources.computeIfAbsent(name, ignored -> new LinkedHashSet<>()).addAll(candidateSources);
+                }
                 // Candidates grouped under one resolution key must agree on durable external
                 // identity. Disagreement means the provider named two different objects with one
                 // address, which cannot be repaired here without inventing a winner.
@@ -250,6 +263,7 @@ class AcquisitionStages extends PipelineBase {
             item.put("semanticType", ResolutionKeys.semanticType(entry.getKey()));
             item.put("root", root);
             item.put("aliases", new ArrayList<>(aliases));
+            item.put("aliasProvenance", aliasProvenance(nameCandidates, nameSources));
             item.put("externalIdentifiers", ExternalIdentifiers.toCanonicalMap(externalIdentifiers));
             item.put("sourceRefs", new ArrayList<>(sources));
             resolved.add(item);
@@ -260,6 +274,25 @@ class AcquisitionStages extends PipelineBase {
         out.put("candidateToUao", candidateToUao);
         out.put("resolvedIdentities", resolved);
         out.put("identityDecisions", identityDecisions(resolved));
+        return out;
+    }
+
+    /**
+     * Turns the observed names into provenance-bearing alias records.
+     *
+     * <p>Covers every name the identity was seen under, the canonical label included: §9 of the
+     * programme treats a human label as one alias kind among many, and a label carries no more
+     * inherent authority than any other name. Sorted by name for determinism.
+     */
+    private static List<Object> aliasProvenance(Map<String, Set<String>> nameCandidates, Map<String, Set<String>> nameSources) {
+        List<Object> out = new ArrayList<>();
+        for (Map.Entry<String, Set<String>> entry : nameCandidates.entrySet()) {
+            Map<String, Object> record = new LinkedHashMap<>();
+            record.put("alias", entry.getKey());
+            record.put("candidateRefs", new ArrayList<>(entry.getValue()));
+            record.put("sourceRefs", new ArrayList<>(nameSources.getOrDefault(entry.getKey(), Set.of())));
+            out.add(record);
+        }
         return out;
     }
 

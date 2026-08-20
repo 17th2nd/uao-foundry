@@ -7,6 +7,7 @@
   "required": [
     "canonical_label",
     "aliases",
+    "alias_provenance",
     "resolution_key",
     "semantic_type",
     "external_identifiers",
@@ -16,21 +17,73 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "canonical_label": {"type": "string", "minLength": 1},
-    "aliases": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "canonical_label": {
+      "type": "string",
+      "minLength": 1
+    },
+    "aliases": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "alias_provenance": {
+      "$comment": "Every name the identity was seen under, canonical label included, with the candidate that used it and the sources behind that candidate. A name without provenance cannot later be weighed against a competing name. Outside identity_digest: this records how the identity was evidenced, not what it is.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "alias",
+          "candidateRefs",
+          "sourceRefs"
+        ],
+        "properties": {
+          "alias": {
+            "type": "string",
+            "minLength": 1
+          },
+          "candidateRefs": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^cid-[a-z0-9._-]+$"
+            }
+          },
+          "sourceRefs": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^src-[a-z0-9._-]+$"
+            }
+          }
+        }
+      }
+    },
     "resolution_key": {
       "type": "string",
       "pattern": "^(?:fixture:[a-z0-9._-]+:[a-z0-9._-]+|foundry:v0\\.1:[a-z0-9._-]+:[a-z0-9._-]+|ext:[a-z][a-z0-9._-]*:[^\\s]+)$"
     },
     "semantic_type": {
       "$comment": "Null is meaningful and required to be explicit: an ext: key names which object is meant without saying what kind of object it is. A guessed type would be indistinguishable from a declared one.",
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "pattern": "^[a-z0-9._-]+$"
     },
     "external_identifiers": {
       "$comment": "Durable third-party identifiers. Evidence about identity, never identity itself. Scheme grammar (^[a-z][a-z0-9._-]*$) is enforced by identity/ExternalIdentifiers rather than here, because the Foundry validator deliberately supports a small fixed keyword set and does not implement propertyNames. The Java discipline is the stricter of the two and the verifier re-derives it.",
       "type": "object",
-      "additionalProperties": {"type": "string", "minLength": 1}
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "identity_digest": {
       "$comment": "Derived, never authored. Covers identity-bearing material only and is stable across state change.",
@@ -42,6 +95,13 @@
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"
     },
-    "source_refs": {"type": "array", "items": {"type": "string", "pattern": "^src-[a-z0-9._-]+$"}, "uniqueItems": true}
+    "source_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^src-[a-z0-9._-]+$"
+      },
+      "uniqueItems": true
+    }
   }
 }

@@ -1,5 +1,6 @@
 package org.seventeenthsecond.uaofoundry.registry;
 
+import org.seventeenthsecond.uaofoundry.identity.IdentityReference;
 import org.seventeenthsecond.uaofoundry.json.Json;
 
 import java.io.PrintStream;
@@ -32,6 +33,7 @@ public final class RegistryApplication {
             return switch (command) {
                 case "register" -> register(registry, parsed);
                 case "search" -> search(registry, parsed);
+                case "identity" -> identity(registry, parsed);
                 case "list" -> list(registry, parsed);
                 case "verify" -> verify(registry, parsed);
                 case "context" -> context(registry, parsed);
@@ -57,6 +59,38 @@ public final class RegistryApplication {
         out.println(Json.canonical(response));
         return 0;
     }
+
+    /**
+     * Exact persistent-identity lookup, as opposed to {@code search}'s discovery ranking.
+     *
+     * <p>The reference kind is inferred from the argument's shape rather than from a flag: a
+     * {@code uao-} address, a canonical resolution key, a {@code scheme:identifier} external
+     * identifier, or otherwise an alias. Inference is safe here because an alias can never
+     * establish identity anyway, so the worst case of a misread argument is an honest
+     * {@code UNRESOLVED}.
+     */
+    private int identity(FoundryRegistry registry, Parsed parsed) {
+        requirePositionals(parsed, 1, "identity requires exactly one reference (uid, resolution key, scheme:identifier or alias).");
+        String value = parsed.positionals().getFirst();
+        IdentityReference reference;
+        if (value.matches("uao-[a-f0-9]{12}")) {
+            reference = IdentityReference.uid(value);
+        } else if (value.startsWith("foundry:") || value.startsWith("fixture:") || value.startsWith("ext:")) {
+            reference = IdentityReference.resolutionKey(value);
+        } else if (value.matches("[a-z][a-z0-9._-]*:\\S+")) {
+            int split = value.indexOf(':');
+            reference = IdentityReference.externalIdentifier(value.substring(0, split), value.substring(split + 1));
+        } else {
+            reference = IdentityReference.alias(value);
+        }
+        Map<String,Object> record = registry.identityRecord(reference);
+        out.println(Json.canonical(record));
+        // A considered "not well enough" is a distinct outcome from success and from failure.
+        return "SAME".equals(object(record.get("resolution")).get("decision")) ? 0 : 4;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String,Object> object(Object value) { return (Map<String,Object>) value; }
 
     private int list(FoundryRegistry registry, Parsed parsed) {
         requirePositionals(parsed, 0, "list accepts no positional arguments.");
@@ -110,8 +144,9 @@ public final class RegistryApplication {
     private void usage() {
         out.println("UAO Foundry Registry " + FoundryRegistry.REGISTRY_VERSION);
         out.println("Usage:");
-        out.println("  java -cp target/uao-foundry-0.1.0-SNAPSHOT.jar org.seventeenthsecond.uaofoundry.registry.RegistryApplication register <package> [--registry .uao-registry]");
+        out.println("  java -cp target/uao-foundry-0.1.0.jar org.seventeenthsecond.uaofoundry.registry.RegistryApplication register <package> [--registry .uao-registry]");
         out.println("  ... RegistryApplication search <query> [--registry .uao-registry]");
+        out.println("  ... RegistryApplication identity <uid|resolution-key|scheme:identifier|alias>");
         out.println("  ... RegistryApplication context <query> [--catalog-limit 5000]");
         out.println("  ... RegistryApplication list");
         out.println("  ... RegistryApplication verify");

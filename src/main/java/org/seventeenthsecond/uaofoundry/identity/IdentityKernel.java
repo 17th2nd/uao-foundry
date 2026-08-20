@@ -22,6 +22,7 @@ import java.util.Map;
  *   <tr><td>{@code resolution_key}</td><td>provider, canonicalised by {@code ResolutionKeys}</td></tr>
  *   <tr><td>{@code semantic_type}</td><td>derived from the key grammar; {@code null} for {@code ext:}</td></tr>
  *   <tr><td>{@code external_identifiers}</td><td>provider, canonicalised by {@link ExternalIdentifiers}</td></tr>
+ *   <tr><td>{@code alias_provenance}</td><td>which candidate and sources used each name</td></tr>
  *   <tr><td>{@code identity_digest}</td><td>derived over the identity projection</td></tr>
  *   <tr><td>{@code state_version}</td><td>derived over the state projection, attached last</td></tr>
  *   <tr><td>{@code source_refs}</td><td>resolved identity provenance</td></tr>
@@ -51,6 +52,10 @@ public final class IdentityKernel {
         kernel.put("external_identifiers", deepCopy(resolvedIdentity.get("externalIdentifiers")));
         kernel.put("identity_digest", IdentityProjections.identityDigest(
                 String.valueOf(resolvedIdentity.get("uaoId")), kernel));
+        // Provenance, like source_refs, sits outside identity_digest: it records how the identity
+        // was evidenced, not what the identity is. Adding a source for a name already known must
+        // not read as a change of identity.
+        kernel.put("alias_provenance", deepCopy(resolvedIdentity.get("aliasProvenance")));
         kernel.put("source_refs", deepCopy(resolvedIdentity.get("sourceRefs")));
         return kernel;
     }

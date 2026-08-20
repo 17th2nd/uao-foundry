@@ -483,6 +483,19 @@ public final class PackageVerifier {
         }
     }
 
+    /** Mirrors the manufacture-side alias provenance assembly from independently grouped candidates. */
+    private static List<Object> reconstructAliasProvenance(Map<String,Set<String>> nameCandidates, Map<String,Set<String>> nameSources) {
+        List<Object> out = new ArrayList<>();
+        for (Map.Entry<String,Set<String>> entry : nameCandidates.entrySet()) {
+            Map<String,Object> record = new LinkedHashMap<>();
+            record.put("alias", entry.getKey());
+            record.put("candidateRefs", new ArrayList<>(entry.getValue()));
+            record.put("sourceRefs", new ArrayList<>(nameSources.getOrDefault(entry.getKey(), Set.of())));
+            out.add(record);
+        }
+        return out;
+    }
+
     private Map<String,Object> reconstructIdentityResolution(List<?> identities, List<String> errors) {
         Map<String,List<Map<String,Object>>> groups = new TreeMap<>();
         for (Object raw : identities) {
@@ -512,13 +525,23 @@ public final class PackageVerifier {
             Set<String> sources = new LinkedHashSet<>();
             List<Object> candidateRefs = new ArrayList<>();
             Map<String,String> externalIdentifiers = new TreeMap<>();
+            Map<String,Set<String>> nameCandidates = new TreeMap<>();
+            Map<String,Set<String>> nameSources = new TreeMap<>();
             for (Map<String,Object> candidate : group) {
                 Object candidateId = candidate.get("candidateId");
                 candidateRefs.add(candidateId);
                 candidateToUao.put(String.valueOf(candidateId), uaoId);
-                if (candidate.get("label") instanceof String label) aliases.add(label);
-                if (candidate.get("aliases") instanceof List<?> values) for (Object value : values) aliases.add(String.valueOf(value));
-                if (candidate.get("sourceRefs") instanceof List<?> values) for (Object value : values) sources.add(String.valueOf(value));
+                List<String> candidateSources = new ArrayList<>();
+                if (candidate.get("sourceRefs") instanceof List<?> values) for (Object value : values) candidateSources.add(String.valueOf(value));
+                sources.addAll(candidateSources);
+                List<String> names = new ArrayList<>();
+                if (candidate.get("label") instanceof String label) names.add(label);
+                if (candidate.get("aliases") instanceof List<?> values) for (Object value : values) names.add(String.valueOf(value));
+                for (String name : names) {
+                    aliases.add(name);
+                    nameCandidates.computeIfAbsent(name, ignored -> new LinkedHashSet<>()).add(String.valueOf(candidateId));
+                    nameSources.computeIfAbsent(name, ignored -> new LinkedHashSet<>()).addAll(candidateSources);
+                }
                 try {
                     Map<String,String> declared = ExternalIdentifiers.requireCanonical(
                             candidate.get("externalIdentifiers"), "Candidate " + candidateId + " externalIdentifiers");
@@ -545,6 +568,7 @@ public final class PackageVerifier {
             item.put("semanticType", ResolutionKeys.semanticType(entry.getKey()));
             item.put("root", root);
             item.put("aliases", new ArrayList<>(aliases));
+            item.put("aliasProvenance", reconstructAliasProvenance(nameCandidates, nameSources));
             item.put("externalIdentifiers", ExternalIdentifiers.toCanonicalMap(externalIdentifiers));
             item.put("sourceRefs", new ArrayList<>(sources));
             resolved.add(item);
