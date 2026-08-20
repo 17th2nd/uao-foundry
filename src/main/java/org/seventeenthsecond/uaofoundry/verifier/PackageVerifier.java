@@ -2,6 +2,7 @@ package org.seventeenthsecond.uaofoundry.verifier;
 
 import org.seventeenthsecond.uaofoundry.identifiers.StableIdentifiers;
 import org.seventeenthsecond.uaofoundry.identity.ExternalIdentifiers;
+import org.seventeenthsecond.uaofoundry.identity.IdentityReference;
 import org.seventeenthsecond.uaofoundry.identity.IdentityKernel;
 import org.seventeenthsecond.uaofoundry.identity.IdentityProjections;
 import org.seventeenthsecond.uaofoundry.identifiers.ResolutionKeys;
@@ -290,6 +291,17 @@ public final class PackageVerifier {
 
         Map<String,Object> expectedResolution = reconstructIdentityResolution(identities, errors);
         if (expectedResolution == null) return;
+
+        // Identity decisions are the one part of the resolution stage that a package cannot fully
+        // re-derive from its own bytes: whether a registry held a matching identity depends on
+        // registry state that is deliberately not copied into the package. They are therefore
+        // separated from the strict reconstruction comparison and checked for internal consistency
+        // against the reconstructed identities instead. Everything else must still reconstruct
+        // exactly.
+        Map<String,Object> resolutionCore = new LinkedHashMap<>(resolution);
+        Object recordedDecisions = resolutionCore.remove("identityDecisions");
+        verifyIdentityDecisions(recordedDecisions, expectedResolution, errors);
+        resolution = resolutionCore;
         if (!canonicalEquals(expectedResolution, resolution)) {
             errors.add("Identity resolution does not reconstruct exactly from accepted candidate identities.");
         }
@@ -409,6 +421,65 @@ public final class PackageVerifier {
             if (!expectedStatus.equals(publication.get("status")) || !java.util.Objects.equals(expectedEligible, publication.get("eligible"))) {
                 errors.add("Publication decision cannot be reconstructed from scope/quarantine/URO/coverage/verification state; expected " + expectedStatus + "/" + expectedEligible + ".");
             }
+        }
+    }
+
+    /**
+     * Checks what a package can prove about its own identity decisions.
+     *
+     * <p>Verifiable here: exactly one decision per resolved identity, each naming that identity's
+     * reconstructed resolution key and candidate/source refs, and a {@code SAME} decision binding
+     * the uid that the key actually derives. That last check matters — it means a package cannot
+     * claim to have reused some other registered identity while carrying this one.
+     *
+     * <p>Not verifiable here, and deliberately not claimed: whether the registry genuinely held a
+     * match at manufacture time. That requires the registry, and an auditor holding it can
+     * re-derive the decision from the recorded key and external identifiers.
+     */
+    private void verifyIdentityDecisions(Object recordedDecisions, Map<String,Object> expectedResolution, List<String> errors) {
+        if (!(recordedDecisions instanceof List<?> decisions)) {
+            errors.add("identity-resolution.json does not carry an identityDecisions array.");
+            return;
+        }
+        Map<String,Map<String,Object>> expectedByUid = new LinkedHashMap<>();
+        for (Object raw : Json.array(expectedResolution.get("resolvedIdentities"), "reconstructed resolved identities")) {
+            Map<String,Object> identity = object(raw, "reconstructed resolved identity", errors);
+            if (identity != null) expectedByUid.put(String.valueOf(identity.get("uaoId")), identity);
+        }
+
+        Set<String> seen = new LinkedHashSet<>();
+        for (Object raw : decisions) {
+            Map<String,Object> decision = object(raw, "identity decision", errors);
+            if (decision == null) continue;
+            ValidationResult schema = validator.validate(decision, schemaDir.resolve("identity-decision.schema.json"));
+            errors.addAll(prefix(schema.errors(), "Identity decision: "));
+
+            String uaoId = String.valueOf(decision.get("uaoId"));
+            if (!seen.add(uaoId)) errors.add("Duplicate identity decision for UAO " + uaoId + ".");
+            Map<String,Object> identity = expectedByUid.get(uaoId);
+            if (identity == null) {
+                errors.add("Identity decision references an unreconstructed UAO: " + uaoId + ".");
+                continue;
+            }
+            Object expectedKey = identity.get("resolutionKey");
+            if (!canonicalEquals(expectedKey, decision.get("resolutionKey"))) {
+                errors.add("Identity decision resolutionKey does not match the reconstructed identity for " + uaoId + ".");
+            }
+            if (!canonicalEquals(IdentityReference.resolutionKey(String.valueOf(expectedKey)).toMap(), decision.get("reference"))) {
+                errors.add("Identity decision reference does not match the reconstructed identity for " + uaoId + ".");
+            }
+            if (!canonicalEquals(identity.get("candidateRefs"), decision.get("candidateRefs"))) {
+                errors.add("Identity decision candidateRefs do not reconstruct for " + uaoId + ".");
+            }
+            if (!canonicalEquals(identity.get("sourceRefs"), decision.get("sourceRefs"))) {
+                errors.add("Identity decision sourceRefs do not reconstruct for " + uaoId + ".");
+            }
+            if ("SAME".equals(decision.get("decision")) && !uaoId.equals(decision.get("uid"))) {
+                errors.add("Identity decision claims reuse of a different registered identity than the one manufactured: " + uaoId + ".");
+            }
+        }
+        for (String uaoId : expectedByUid.keySet()) {
+            if (!seen.contains(uaoId)) errors.add("No identity decision was recorded for UAO " + uaoId + ".");
         }
     }
 

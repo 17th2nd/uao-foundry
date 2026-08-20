@@ -2,6 +2,10 @@ package org.seventeenthsecond.uaofoundry.pipeline;
 
 import org.seventeenthsecond.uaofoundry.identifiers.StableIdentifiers;
 import org.seventeenthsecond.uaofoundry.identity.ExternalIdentifiers;
+import org.seventeenthsecond.uaofoundry.identity.IdentityDecision;
+import org.seventeenthsecond.uaofoundry.identity.IdentityReference;
+import org.seventeenthsecond.uaofoundry.identity.IdentityResolution;
+import org.seventeenthsecond.uaofoundry.identity.IdentityResolver;
 import org.seventeenthsecond.uaofoundry.identifiers.ResolutionKeys;
 import org.seventeenthsecond.uaofoundry.json.Json;
 import org.seventeenthsecond.uaofoundry.model.ManufacturingRequest;
@@ -255,7 +259,66 @@ class AcquisitionStages extends PipelineBase {
         out.put("rootUaoId", rootUao);
         out.put("candidateToUao", candidateToUao);
         out.put("resolvedIdentities", resolved);
+        out.put("identityDecisions", identityDecisions(resolved));
         return out;
+    }
+
+    /**
+     * Records, for every resolved identity, why the Foundry believes it does or does not denote an
+     * already-registered object.
+     *
+     * <p>Before this existed the resolution key was an <em>assertion</em> of identity that the
+     * pipeline treated as <em>evidence</em> of identity, and no artefact could answer the question
+     * afterwards. Each decision now carries its reference, verdict, reason codes, the registered
+     * identities the evidence pointed at, and the candidate and source refs that supported it.
+     *
+     * <p>History is preserved by accretion rather than by mutation: decisions live inside an
+     * immutable package, so a later manufacture adds a new package carrying its own decisions and
+     * can never rewrite an earlier determination.
+     *
+     * <p>When no registry is supplied the Foundry does not pretend to have looked. Every decision
+     * is {@code UNRESOLVED / REGISTRY_NOT_CONSULTED}, which is deliberately distinguishable from
+     * having looked and found nothing.
+     */
+    private List<Object> identityDecisions(List<Object> resolvedIdentities) {
+        IdentityResolver resolver = registryIndex == null ? null : new IdentityResolver(registryIndex);
+        List<Object> decisions = new ArrayList<>();
+        for (Object raw : resolvedIdentities) {
+            Map<String, Object> identity = map(raw);
+            String uaoId = string(identity.get("uaoId"), "uaoId");
+            String resolutionKey = string(identity.get("resolutionKey"), "resolutionKey");
+            Map<String, String> externalIdentifiers = new TreeMap<>();
+            map(identity.get("externalIdentifiers")).forEach((k, v) -> externalIdentifiers.put(k, String.valueOf(v)));
+
+            Map<String, Object> decision = new LinkedHashMap<>();
+            decision.put("uaoId", uaoId);
+            decision.put("reference", IdentityReference.resolutionKey(resolutionKey).toMap());
+            if (resolver == null) {
+                decision.put("decision", "UNRESOLVED");
+                decision.put("reasonCodes", List.of("REGISTRY_NOT_CONSULTED"));
+                decision.put("candidateUids", List.of());
+            } else {
+                IdentityResolution resolution = resolver.resolveCandidate(resolutionKey, externalIdentifiers);
+                if (resolution.decision() == IdentityDecision.DIFFERENT) {
+                    // Positive evidence of difference under one address. There is no winner to pick,
+                    // and repairing it here would fabricate identity certainty, so manufacture stops.
+                    throw new IllegalArgumentException("EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey "
+                            + resolutionKey + " contradicts the durable external identity already registered for "
+                            + String.join(", ", resolution.candidateUids()) + ".");
+                }
+                decision.put("decision", resolution.decision().name());
+                decision.put("reasonCodes", new ArrayList<>(resolution.reasonCodes()));
+                if (resolution.uid() != null) decision.put("uid", resolution.uid());
+                decision.put("candidateUids", new ArrayList<>(resolution.candidateUids()));
+            }
+            decision.put("resolutionKey", resolutionKey);
+            decision.put("candidateRefs", deepCopyList(list(identity.get("candidateRefs"), "candidateRefs")));
+            decision.put("sourceRefs", deepCopyList(list(identity.get("sourceRefs"), "sourceRefs")));
+            validate(decision, "identity-decision.schema.json", "Identity decision " + uaoId);
+            decisions.add(decision);
+        }
+        decisions.sort(Comparator.comparing(v -> string(map(v).get("uaoId"), "uaoId")));
+        return decisions;
     }
 
     protected Map<String, Object> relationshipConstruction(Map<String, Object> candidateValidation, Map<String, Object> resolution) {

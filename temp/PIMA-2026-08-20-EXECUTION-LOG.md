@@ -99,3 +99,44 @@ exactly those two fail, and no others. The check is therefore load-bearing rathe
 `uao-7fde0894bfbc` for the cow fixture is byte-identical to the baseline, confirming the identity
 derivation was not disturbed. Fail-closed URO behaviour, forbidden-field rejection, content
 addressing, registry rebuild-and-compare and transactional admission are all untouched and green.
+
+---
+
+## Phase 2 — Identity provenance
+
+**Status:** COMPLETE
+**Tests:** 61/61 green (35 baseline + 16 Phase 1 + 10 Phase 2). `BUILD SUCCESS`.
+
+### Built
+
+- `schemas/identity-decision.schema.json` — closed reason-code vocabulary, `SAME` requires a uid.
+- `AcquisitionStages.identityDecisions` — one evidence-bearing record per resolved identity,
+  emitted into `identity-resolution.json` and therefore into every package.
+- `PackageVerifier.verifyIdentityDecisions` — internal-consistency verification.
+- `IdentityResolver.resolveCandidate` now **wired into manufacture** (the Phase 1 deferral is closed).
+
+### Closed
+
+- **G-5** — SAME/DIFFERENT/UNRESOLVED persisted per identity.
+- **G-6** — decision evidence and reason codes persisted with candidate and source refs.
+
+### Design decision worth recording
+
+Decisions live inside immutable packages rather than in a journal beside the registry index.
+A journal would need a *rule* against rewriting; package immutability makes rewriting
+structurally impossible, since any edit breaks the content digest and checksum inventory.
+Append-preservation therefore comes from the existing architecture rather than from new discipline.
+
+### Honest verification boundary
+
+A package cannot prove whether the registry held a match at manufacture time — that state is
+deliberately not copied into the package. Identity decisions are therefore excluded from the strict
+reconstruction comparison and checked for internal consistency instead. The exclusion is narrow and
+documented; a `SAME` decision must still bind the uid its own key derives, so a package cannot
+claim to have reused a different registered identity.
+
+### New fail-closed behaviour
+
+Manufacture stops on `EXTERNAL_IDENTIFIER_CONTRADICTION` — a candidate whose durable external
+identity contradicts what is registered under the same address. The complementary cross-key match
+is recorded as a merge candidate and explicitly not acted on.
