@@ -179,3 +179,48 @@ Adding `alias_provenance` initially broke 20 tests, because the verifier's indep
 reconstruction did not produce the new field. That is the reconstruction discipline working: the
 package could not carry identity material the verifier had not derived for itself. Mirroring the
 assembly in `PackageVerifier` restored green.
+
+---
+
+## Q1 QUARTER GATE — identity substrate
+
+**Status:** REACHED. Draft PR open for independent audit. Not merged.
+
+| Item | Evidence |
+|---|---|
+| Base SHA | `2bc2871d2a7c36c9b4d67881d40827ff2e948d2e` |
+| Q1 head SHA | `7ea8d33824d8e61a0e2f18936196591fc99c96e6` |
+| Branch | `programme/persistent-identity-manufacturing-alpha` |
+| Draft PR | `17th2nd/uao-foundry#15` |
+| Java tests | 68/68 |
+| Python adapter tests | 12/12 |
+| CI workflows on the exact head | **5/5 success** |
+
+CI workflows, all `success` on this exact SHA:
+UAO Foundry CI · independent-audit remediation · provider protocol · semantic delta · Claude Code adapter.
+
+### Q1 gate requirements
+
+| Required | Status |
+|---|---|
+| persistent identity model | `identity/IdentityKernel`, `schemas/foundry-identity.schema.json` |
+| aliases | present; provenance-bearing; **time-awareness open** |
+| state/version separation | `identity_digest` / `state_version`, both derived and verifier-checked |
+| provenance | `identity-decision.schema.json`, one record per identity, append-preserving |
+| registry lookup | uid / resolution key / external identifier / alias, plus decision history |
+| tests green | 68/68 Java, 12/12 Python, 5/5 CI |
+
+### Locally replicated CI gates (before push)
+
+- demonstration-identity leak guard — clean
+- cross-domain manufacture (cow/granite/pie) — 3/3 EXPERIMENTAL + verified
+- byte-determinism — identical trees
+- snapshot-only resume — 14 stages resumed, verification passed
+- tamper negative control — rejected
+- ASA#29 fail-closed URO boundary — `canonicalUros = 0`, `URO_TYPE_AUTHORITY_UNAVAILABLE`, `EVIDENCE_INCOMPLETE`
+
+### Operator note
+
+Two tracked `.gitkeep` files (`dist/`, `work/`) were removed by the local `rm -rf work dist` CI
+replication and restored before proceeding. Python `__pycache__` directories produced by the
+adapter tests are untracked and were cleaned; they are not covered by `.gitignore`.
