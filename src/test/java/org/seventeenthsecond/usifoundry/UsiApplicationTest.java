@@ -243,6 +243,12 @@ class UsiApplicationTest {
         SignificanceBoundary.collect(neighbourhood, "$staged", violations);
         assertEquals(List.of(), violations);
         assertEquals(1, ((java.math.BigDecimal) get("/api/status").get("stagedRelationshipCount")).intValue());
+
+        // The banner wording is part of the contract: the UI must present staged candidates as
+        // non-canonical candidate memory, never as canonical UROs.
+        String js = resource("/app/app.js");
+        assertTrue(js.contains("Staged relationship candidates (non-canonical)"));
+        assertTrue(js.contains("certifying: false"));
     }
 
     @Test
