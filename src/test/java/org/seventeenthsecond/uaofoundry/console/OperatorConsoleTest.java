@@ -114,8 +114,14 @@ class OperatorConsoleTest {
         Map<String,Object> report = object(Json.parse(result.out()));
         Path packagePath = Path.of(String.valueOf(report.get("packagePath")));
 
-        // Cross-check each counter against the package it claims to describe.
-        Map<String,Object> reuse = object(FileOps.readJson(packagePath.resolve("reuse-report.json")));
+        // Cross-check each counter against the artefacts it claims to describe. Since ADR-0006 the
+        // reuse report is run evidence stored beside the registry, so the cross-check reads it
+        // from there -- and asserts it is not inside the immutable package.
+        assertFalse(java.nio.file.Files.isRegularFile(packagePath.resolve("reuse-report.json")),
+                "volatile run evidence must not live inside a content-addressed package");
+        Map<String,Object> run = object(FileOps.readJson(
+                registry.resolveSibling("runs").resolve(report.get("runId") + ".json")));
+        Map<String,Object> reuse = object(run.get("reuseReport"));
         Map<String,Object> reuseCounts = object(reuse.get("counts"));
         Map<String,Object> reported = counts(result);
         assertEquals(intOf(reuseCounts, "newUaoCount"), intOf(reported, "newIdentitiesManufactured"));

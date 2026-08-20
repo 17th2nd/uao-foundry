@@ -10,6 +10,8 @@ import org.seventeenthsecond.uaofoundry.provider.FixtureProvider;
 import org.seventeenthsecond.uaofoundry.provider.FoundryProvider;
 import org.seventeenthsecond.uaofoundry.registry.FoundryRegistry;
 import org.seventeenthsecond.uaofoundry.registry.SemanticVariants;
+import org.seventeenthsecond.uaofoundry.runs.RunRecord;
+import org.seventeenthsecond.uaofoundry.runs.RunStore;
 import org.seventeenthsecond.uaofoundry.reuse.RegistryAwareCommandProvider;
 import org.seventeenthsecond.uaofoundry.reuse.ReuseAnalyzer;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
@@ -82,6 +84,7 @@ public final class OperatorConsole {
 
     private int manufacture(Options options) {
         String seed = options.single("manufacture requires exactly one identity expression.");
+        String startedAt = options.clock();
         Path schemaDir = options.schemaDir();
         FoundryRegistry registry = options.registry() == null ? null : new FoundryRegistry(options.registry(), schemaDir);
         Map<String,Object> preIndex = registry == null ? null : readIndex(registry, options.registry());
@@ -118,7 +121,6 @@ public final class OperatorConsole {
             reuse = analyzer.analyze(preIndex, options.registry(), result.packagePath(),
                     registryContextHash == null ? Hashes.canonicalJson(preIndex) : registryContextHash);
             new SchemaValidator().validate(reuse, schemaDir.resolve("reuse-report.schema.json")).requireValid("Reuse report");
-            analyzer.attachAndVerify(result.packagePath(), reuse);
         }
 
         String admission = "NOT_REQUESTED";
@@ -134,7 +136,29 @@ public final class OperatorConsole {
             }
         }
 
-        Report report = Report.of(result, reuse, registry, admission, seed, options);
+        // ADR-0006: reuse evidence is run evidence. It goes beside the registry, never inside the
+        // content-addressed package, so repeated manufacture of identical material stays
+        // byte-identical and admission stays idempotent.
+        String runId = null;
+        if (registry != null) {
+            String status = !result.verificationPassed() ? RunRecord.VERIFICATION_FAILED
+                    : admission.startsWith("REFUSED") ? RunRecord.ADMISSION_REFUSED
+                    : RunRecord.COMPLETED;
+            List<String> usiIds = new ArrayList<>();
+            for (Object raw : list(FileOps.readJson(result.packagePath().resolve("canonical-identities.json")))) {
+                usiIds.add(String.valueOf(map(raw).get("uid")));
+            }
+            RunStore store = options.runStore() != null
+                    ? new RunStore(options.runStore()) : RunStore.besideRegistry(options.registry());
+            RunRecord run = RunRecord.create(seed, options.context(),
+                    options.fixture() != null ? "fixture" : "command", status,
+                    String.valueOf(map(FileOps.readJson(result.packagePath().resolve("manifest.json"))).get("packageId")),
+                    usiIds, Hashes.canonicalJson(preIndex), Hashes.canonicalJson(registry.index()),
+                    reuse, startedAt, options.clock(), null, null);
+            runId = store.record(run).runId();
+        }
+
+        Report report = Report.of(result, reuse, registry, admission, seed, options, runId);
         if (options.json()) out.println(Json.canonical(report.toMap()));
         else report.print(out);
         return report.verificationPassed() ? 0 : 4;
@@ -249,12 +273,12 @@ public final class OperatorConsole {
 
     /** The operator-facing summary of one manufacture, read back from artefacts rather than tallied. */
     private record Report(String seed, String context, String registryPath, String packageId, String packagePath,
-                          String publicationStatus, boolean verificationPassed, String admission,
+                          String publicationStatus, boolean verificationPassed, String admission, String runId,
                           int reusedIdentities, int newIdentities, int newSources, int reusedRegistrySources,
                           int unresolvedRelationships, int unreconciledVariants, boolean registryConsulted) {
 
         static Report of(PipelineResult result, Map<String,Object> reuse, FoundryRegistry registry,
-                         String admission, String seed, Options options) {
+                         String admission, String seed, Options options, String runId) {
             Map<String,Object> manifest = map(FileOps.readJson(result.packagePath().resolve("manifest.json")));
             int unresolved = list(FileOps.readJson(result.packagePath().resolve("unresolved-items.json"))).size();
 
@@ -289,7 +313,7 @@ public final class OperatorConsole {
 
             return new Report(seed, options.context(), options.registry() == null ? null : options.registry().toString(),
                     String.valueOf(manifest.get("packageId")), result.packagePath().toString(),
-                    result.publicationStatus(), result.verificationPassed(), admission,
+                    result.publicationStatus(), result.verificationPassed(), admission, runId,
                     reused, created, newSources, registrySources, unresolved, unreconciled, registry != null);
         }
 
@@ -312,6 +336,7 @@ public final class OperatorConsole {
             out.printf("  %-30s %s%n", "Publication status", publicationStatus);
             out.printf("  %-30s %s%n", "Package ID", packageId);
             out.printf("  %-30s %s%n", "Registry admission", admission);
+            if (runId != null) out.printf("  %-30s %s%n", "Run record", runId);
             out.printf("  %-30s %s%n", "Package path", packagePath);
             if (!registryConsulted) {
                 out.println();
@@ -345,6 +370,7 @@ public final class OperatorConsole {
             out.put("packageId", packageId);
             out.put("packagePath", packagePath);
             out.put("registryAdmission", admission);
+            out.put("runId", runId);
             return out;
         }
     }

@@ -95,7 +95,8 @@ See [`docs/REGISTRY.md`](docs/REGISTRY.md).
 
 Registry-aware live manufacture verifies the registry **before** provider acquisition, supplies bounded discovery context, binds registry state into the provider transaction, then computes reuse inside the Foundry from stable UAO identities.
 
-A checksum-covered `reuse-report.json` distinguishes:
+A `reuse-report.json` is computed by the Foundry and recorded as **run evidence beside the
+registry**, not inside the immutable package (ADR-0006, finding P9-1). It distinguishes:
 
 - previously registered UAO identities reused by the new package;
 - genuinely new UAO identities;
@@ -265,7 +266,6 @@ verification-report.json
 unresolved-items.json
 publication-decision.json
 manufactured-package.json
-reuse-report.json       # registry-aware manufacture
 checksums.sha256
 ```
 

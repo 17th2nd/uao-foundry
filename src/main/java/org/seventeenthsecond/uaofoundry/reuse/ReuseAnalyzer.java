@@ -135,17 +135,28 @@ public final class ReuseAnalyzer {
         return report;
     }
 
+    /**
+     * Finding P9-1 (ADR-0006): the reuse report is no longer attached to the package.
+     *
+     * <p>It embeds {@code registryIndexHash}, {@code registryContextHash} and prior occurrences,
+     * all of which move as the registry grows, while being excluded from the content digest that
+     * determines {@code packageId}. Two manufactures of semantically identical material against a
+     * moved-on registry therefore produced the same package id with different bytes, and the
+     * collision guards correctly refused the second — 69 of 114 cumulative manufactures in the
+     * Alpha measurement.
+     *
+     * <p>The report is now stored in a {@link org.seventeenthsecond.uaofoundry.runs.RunStore}
+     * beside the registry. The guards are unchanged: the defect is resolved by removing the
+     * volatile input, not by loosening the check that caught it.
+     *
+     * @deprecated retained only to document the removal; attaching volatile run evidence to a
+     *             content-addressed package reintroduces P9-1.
+     */
+    @Deprecated
     public void attachAndVerify(Path packageDir, Map<String,Object> report) {
-        FileOps.writeJson(packageDir.resolve("reuse-report.json"), report);
-        Map<String,Object> manifest = object(FileOps.readJson(packageDir.resolve("manifest.json")), "manifest");
-        Set<String> files = new LinkedHashSet<>();
-        for (Object raw : array(manifest.get("files"), "manifest files")) files.add(string(raw, "manifest file"));
-        files.add("reuse-report.json");
-        manifest.put("files", files.stream().sorted().toList());
-        FileOps.writeJson(packageDir.resolve("manifest.json"), manifest);
-        writeChecksums(packageDir);
-        PackageVerifier.Result result = new PackageVerifier(schemaDir).verify(packageDir);
-        if (!result.passed()) throw new IllegalArgumentException("Reuse-augmented package failed verification: " + String.join("; ", result.errors()));
+        throw new UnsupportedOperationException(
+                "P9-1/ADR-0006: reuse evidence must not be attached to an immutable package. "
+                        + "Record it in a RunStore beside the registry instead.");
     }
 
     private RegistrySource resolveRegistrySource(String locator, Path registryRoot, Map<String,Object> registryIndex) {

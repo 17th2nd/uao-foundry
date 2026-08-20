@@ -167,7 +167,7 @@ Foundry verifies prior package evidence
    |
 canonical identity comparison
    |
-reuse-report.json
+reuse-report.json   # legacy packages only; see ADR-0006
    |-- reused existing UAOs
    |-- new UAOs
    `-- evidence/source delta

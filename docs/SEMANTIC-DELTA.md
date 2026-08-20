@@ -10,7 +10,7 @@ Semantic-delta manufacture makes prior verified UAO work visible to the next man
 ```text
 request -> verify registry -> deterministic registry context -> provider
         -> normal 16-stage Foundry -> stable UAO comparison
-        -> reuse-report.json -> checksummed package -> optional register
+        -> checksummed package -> optional register -> reuse-report recorded as run evidence
 ```
 
 The registry is verified **before** the external provider is invoked. If a registered package has been altered, manufacture stops before acquisition.
@@ -55,6 +55,14 @@ The prefix alone is not trusted. Core source acquisition requires a verified reg
 The normal source acquisition stage still snapshots the content into the new package, so reused evidence remains provenance-bearing.
 
 ## `reuse-report.json`
+
+> **Location changed (ADR-0006, finding P9-1).** The report is no longer written into the package.
+> It embeds `registryIndexHash` and `registryContextHash`, which move as the registry grows, while
+> being excluded from the content digest that determines `packageId` — so semantically identical
+> manufactures produced the same package id with different bytes and the third was refused. It is
+> now recorded in a run store beside the registry (`<registry>/../runs/<runId>.json`) under
+> `reuseReport`. Packages manufactured before this change keep their embedded copy and remain
+> verifiable unconverted.
 
 The schema-validated report records:
 

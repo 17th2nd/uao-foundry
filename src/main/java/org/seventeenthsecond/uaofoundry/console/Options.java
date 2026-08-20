@@ -13,16 +13,17 @@ import java.util.List;
  * report every identity as new. Both are wrong in ways that look like success.
  */
 record Options(List<String> positionals, Path registry, Path schemaDir, Path workDir, Path distDir,
-               Path fixture, Path providerCommand, String context, String language, String profile,
-               String repositoryCommit, int catalogLimit, int timeoutSeconds, boolean register, boolean json) {
+               Path fixture, Path providerCommand, Path runStore, String context, String language, String profile,
+               String repositoryCommit, String explicitClock, int catalogLimit, int timeoutSeconds,
+               boolean register, boolean json) {
 
     static Options parse(String[] args) {
         List<String> positionals = new ArrayList<>();
-        Path registry = null, fixture = null, providerCommand = null;
+        Path registry = null, fixture = null, providerCommand = null, runStore = null;
         Path schemaDir = Path.of("schemas");
         Path workDir = Path.of("work");
         Path distDir = Path.of("dist");
-        String context = null, language = "en", profile = "experimental", repositoryCommit = "local";
+        String context = null, language = "en", profile = "experimental", repositoryCommit = "local", clock = null;
         int catalogLimit = 5000, timeoutSeconds = 900;
         boolean register = false, json = false;
 
@@ -45,6 +46,8 @@ record Options(List<String> positionals, Path registry, Path schemaDir, Path wor
                 case "--dist-dir" -> distDir = Path.of(value);
                 case "--fixture" -> fixture = Path.of(value);
                 case "--provider" -> providerCommand = Path.of(value);
+                case "--run-store" -> runStore = Path.of(value);
+                case "--clock" -> clock = value;
                 case "--context" -> context = value;
                 case "--language" -> language = value;
                 case "--profile" -> profile = value;
@@ -58,7 +61,17 @@ record Options(List<String> positionals, Path registry, Path schemaDir, Path wor
             throw new IllegalArgumentException("--fixture and --provider are mutually exclusive; a manufacture has one evidence source.");
         }
         return new Options(List.copyOf(positionals), registry, schemaDir, workDir, distDir, fixture, providerCommand,
-                context, language, profile, repositoryCommit, catalogLimit, timeoutSeconds, register, json);
+                runStore, context, language, profile, repositoryCommit, clock, catalogLimit, timeoutSeconds,
+                register, json);
+    }
+
+    /**
+     * The timestamp a run record is stamped with. Explicit when supplied so a test is reproducible,
+     * wall clock otherwise. Run records are operational evidence, so a real clock is correct in
+     * production; determinism is what tests need, not what operators need.
+     */
+    String clock() {
+        return explicitClock != null ? explicitClock : java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString();
     }
 
     String single(String message) {
