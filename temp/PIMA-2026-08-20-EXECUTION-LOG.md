@@ -531,3 +531,38 @@ independently of ASA#29.
 `PackageContentDigest.java` is byte-unchanged from `2bc2871d` — pre-existing, surfaced not caused.
 **Not fixed:** every option is a design decision on an audited surface. Options and a recommendation
 are in `research/UAO_USI/falsification/IDENTITY_ERRORS.md`.
+
+---
+
+## Phase 11 — Product handoff
+
+**Status:** COMPLETE
+
+- `docs/OPERATOR-GUIDE-PERSISTENT-IDENTITY.md` — clean-room setup, console reference,
+  demonstration script, lifecycle operations, architecture diagram, limitations, recovery.
+- `research/UAO_USI/consensus/UAO_USI_CONSENSUS_CANDIDATE.md` — **retain UAO, do not adopt USI**,
+  on measured evidence.
+- `research/UAO_USI/terminology/DEFINITIONS.md`
+- `temp/PIMA-2026-08-20-FINAL-HANDOFF.md` — the §34 seventeen-point handoff.
+
+### Q3 and Q4 gate positions
+
+**Q3 — significance and ASALLM integration:** MET. Versioned `A_x`/`R_x` interface; no significance
+stored canonically (enforced at manufacture and verification, two-tier prohibition); C/D/E lanes
+added without altering A/B or the oracle; measurement instrumentation in `benchmark/pima/`.
+
+**Q4 — functional product alpha:** MET with two open defects named. Console workflow, acceptance
+demonstration in a disposable registry, benchmark results, documentation, recovery guidance, and
+this handoff. The two open items — **P9-1** and **ASA#29** — are both recorded, neither is hidden,
+and neither was worked around by weakening a control.
+
+### Programme close
+
+12 commits from `2bc2871d`. 120/120 Java tests, 12/12 Python. CI 5/5 at both quarter gates.
+`main` untouched; the draft PR is not merged and not mergeable by the operator.
+
+**The programme's own verdict on its subject: H7 is not refuted.** Persistent identity as built
+adds no measurable task-success capability over good relationship extraction. The two mechanisms
+that would let it accumulate — a persistent relationship graph, and repeated observation — are
+blocked by ASA#29 and P9-1 respectively. That is the finding, and it is reported as the finding
+rather than buried under the machinery that works.
