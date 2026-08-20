@@ -28,6 +28,20 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <!--
+              The USI Foundry UI. Kept in an explicit application layer (app/frontend) rather than
+              scattered through the audited core, and bundled under /app/ so the application serves
+              it from the classpath with no build step and no external asset host.
+            -->
+            <resource>
+                <directory>app/frontend</directory>
+                <targetPath>app</targetPath>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

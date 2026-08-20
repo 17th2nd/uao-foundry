@@ -139,21 +139,47 @@ class LegacyCompatibilityTest {
     }
 
     @Test
-    void nothingInTheManufacturePathCallsTheReservedMapping() throws Exception {
-        // ADR-0005 §4: the mapping exists so Option C is a switch to throw, not a design to
-        // invent. If production code started calling it, usi-* identifiers would begin leaking
-        // into artefacts without the governed migration this ADR requires.
-        List<String> callers = new ArrayList<>();
+    void noProductionCodeMintsAUsiIdentifierAndTheCoreNeverSeesTheMapping() throws Exception {
+        // ADR-0005 §4. Two distinct invariants, because the directions differ in risk:
+        //
+        //   toUsi()   MINTS a usi- string. Calling it anywhere in production would start leaking
+        //             usi- identifiers into artefacts without the governed migration.
+        //   toLegacy()/schemeOf()  translate INBOUND and label a scheme. Safe, and used by the
+        //             application facade so a future-form reference is not silently unresolvable.
+        //
+        // Separately, the audited core must not reference the class at all: the migration seam
+        // belongs at the application boundary, not inside manufacture, registry or verification.
+        List<String> minters = new ArrayList<>();
+        List<String> coreReferences = new ArrayList<>();
         Path main = Path.of("src/main/java");
         try (var stream = Files.walk(main)) {
             for (Path file : stream.filter(p -> p.toString().endsWith(".java")).toList()) {
-                if (file.getFileName().toString().equals("UsiIdentifiers.java")) continue;
+                String relative = main.relativize(file).toString().replace('\\', '/');
+                if (relative.endsWith("usi/UsiIdentifiers.java")) continue;
                 String text = Files.readString(file);
-                if (text.contains("UsiIdentifiers.")) callers.add(main.relativize(file).toString());
+                if (text.contains("UsiIdentifiers.toUsi(")) minters.add(relative);
+                if (text.contains("UsiIdentifiers.") && relative.startsWith("org/seventeenthsecond/uaofoundry/")) {
+                    coreReferences.add(relative);
+                }
             }
         }
-        assertEquals(List.of(), callers,
-                "the reserved identifier mapping must remain uncalled by production code");
+        assertEquals(List.of(), minters, "no production code may mint a usi- identifier");
+        assertEquals(List.of(), coreReferences,
+                "the audited core must not reference the migration seam; it lives at the application boundary");
+
+        // And nothing that reaches an artefact is in the usi- form.
+        Path registry = temp.resolve("registry");
+        Result result = run("manufacture", "electric motor", "--registry", registry.toString(),
+                "--fixture", DEMO.resolve("electric-motor.json").toString(),
+                "--register", "--json", "--clock", AT,
+                "--work-dir", temp.resolve("wm").toString(), "--dist-dir", temp.resolve("dm").toString());
+        Path pkg = Path.of(String.valueOf(object(Json.parse(result.out())).get("packagePath")));
+        try (var stream = Files.walk(pkg)) {
+            for (Path file : stream.filter(Files::isRegularFile).toList()) {
+                assertFalse(Files.readString(file).contains("usi-"),
+                        "no manufactured artefact may contain a usi- identifier: " + pkg.relativize(file));
+            }
+        }
     }
 
     // ---------------------------------------------------------------- helpers

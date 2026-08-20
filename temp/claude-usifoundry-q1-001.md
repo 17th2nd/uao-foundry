@@ -138,3 +138,76 @@ No adversarial control was removed or weakened.
 | all core tests green | **133/133** |
 
 **Q1 MET.** Awaiting independent audit; Claude does not self-certify acceptance (§56).
+
+---
+
+# Q2 Gate — Application Shell
+
+**Run label:** `claude-usifoundry-q2-001` (appended to the Q1 record for one continuous lineage)
+**Date:** 2026-08-21
+
+## Delivered
+
+| §52 requirement | Delivered |
+|---|---|
+| USI-branded application | `USI Foundry 0.1.0-alpha`, six views |
+| backend service facade | `UsiFoundryService` — translates terminology, **re-implements nothing** |
+| manufacture screen | with **real** stage progress from the pipeline's checkpoint |
+| registry search | ranked discovery across uid, key, label, alias, external identifier |
+| identity inspector | kernel, lifecycle, variants, occurrences, decision history, relationship bindings, `A_x`/`R_x` view |
+| package inspector | manifest, verification checks, identities, sources, unresolved relationships |
+| local config/storage | `~/.usi-foundry/{registry,runs,packages,cache,config,logs}` |
+| deterministic fixture operation | full acceptance flow, no live provider |
+
+Plus, beyond the minimum: run history view, plant-status view, classified errors with guidance,
+`install.sh`, a CI workflow, and CDP-driven UI evidence.
+
+## Architecture choice
+
+**JDK `com.sun.net.httpserver` + static HTML/CSS/vanilla JS.** No Electron, no framework, no build
+step, and — decisively — **no new runtime dependency**. The Foundry's zero-dependency posture is a
+security property of the audited core; trading it to serve six screens would be a poor bargain.
+
+Backend Java sits in `org.seventeenthsecond.usifoundry`; the UI lives in `app/frontend` and is
+bundled as a Maven resource. UI logic is not scattered through the audited core.
+
+## Security posture
+
+- **Loopback only.** Local-first means the socket, not just the storage.
+- **Same-origin only**, verified both ways: a foreign `Origin` gets 403; the application's own gets 200.
+- Strict CSP on served assets; no credentials anywhere; no destructive controls in the Alpha.
+
+## Two real defects found by testing the application, not the unit
+
+1. **The UI could not call its own API.** The `Origin` check rejected the header's *presence*, but
+   browsers send `Origin` on same-origin POSTs. `curl` never sends it, so every API test passed
+   while the actual UI was broken — caught only by driving a real browser. Fixed by comparing the
+   value; cross-origin refusal verified intact.
+
+2. **Run history undercounted attempts.** Run records are content-addressed with second-resolution
+   timestamps, so ten rapid identical manufactures collapsed into **four** records. Operational
+   evidence that undercounts attempts is not evidence. Fixed with millisecond resolution; a
+   genuine replay with supplied timestamps stays idempotent. CI now asserts 10 of 10.
+
+## Evidence
+
+| Check | Result |
+|---|---|
+| Java tests | **147/147** (120 inherited + 27 new) |
+| Python adapter tests | 12/12 |
+| Clean-room install → launch → manufacture → search → inspect → **restart** → re-resolve | PASS |
+| Repeated accumulation, 10× | all REGISTERED, one package id, 10 run records |
+| UI evidence, six views | captured, **0 console errors** |
+| Product language guard | no `UAO` in operator-facing UI |
+| No `usi-` minted; core free of the seam | PASS |
+
+## UI evidence
+
+`temp/ui-evidence/01..06-*.png`, captured by `app/packaging/ui-evidence.py` driving real headless
+Chrome over CDP (standard library only) against the running application reading a live registry.
+
+The identity inspector screenshot shows the point of the whole programme: one identity, three
+occurrences, one state version, and an append-preserving decision history in which the earliest
+`UNRESOLVED / NO_REGISTERED_MATCH` determination sits unchanged beside two later `SAME` decisions.
+
+**Q2 MET.** Awaiting independent audit; Claude does not self-certify acceptance (§56).

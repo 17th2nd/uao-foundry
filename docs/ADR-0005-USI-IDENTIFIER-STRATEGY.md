@@ -86,9 +86,22 @@ accept back.
 usi-<hex>  ⟷  uao-<hex>
 ```
 
-It is unit-tested for round-trip fidelity and is **called by nothing in the manufacture, registry
-or verification path**. It exists so that Option C is a switch to throw rather than a design to
-invent, on the day ASA changes the CSS shape.
+Unit-tested for round-trip fidelity. Two invariants are enforced by test, because the two
+directions differ in risk:
+
+| Function | Direction | Permitted where |
+|---|---|---|
+| `toUsi` | **mints** a `usi-` string | **nowhere in production.** Calling it would start leaking `usi-` identifiers into artefacts without the governed migration this ADR requires. |
+| `toLegacy` | translates an inbound reference | the application facade only, so a future-form identifier someone pastes is not silently unresolvable |
+| `schemeOf` | labels which scheme a value is in | the application facade only, to populate `identifierScheme` |
+
+The audited core (`org.seventeenthsecond.uaofoundry.*`) must not reference the class at all: the
+migration seam belongs at the application boundary, not inside manufacture, registry or
+verification. A further test walks every file of a manufactured package and asserts no `usi-`
+string appears in any artefact.
+
+Option C therefore remains a switch to throw rather than a design to invent, on the day ASA
+changes the CSS shape.
 
 ### 5. Preconditions for Option C
 

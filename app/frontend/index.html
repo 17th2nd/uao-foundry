@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>USI Foundry</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="mark">
+    <h1>USI FOUNDRY</h1>
+    <p>Universal Semantic Identity Factory</p>
+  </div>
+  <div class="plant-state" id="plant-state">
+    <span class="chip" id="chip-registry">registry —</span>
+    <span class="chip" id="chip-identities">identities —</span>
+    <span class="chip" id="chip-authority">relationship authority —</span>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab" data-view="manufacture" aria-current="true">Manufacture</button>
+  <button class="tab" data-view="registry">Registry</button>
+  <button class="tab" data-view="identity">Identity</button>
+  <button class="tab" data-view="package">Package</button>
+  <button class="tab" data-view="runs">Runs</button>
+  <button class="tab" data-view="status">Status</button>
+</nav>
+
+<main>
+
+  <!-- ─────────────────────────────── MANUFACTURE ─────────────────────────────── -->
+  <section class="view" id="view-manufacture">
+    <div class="grid">
+      <fieldset class="panel">
+        <legend>Manufacturing order</legend>
+
+        <label for="f-identity">Identity / Topic</label>
+        <input id="f-identity" type="text" autocomplete="off" placeholder="electric motor">
+
+        <label for="f-context">Context / keywords</label>
+        <input id="f-context" type="text" autocomplete="off" placeholder="three phase induction motor industrial">
+
+        <label for="f-provider">Provider</label>
+        <select id="f-provider">
+          <option value="fixture">Deterministic fixture bundle</option>
+          <option value="claude-code">Claude Code (research provider)</option>
+        </select>
+
+        <div id="fixture-row">
+          <label for="f-fixture">Fixture bundle</label>
+          <input id="f-fixture" type="text" autocomplete="off"
+                 value="examples/demonstration/electric-motor.json">
+        </div>
+
+        <label class="check"><input id="f-register" type="checkbox" checked> Admit to registry on success</label>
+
+        <button class="primary" id="btn-manufacture">MANUFACTURE</button>
+        <p class="hint" id="manufacture-hint"></p>
+      </fieldset>
+
+      <fieldset class="panel">
+        <legend>Stages</legend>
+        <ol class="stages" id="stages"><li class="idle">No run in progress.</li></ol>
+        <p class="hint" id="stage-hint"></p>
+      </fieldset>
+    </div>
+
+    <fieldset class="panel result" id="result-panel" hidden>
+      <legend>Result</legend>
+      <div id="result"></div>
+    </fieldset>
+  </section>
+
+  <!-- ─────────────────────────────── REGISTRY ─────────────────────────────── -->
+  <section class="view" id="view-registry" hidden>
+    <fieldset class="panel">
+      <legend>Search the registry</legend>
+      <label for="s-query">USI ID · resolution key · canonical label · alias · scheme:identifier</label>
+      <div class="row">
+        <input id="s-query" type="text" autocomplete="off" placeholder="electric motor">
+        <button id="btn-search">SEARCH</button>
+      </div>
+      <p class="hint">Search ranks possible matches for discovery. Exact addressing is on the Identity tab.</p>
+    </fieldset>
+    <div id="search-results"></div>
+  </section>
+
+  <!-- ─────────────────────────────── IDENTITY ─────────────────────────────── -->
+  <section class="view" id="view-identity" hidden>
+    <fieldset class="panel">
+      <legend>Inspect a semantic identity</legend>
+      <label for="i-ref">Reference</label>
+      <div class="row">
+        <input id="i-ref" type="text" autocomplete="off" placeholder="uao-… · foundry:v0.1:… · wikidata:Q53068">
+        <button id="btn-identity">INSPECT</button>
+      </div>
+      <p class="hint">An alias never resolves on its own; it returns candidates.</p>
+    </fieldset>
+    <div id="identity-result"></div>
+  </section>
+
+  <!-- ─────────────────────────────── PACKAGE ─────────────────────────────── -->
+  <section class="view" id="view-package" hidden>
+    <fieldset class="panel">
+      <legend>Inspect a package</legend>
+      <label for="p-id">Package ID</label>
+      <div class="row">
+        <input id="p-id" type="text" autocomplete="off" placeholder="pkg-…">
+        <button id="btn-package">OPEN</button>
+      </div>
+    </fieldset>
+    <div id="package-result"></div>
+  </section>
+
+  <!-- ─────────────────────────────── RUNS ─────────────────────────────── -->
+  <section class="view" id="view-runs" hidden>
+    <fieldset class="panel">
+      <legend>Manufacturing history</legend>
+      <button id="btn-runs">REFRESH</button>
+      <p class="hint">Run evidence is recorded beside the registry and is append-preserving. A completed run is never edited.</p>
+    </fieldset>
+    <div id="runs-result"></div>
+  </section>
+
+  <!-- ─────────────────────────────── STATUS ─────────────────────────────── -->
+  <section class="view" id="view-status" hidden>
+    <fieldset class="panel">
+      <legend>Plant status</legend>
+      <div class="row">
+        <button id="btn-status">REFRESH</button>
+        <button id="btn-verify">VERIFY REGISTRY</button>
+      </div>
+    </fieldset>
+    <div id="status-result"></div>
+  </section>
+
+</main>
+
+<footer>
+  <span id="footer-version">USI Foundry</span>
+  <span>Local only · loopback interface · no significance is stored</span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

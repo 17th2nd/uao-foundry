@@ -82,7 +82,7 @@ public final class RegistryManufactureApplication {
                 usiIds.add(String.valueOf(Json.object(raw, "canonical UAO").get("uid")));
             }
             RunStore store = RunStore.besideRegistry(parsed.registry());
-            String stamp = java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString();
+            String stamp = java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS).toString();
             RunRecord run = store.record(RunRecord.create(
                     parsed.identity(), null, "command", admissionStatus,
                     String.valueOf(Json.object(FileOps.readJson(result.packagePath().resolve("manifest.json")), "manifest").get("packageId")),

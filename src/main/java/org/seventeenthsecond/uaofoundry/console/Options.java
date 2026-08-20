@@ -71,7 +71,7 @@ record Options(List<String> positionals, Path registry, Path schemaDir, Path wor
      * production; determinism is what tests need, not what operators need.
      */
     String clock() {
-        return explicitClock != null ? explicitClock : java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString();
+        return explicitClock != null ? explicitClock : java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS).toString();
     }
 
     String single(String message) {
