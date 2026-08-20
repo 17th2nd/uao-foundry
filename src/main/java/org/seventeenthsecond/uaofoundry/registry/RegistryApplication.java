@@ -40,6 +40,7 @@ public final class RegistryApplication {
                 case "merge" -> operation(registry, parsed, IdentityOperation.Kind.MERGE);
                 case "split" -> operation(registry, parsed, IdentityOperation.Kind.SPLIT);
                 case "operations" -> operations(registry, parsed);
+                case "significance-inputs" -> significanceInputs(registry, parsed);
                 case "list" -> list(registry, parsed);
                 case "verify" -> verify(registry, parsed);
                 case "context" -> context(registry, parsed);
@@ -77,22 +78,23 @@ public final class RegistryApplication {
      */
     private int identity(FoundryRegistry registry, Parsed parsed) {
         requirePositionals(parsed, 1, "identity requires exactly one reference (uid, resolution key, scheme:identifier or alias).");
-        String value = parsed.positionals().getFirst();
-        IdentityReference reference;
-        if (value.matches("uao-[a-f0-9]{12}")) {
-            reference = IdentityReference.uid(value);
-        } else if (value.startsWith("foundry:") || value.startsWith("fixture:") || value.startsWith("ext:")) {
-            reference = IdentityReference.resolutionKey(value);
-        } else if (value.matches("[a-z][a-z0-9._-]*:\\S+")) {
-            int split = value.indexOf(':');
-            reference = IdentityReference.externalIdentifier(value.substring(0, split), value.substring(split + 1));
-        } else {
-            reference = IdentityReference.alias(value);
-        }
-        Map<String,Object> record = registry.identityRecord(reference);
+        Map<String,Object> record = registry.identityRecord(reference(parsed.positionals().getFirst()));
         out.println(Json.canonical(record));
         // A considered "not well enough" is a distinct outcome from success and from failure.
         return "SAME".equals(object(record.get("resolution")).get("decision")) ? 0 : 4;
+    }
+
+    /** Infers the reference kind from the argument's shape; a misread argument can only under-resolve. */
+    private static IdentityReference reference(String value) {
+        if (value.matches("uao-[a-f0-9]{12}")) return IdentityReference.uid(value);
+        if (value.startsWith("foundry:") || value.startsWith("fixture:") || value.startsWith("ext:")) {
+            return IdentityReference.resolutionKey(value);
+        }
+        if (value.matches("[a-z][a-z0-9._-]*:\\S+")) {
+            int split = value.indexOf(':');
+            return IdentityReference.externalIdentifier(value.substring(0, split), value.substring(split + 1));
+        }
+        return IdentityReference.alias(value);
     }
 
     @SuppressWarnings("unchecked")
@@ -118,6 +120,17 @@ public final class RegistryApplication {
         IdentityOperation operation = IdentityOperation.create(kind, subjects, targets, parsed.reasonCodes(),
                 parsed.justification(), List.of(), parsed.authority(), parsed.recordedAt());
         out.println(Json.canonical(registry.applyIdentityOperation(operation).toMap()));
+        return 0;
+    }
+
+    /**
+     * Exports the durable A_x / R_x inputs for one identity. The Foundry supplies inputs to
+     * significance and never computes it; the payload names the boundary explicitly so a consumer
+     * cannot mistake a supply surface for a result.
+     */
+    private int significanceInputs(FoundryRegistry registry, Parsed parsed) {
+        requirePositionals(parsed, 1, "significance-inputs requires exactly one identity reference.");
+        out.println(Json.canonical(registry.significanceInputs(reference(parsed.positionals().getFirst()))));
         return 0;
     }
 
@@ -206,6 +219,7 @@ public final class RegistryApplication {
         out.println("  ... RegistryApplication merge     --subject <uid> --subject <uid> --target <uid> --reason <CODE> --justification <text> --recorded-at <iso8601>");
         out.println("  ... RegistryApplication split     --subject <uid> --target <uid> --target <uid> --reason <CODE> --justification <text> --recorded-at <iso8601>");
         out.println("  ... RegistryApplication operations");
+        out.println("  ... RegistryApplication significance-inputs <uid|resolution-key|scheme:identifier>");
     }
 
     private record Parsed(Path registry, Path schemaDir, int catalogLimit, List<String> positionals,

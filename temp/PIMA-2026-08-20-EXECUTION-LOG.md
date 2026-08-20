@@ -315,3 +315,56 @@ affected — but it is exactly the defect class the binding closes.
 A package carrying a relationship candidate is `EVIDENCE_INCOMPLETE` and therefore not
 registry-admissible, so cross-package relationship tracing is **latent** rather than demonstrable
 today. The test asserts the inadmissibility rather than pretending otherwise.
+
+---
+
+## Phase 6 — Significance interface
+
+**Status:** COMPLETE
+**Tests:** 102/102 green (12 new). `BUILD SUCCESS`.
+
+### Built
+
+- `significance/SignificanceBoundary.java` — the two-tier prohibition, centralised. Previously the
+  forbidden set was duplicated verbatim in `PipelineBase` and `PackageVerifier`, so the two could
+  drift apart silently.
+- `significance/SignificanceInputs.java` — versioned `A_x` / `R_x` supply surface.
+- `FoundryRegistry.significanceInputs(...)` + `RegistryApplication significance-inputs`.
+- `research/UAO_USI/significance/` — `SIGNIFICANCE_INTERFACE.md`, `SIGNIFICANCE_INPUT_MODEL.md`,
+  `TRANSFER_SIGNATURE_CANDIDATE.md` + `.schema.json`.
+
+### Closed
+
+- **G-13** — `A_x` / `R_x` export exists, is versioned, and computes no significance.
+- **G-16** — the programme's eight additional significance field names are now rejected, kept
+  **separate** from ADR-0002's four so a Foundry-local tightening cannot be mistaken for ASA
+  authority. Reported distinctly and tested.
+
+### The most important thing the interface reports
+
+`R_x` is **structurally empty** and says so in a field, not by an empty array. The ASA direction is
+`𝓡_v → S_v → Plan → Schedule` and `𝓡_v` takes `R_x` as an argument — so a significance
+architecture that depends on relationships is currently being handed nothing. `R_x` carries
+`complete: false`, `authorityStatus`, `blockedBy: 17th2nd/ASA#29` and a plain-language
+`consequence` stating that any result computed from these inputs considers the object in isolation.
+
+### Placement correction made during the phase
+
+The transfer-signature candidate schema was first written into `schemas/`, then moved to
+`research/UAO_USI/significance/`. `schemas/` is tree-hashed into every job's `configurationHash`,
+so a research artefact there would have altered the manufacturing configuration of every job —
+making an unratified proposal part of the deterministic identity of real work.
+
+### Two test defects found and fixed (behaviour was correct in both)
+
+1. A crude "payload contains no `R_v`" assertion flagged the `notSupplied` block, which names
+   engine-owned outputs precisely in order to disclaim them. Narrowed to the supplied halves.
+2. The unreconciled-variant refusal fires at *resolution*, not inside the export. The export's own
+   guard is therefore unreachable from the registry path; it is now exercised directly so a future
+   caller bypassing resolution cannot bypass the guard.
+
+### Gap recorded, not filled
+
+**Validity declarations are not modelled.** ASA lifecycle gives a *status*, not a validity
+interval; nothing records "valid from T1 to T2". This is the same missing time model as alias
+time-awareness — one absence surfacing twice.

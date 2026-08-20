@@ -6,6 +6,7 @@ import org.seventeenthsecond.uaofoundry.identity.IdentityReference;
 import org.seventeenthsecond.uaofoundry.identity.IdentityResolution;
 import org.seventeenthsecond.uaofoundry.identity.IdentityResolver;
 import org.seventeenthsecond.uaofoundry.json.Json;
+import org.seventeenthsecond.uaofoundry.significance.SignificanceInputs;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
 import org.seventeenthsecond.uaofoundry.verifier.PackageVerifier;
 
@@ -247,6 +248,46 @@ public final class FoundryRegistry {
             out.put("candidates", candidates);
         }
         return out;
+    }
+
+    /**
+     * Exports the durable {@code A_x} / {@code R_x} inputs for one identity.
+     *
+     * <p>The Foundry supplies inputs to significance and never computes it. Assertions are gathered
+     * from the identity's immutable package occurrences, which is safe only because the export
+     * refuses an identity carrying unreconciled semantic variants — otherwise {@code A_x} would be
+     * assembled by silently unioning mutually inconsistent accounts of one object.
+     */
+    public Map<String,Object> significanceInputs(IdentityReference reference) {
+        Map<String,Object> current = index();
+        IdentityResolution resolution = new IdentityResolver(current).resolve(reference);
+        if (!resolution.isSame()) {
+            throw new IllegalArgumentException("Significance inputs require an exactly resolved identity; resolution was "
+                    + resolution.decision() + " (" + String.join(", ", resolution.reasonCodes()) + ").");
+        }
+        Map<String,Object> identity = null;
+        for (Object raw : array(current.get("identities"), "registry identities")) {
+            Map<String,Object> candidate = object(raw, "registry identity");
+            if (resolution.uid().equals(candidate.get("uid"))) { identity = candidate; break; }
+        }
+        if (identity == null) throw new IllegalArgumentException("Resolved identity is absent from the registry index: " + resolution.uid());
+
+        List<Object> assertions = List.of();
+        for (Object raw : array(identity.get("occurrences"), "registry identity occurrences")) {
+            Map<String,Object> occurrence = object(raw, "registry identity occurrence");
+            Path canonical = root.resolve(string(occurrence.get("canonicalPath"), "canonicalPath")).normalize();
+            if (!canonical.startsWith(packageRoot)) throw new IllegalArgumentException("Occurrence path escapes the registry package root.");
+            for (Object rawUao : array(FileOps.readJson(canonical), "canonical identities")) {
+                Map<String,Object> uao = object(rawUao, "canonical UAO");
+                if (resolution.uid().equals(uao.get("uid"))) {
+                    assertions = array(uao.get("assertions"), "canonical UAO assertions");
+                    break;
+                }
+            }
+            // Every occurrence shares one semantic variant here, so the first is representative.
+            if (!assertions.isEmpty()) break;
+        }
+        return SignificanceInputs.export(identity, assertions);
     }
 
     /** Provider-safe discovery material. No package source content or credentials are exposed here. */

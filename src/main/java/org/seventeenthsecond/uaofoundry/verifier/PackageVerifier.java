@@ -7,6 +7,7 @@ import org.seventeenthsecond.uaofoundry.identity.IdentityKernel;
 import org.seventeenthsecond.uaofoundry.identity.IdentityProjections;
 import org.seventeenthsecond.uaofoundry.identifiers.ResolutionKeys;
 import org.seventeenthsecond.uaofoundry.json.Json;
+import org.seventeenthsecond.uaofoundry.significance.SignificanceBoundary;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
 import org.seventeenthsecond.uaofoundry.util.Hashes;
 import org.seventeenthsecond.uaofoundry.validation.SchemaValidator;
@@ -698,16 +699,7 @@ public final class PackageVerifier {
     }
 
     private void collectForbidden(Object value, String path, List<String> errors) {
-        Set<String> forbidden = Set.of("score", "significance_value", "belief", "stance");
-        if (value instanceof Map<?,?> m) {
-            for (Map.Entry<?,?> e : m.entrySet()) {
-                String key = String.valueOf(e.getKey());
-                if (forbidden.contains(key)) errors.add("Forbidden ASA field at " + path + "." + key);
-                collectForbidden(e.getValue(), path + "." + key, errors);
-            }
-        } else if (value instanceof List<?> l) {
-            for (int i=0;i<l.size();i++) collectForbidden(l.get(i), path + "[" + i + "]", errors);
-        }
+        SignificanceBoundary.collect(value, path, errors);
     }
 
     private static List<String> prefix(List<String> errors, String prefix) { return errors.stream().map(e -> prefix + e).toList(); }
