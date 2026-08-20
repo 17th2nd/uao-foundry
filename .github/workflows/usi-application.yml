@@ -86,6 +86,25 @@ jobs:
           python3 app/packaging/smoke.py http://127.0.0.1:7788 \
             "$RUNNER_TEMP/prefix/lib/usi-foundry/examples/demonstration" --accumulate 10
 
+      - name: Relationship staging is fail-closed and non-canonical (§18)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 app/packaging/smoke.py http://127.0.0.1:7788 \
+            "$RUNNER_TEMP/prefix/lib/usi-foundry/examples/demonstration" \
+            --staging "$PWD/src/test/resources/fixtures/relationship-bearing-cow.json"
+          # The store is a sibling of the registry and every record is labelled non-canonical.
+          test -d "$RUNNER_TEMP/home/staged-relationships"
+          test "$(find "$RUNNER_TEMP/home/staged-relationships" -name 'stg-*.json' | wc -l)" -gt 0
+          if grep -L -E '"certifying"[[:space:]]*:[[:space:]]*false' "$RUNNER_TEMP/home/staged-relationships"/stg-*.json | grep -q .; then
+            echo 'A staged record is missing its non-canonical labelling.' >&2
+            exit 1
+          fi
+          if grep -q 'stg-' "$RUNNER_TEMP/home/registry/index.json"; then
+            echo 'Staged content leaked into the registry index.' >&2
+            exit 1
+          fi
+
       - name: Run evidence is beside the registry, not inside the package
         shell: bash
         run: |

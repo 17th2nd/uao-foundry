@@ -4,11 +4,13 @@
 Standard library only. Drives the real HTTP API so CI exercises the application an operator uses,
 not a mock of it.
 
-  smoke.py <base-url> <demonstration-dir> [--accumulate N]
+  smoke.py <base-url> <demonstration-dir> [--accumulate N] [--staging <fixture-path>]
 
 Default: manufacture -> register -> rediscover by durable external identifier -> reuse -> prove an
 unrelated domain reuses nothing.
 --accumulate N: manufacture identical material N times and assert no package-id collision (P9-1).
+--staging <fixture-path>: manufacture a relationship-bearing bundle and assert the candidate is
+staged as non-canonical memory while publication stays fail-closed (directive §18).
 """
 import json, sys, time, urllib.error, urllib.request
 
@@ -26,7 +28,7 @@ def call(base, path, payload=None):
 def manufacture(base, demo, identity, fixture):
     started = call(base, "/api/manufacture", {
         "identity": identity, "provider": "fixture",
-        "fixture": f"{demo}/{fixture}", "register": True})
+        "fixture": fixture if fixture.startswith("/") else f"{demo}/{fixture}", "register": True})
     token = started["jobToken"]
     for _ in range(600):
         status = call(base, "/api/manufacture/" + token)
@@ -50,6 +52,26 @@ def main():
     accumulate = 0
     if "--accumulate" in sys.argv:
         accumulate = int(sys.argv[sys.argv.index("--accumulate") + 1])
+    staging = None
+    if "--staging" in sys.argv:
+        staging = sys.argv[sys.argv.index("--staging") + 1]
+
+    if staging:
+        # Directive §18: the candidate is retained as non-canonical memory; nothing else moves.
+        before = int(call(base, "/api/status").get("stagedRelationshipCount", 0))
+        result = manufacture(base, demo, "cow", staging)
+        expect(result["publicationStatus"] == "EVIDENCE_INCOMPLETE",
+               "a relationship-bearing package stays evidence-incomplete")
+        expect(result["registryAdmission"] == "REFUSED",
+               "and stays inadmissible — staging buys no publication eligibility")
+        expect(result["relationshipAuthority"] == "URO_TYPE_AUTHORITY_UNAVAILABLE",
+               "the missing authority is named")
+        status = call(base, "/api/status")
+        expect(int(status.get("stagedRelationshipCount", 0)) == before + 1,
+               "the candidate was staged as exactly one new record")
+        expect(status["registryVerification"] == "PASS",
+               "the registry is untouched by staging")
+        return 0
 
     if accumulate:
         # Count the delta, not the total: this step may run against a store that already holds

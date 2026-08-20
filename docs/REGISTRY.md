@@ -146,6 +146,8 @@ Registry-aware automatic manufacture refuses a matched `MULTIPLE_UNRECONCILED_VA
 
 Registry admission does not cure unresolved URO type authority. Packages with publication decisions that are not reuse-eligible are rejected, and the current Foundry relationship fail-closed policy remains unchanged.
 
+A non-canonical staging store for retained relationship candidates lives **beside** the registry root (`staged-relationships/`), never inside it. Nothing staged enters `index.json`, influences admission, or is consulted by verification; the registry index remains derived from packages and identity operations only. See `RELATIONSHIP-STAGING.md`.
+
 See `UPSTREAM-DEPENDENCIES.md` and Issue #3.
 
 ## Next step: semantic delta

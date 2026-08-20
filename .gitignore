@@ -8,3 +8,5 @@ work/*
 !work/.gitkeep
 dist/*
 !dist/.gitkeep
+benchmark/**/*.class
+__pycache__/

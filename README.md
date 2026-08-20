@@ -107,6 +107,16 @@ The model/provider cannot simply declare canonical reuse. `registry://` evidence
 
 See [`docs/SEMANTIC-DELTA.md`](docs/SEMANTIC-DELTA.md).
 
+### Relationship staging (non-canonical)
+
+Identity-bound relationship candidates retained by a manufacture are additionally copied into a
+content-addressed staging store **beside** the registry, so persistent relationship reconstruction
+can be studied while `17th2nd/ASA#29` remains open. Every staged record is schema-pinned as
+`NON_CANONICAL_CANDIDATE_MEMORY` with `certifying: false`; staging changes no publication decision,
+buys no registry admission, and is consulted by nothing in manufacture, verification or admission.
+
+See [`docs/RELATIONSHIP-STAGING.md`](docs/RELATIONSHIP-STAGING.md).
+
 ### Claude Code adapter
 
 [`adapters/claude-code/`](adapters/claude-code/) supplies a bounded live adapter for an installed Claude Code CLI. Claude is used as a research/evidence provider; Java Foundry still owns validation, identity resolution, canonicalisation, verification and publication.
@@ -234,7 +244,7 @@ The dependency is tracked in:
 - `17th2nd/uao-foundry#3`;
 - `17th2nd/ASA#29`.
 
-Until upstream authority exists, the Foundry does **not** invent one. A non-empty unsupported relationship candidate is preserved as unresolved evidence, excluded from canonical URO publication, and forces an incomplete publication status. The Claude adapter rejects such candidates even earlier.
+Until upstream authority exists, the Foundry does **not** invent one. A non-empty unsupported relationship candidate is preserved as unresolved evidence, excluded from canonical URO publication, and forces an incomplete publication status. The Claude adapter rejects such candidates even earlier. Retained candidates are additionally staged as non-canonical memory beside the registry ([`docs/RELATIONSHIP-STAGING.md`](docs/RELATIONSHIP-STAGING.md)); this studies the gap and does not close it.
 
 This limitation does not block UAO identity/evidence manufacture, package verification, registry admission or semantic-delta reuse when no unsupported relationship candidate is required.
 

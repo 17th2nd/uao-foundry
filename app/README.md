@@ -36,11 +36,12 @@ Uninstall is `rm -rf ~/.local/bin/usi-foundry ~/.local/lib/usi-foundry`. Your re
 
 ```
 ~/.usi-foundry/
-├── registry/   packages/ · identity-operations/ · index.json
-├── runs/       run evidence, beside the registry (ADR-0006)
-├── packages/   manufactured package output
-├── cache/      job working directories; safe to delete
-├── config/     config.json
+├── registry/               packages/ · identity-operations/ · index.json
+├── runs/                   run evidence, beside the registry (ADR-0006)
+├── staged-relationships/   non-canonical relationship candidate memory (docs/RELATIONSHIP-STAGING.md)
+├── packages/               manufactured package output
+├── cache/                  job working directories; safe to delete
+├── config/                 config.json
 └── logs/
 ```
 
@@ -78,6 +79,7 @@ property, and a web framework to serve six screens would trade it for nothing.
 | `GET` | `/api/identity/{ref}` | exact addressing: uid · resolution key · `scheme:identifier` · alias |
 | `GET` | `/api/package/{packageId}` | package inspector |
 | `GET` | `/api/significance/{ref}` | `A_x` / `R_x` debugging view — never computes significance |
+| `GET` | `/api/staged-relationships/{ref}` | staged candidate neighbourhood of an exactly resolved identity — non-canonical memory, never UROs |
 | `GET` | `/api/runs` | manufacturing history |
 
 Errors carry a classified `error` code and, where useful, `guidance` (§25). "Manufacture failed" is

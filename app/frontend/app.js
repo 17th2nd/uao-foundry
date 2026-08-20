@@ -341,6 +341,8 @@ async function loadIdentity() {
       target.appendChild(rel);
     }
 
+    await renderStagedNeighbourhood(target, i.usiId);
+
     const sig = el('fieldset', 'panel');
     sig.appendChild(el('legend', null, 'ASA input (A_x / R_x)'));
     const sigBtn = el('button', null, 'SHOW SIGNIFICANCE INPUTS');
@@ -359,6 +361,50 @@ async function loadIdentity() {
   } catch (error) {
     target.replaceChildren(notice((error.body || {}).error || 'ERROR', error.message, (error.body || {}).guidance, true));
   }
+}
+
+/*
+  Staged relationship candidates are memory, not authority. The panel exists so an operator can see
+  what has accumulated for an identity, and its wording is part of the contract: nothing here may
+  read as a canonical URO, because none exists (17th2nd/ASA#29).
+*/
+async function renderStagedNeighbourhood(target, usiId) {
+  const panel = el('fieldset', 'panel');
+  panel.appendChild(el('legend', null, 'Staged relationship candidates (non-canonical)'));
+  try {
+    const n = await api('/api/staged-relationships/' + encodeURIComponent(usiId));
+    const edges = n.edges || [];
+    if (!edges.length) {
+      panel.appendChild(el('div', 'empty',
+        'No staged relationship candidates mention this identity. That is not evidence none exist.'));
+      target.appendChild(panel);
+      return;
+    }
+    edges.forEach((e) => {
+      const card = el('div', 'card');
+      card.appendChild(el('h3', null, e.typeVersion));
+      card.appendChild(el('p', 'sub',
+        e.stagedId + '  ·  from package ' + e.packageId + '  ·  recorded ' + e.recordedAt));
+      (e.participants || []).forEach((pt) => {
+        card.appendChild(el('span', pt.binding === 'RESOLVED' ? 'tag pass' : 'tag hold',
+          pt.role + ' → ' + (pt.uaoId || 'unresolved')));
+      });
+      card.appendChild(el('span', 'tag hold', e.identityBindingStatus));
+      card.appendChild(el('span', 'tag hold', 'certifying: false'));
+      (e.sourceRefs || []).forEach((s) => card.appendChild(el('span', 'tag', 'evidence ' + s)));
+      panel.appendChild(card);
+    });
+    if ((n.neighbourUids || []).length) {
+      panel.appendChild(el('p', 'hint', 'Candidate neighbours: ' + n.neighbourUids.join(', ')));
+    }
+    panel.appendChild(notice(n.authorityStatus,
+      'Candidate relationship memory only — asserted, not governed. No canonical URO exists and '
+        + 'none is implied; publication remains fail-closed pending 17th2nd/ASA#29.', null, false));
+  } catch (error) {
+    panel.appendChild(notice((error.body || {}).error || 'ERROR', error.message,
+      (error.body || {}).guidance, true));
+  }
+  target.appendChild(panel);
 }
 
 /* ── package inspector ─────────────────────────────────────────────────── */
@@ -495,6 +541,7 @@ async function loadStatus() {
       ['Home', s.home],
       ['Registry', s.registry],
       ['Run store', s.runs],
+      ['Staged relationships (non-canonical)', s.stagedRelationships],
       ['Package output', s.packages],
       ['Schema directory', s.schemaDir],
       ['Registry verification', s.registryVerification, s.registryVerification === 'PASS' ? 'verdict pass' : 'verdict fail'],
@@ -504,9 +551,13 @@ async function loadStatus() {
     panel.appendChild(counters([
       ['Packages', s.packageCount], ['Identities', s.identityCount],
       ['Unreconciled', s.unreconciledIdentities], ['Non-active', s.nonActiveIdentities],
-      ['Identity operations', (s.identityOperations || []).length], ['Runs', s.runCount]
+      ['Identity operations', (s.identityOperations || []).length], ['Runs', s.runCount],
+      ['Staged candidates', s.stagedRelationshipCount]
     ]));
     (s.registryErrors || []).forEach((e) => panel.appendChild(notice('REGISTRY ERROR', e, null, true)));
+    if (s.stagedRelationshipStoreError) {
+      panel.appendChild(notice('STAGING STORE FAIL-CLOSED', s.stagedRelationshipStoreError, null, true));
+    }
     target.appendChild(panel);
 
     if ((s.identityOperations || []).length) {

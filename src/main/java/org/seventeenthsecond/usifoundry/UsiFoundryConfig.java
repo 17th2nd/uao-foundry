@@ -42,7 +42,7 @@ public final class UsiFoundryConfig {
     public UsiFoundryConfig(Path home) {
         this.home = home.toAbsolutePath().normalize();
         try {
-            for (Path directory : new Path[]{registry(), runs(), cache(), packages(), configDir(), logs()}) {
+            for (Path directory : new Path[]{registry(), runs(), stagedRelationships(), cache(), packages(), configDir(), logs()}) {
                 Files.createDirectories(directory);
             }
         } catch (Exception ex) {
@@ -60,6 +60,11 @@ public final class UsiFoundryConfig {
     public Path home() { return home; }
     public Path registry() { return home.resolve("registry"); }
     public Path runs() { return home.resolve("runs"); }
+    /**
+     * Non-canonical staged relationship candidates (§18). A sibling of the registry, never a child:
+     * keeping it outside the registry root makes "this is not registry content" structural.
+     */
+    public Path stagedRelationships() { return home.resolve("staged-relationships"); }
     public Path cache() { return home.resolve("cache"); }
     public Path packages() { return home.resolve("packages"); }
     public Path configDir() { return home.resolve("config"); }
@@ -93,6 +98,7 @@ public final class UsiFoundryConfig {
         out.put("home", home.toString());
         out.put("registry", registry().toString());
         out.put("runs", runs().toString());
+        out.put("stagedRelationships", stagedRelationships().toString());
         out.put("packages", packages().toString());
         out.put("schemaDir", schemaDir().toString());
         out.put("claudeCommandConfigured", claudeCommand() != null);

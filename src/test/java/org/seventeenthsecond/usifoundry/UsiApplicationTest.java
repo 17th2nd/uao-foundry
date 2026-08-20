@@ -209,6 +209,53 @@ class UsiApplicationTest {
     }
 
     @Test
+    void stagedCandidatesAreVisibleFromAResolvedIdentityAndNeverCanonical() throws Exception {
+        // A relationship-bearing manufacture is refused admission but its candidate is staged...
+        Map<String,Object> bearing = manufactureFrom("cow",
+                Path.of("src/test/resources/fixtures/relationship-bearing-cow.json"), true);
+        assertEquals("REFUSED", bearing.get("registryAdmission"));
+
+        // ...and the same identity, registered from a relationship-free observation, reaches it.
+        Map<String,Object> registered = manufactureFrom("cow",
+                Path.of("src/test/resources/fixtures/biological-cow.json"), true);
+        assertEquals("REGISTERED", registered.get("registryAdmission"));
+        String usiId = String.valueOf(registered.get("usiId"));
+
+        Map<String,Object> neighbourhood = get("/api/staged-relationships/" + usiId);
+        assertEquals(1, array(neighbourhood.get("edges")).size());
+        assertEquals(Boolean.FALSE, neighbourhood.get("certifying"));
+        assertEquals("URO_TYPE_AUTHORITY_UNAVAILABLE", neighbourhood.get("authorityStatus"));
+
+        Map<String,Object> edge = object(array(neighbourhood.get("edges")).getFirst());
+        assertEquals("NON_CANONICAL_CANDIDATE_MEMORY", edge.get("status"));
+        List<Object> participants = array(edge.get("participants"));
+        assertTrue(participants.stream().map(UsiApplicationTest::object)
+                        .anyMatch(p -> usiId.equals(p.get("uaoId"))),
+                "the staged edge must be bound to the persistent identity it was found from");
+        assertTrue(participants.stream().map(UsiApplicationTest::object)
+                        .anyMatch(p -> "UNRESOLVED".equals(p.get("binding")) && p.get("uaoId") == null),
+                "an unresolved participant must remain unresolved, never forced");
+
+        // Staging never enters canonical surfaces: the registry still verifies, no URO exists,
+        // and no significance-like field rides along.
+        assertEquals("PASS", get("/api/status").get("registryVerification"));
+        List<String> violations = new ArrayList<>();
+        SignificanceBoundary.collect(neighbourhood, "$staged", violations);
+        assertEquals(List.of(), violations);
+        assertEquals(1, ((java.math.BigDecimal) get("/api/status").get("stagedRelationshipCount")).intValue());
+    }
+
+    @Test
+    void anUnresolvedReferenceIsRefusedAStagedNeighbourhood() throws Exception {
+        manufactureFrom("cow",
+                Path.of("src/test/resources/fixtures/relationship-bearing-cow.json"), false);
+        // Nothing was registered, so the reference cannot resolve — and staging must not guess.
+        HttpResponse<String> response = send("GET", "/api/staged-relationships/cow", null);
+        assertEquals(409, response.statusCode());
+        assertEquals("IDENTITY_AMBIGUITY", object(Json.parse(response.body())).get("error"));
+    }
+
+    @Test
     void errorsAreClassifiedRatherThanCollapsed() throws Exception {
         // An operator who picked the wrong evidence bundle must be sent to the bundle, not to the
         // provider timeout settings.

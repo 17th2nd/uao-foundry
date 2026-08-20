@@ -104,6 +104,8 @@ public final class UsiApiServer {
                 respond(exchange, 200, service.verifyRegistry());
             } else if (path.startsWith("/api/identity/") && method.equals("GET")) {
                 respond(exchange, 200, service.identity(segment(path, "/api/identity/")));
+            } else if (path.startsWith("/api/staged-relationships/") && method.equals("GET")) {
+                respond(exchange, 200, service.stagedRelationships(segment(path, "/api/staged-relationships/")));
             } else if (path.startsWith("/api/significance/") && method.equals("GET")) {
                 respond(exchange, 200, service.significanceInputs(segment(path, "/api/significance/")));
             } else if (path.startsWith("/api/package/") && method.equals("GET")) {

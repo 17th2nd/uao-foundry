@@ -14,6 +14,7 @@ import org.seventeenthsecond.uaofoundry.reuse.RegistryAwareCommandProvider;
 import org.seventeenthsecond.uaofoundry.reuse.ReuseAnalyzer;
 import org.seventeenthsecond.uaofoundry.runs.RunRecord;
 import org.seventeenthsecond.uaofoundry.runs.RunStore;
+import org.seventeenthsecond.uaofoundry.staging.StagedRelationshipStore;
 import org.seventeenthsecond.uaofoundry.usi.UsiIdentifiers;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
 import org.seventeenthsecond.uaofoundry.util.Hashes;
@@ -58,11 +59,13 @@ public final class UsiFoundryService {
     private final UsiFoundryConfig config;
     private final FoundryRegistry registry;
     private final RunStore runStore;
+    private final StagedRelationshipStore stagedRelationships;
 
     public UsiFoundryService(UsiFoundryConfig config) {
         this.config = config;
         this.registry = new FoundryRegistry(config.registry(), config.schemaDir());
         this.runStore = new RunStore(config.runs());
+        this.stagedRelationships = new StagedRelationshipStore(config.stagedRelationships());
         initialiseRegistry();
     }
 
@@ -171,6 +174,12 @@ public final class UsiFoundryService {
                 admissionDetail = ex.getMessage();
             }
         }
+
+        // Directive §18: retain identity-bound relationship candidates so persistent relationship
+        // reconstruction can be studied while ASA#29 blocks accumulation. This changes no
+        // publication decision and enters no registry index -- the package above is still
+        // EVIDENCE_INCOMPLETE and still inadmissible if it carries a relationship candidate.
+        stagedRelationships.stageFrom(result.packagePath(), now());
 
         List<String> usiIds = new ArrayList<>();
         for (Object raw : Json.array(FileOps.readJson(result.packagePath().resolve("canonical-identities.json")), "identities")) {
@@ -449,6 +458,13 @@ public final class UsiFoundryService {
         out.put("nonActiveIdentities", BigDecimal.valueOf(nonActive));
         out.put("identityOperations", index.get("identityOperations"));
         out.put("runCount", BigDecimal.valueOf(runStore.list().size()));
+        try {
+            out.put("stagedRelationshipCount", BigDecimal.valueOf(stagedRelationships.list().size()));
+        } catch (IllegalArgumentException ex) {
+            // The store fails closed on a record that lost its non-canonical labelling. That must
+            // be visible to the operator, not fatal to the rest of the status view.
+            out.put("stagedRelationshipStoreError", ex.getMessage());
+        }
         out.put("relationshipAuthority", "URO_TYPE_AUTHORITY_UNAVAILABLE");
         out.put("relationshipAuthorityIssue", "17th2nd/ASA#29");
         return out;
@@ -457,6 +473,24 @@ public final class UsiFoundryService {
     public Map<String,Object> verifyRegistry() {
         FoundryRegistry.VerificationResult result = registry.verify();
         return result.toMap();
+    }
+
+    /**
+     * The staged candidate relationship neighbourhood of one identity (§18).
+     *
+     * <p>Explicitly non-canonical. These edges were asserted by providers and bound to persistent
+     * identities; none is governed, and no URO exists. The view is here so persistent relationship
+     * reconstruction can be measured while ASA#29 is open, not so it can be believed.
+     */
+    public Map<String,Object> stagedRelationships(String reference) {
+        Map<String,Object> record = registry.identityRecord(referenceOf(reference));
+        Map<String,Object> resolution = Json.object(record.get("resolution"), "resolution");
+        if (!"SAME".equals(resolution.get("decision"))) {
+            throw new UsiFoundryException(UsiFoundryException.IDENTITY_AMBIGUITY,
+                    "Staged relationships require an exactly resolved identity; resolution was "
+                            + resolution.get("decision") + ".");
+        }
+        return stagedRelationships.neighbourhood(String.valueOf(resolution.get("uid")));
     }
 
     /** {@code A_x} / {@code R_x} debugging view (§20). The application never computes significance. */
