@@ -60,6 +60,11 @@ Reporting these as "no effect" would be a finding the experiment did not earn. T
 missing upstream authority, and no Foundry work removes the blockage. See
 `../integration/ASA_INTERFACE.md §2`.
 
+> **Update 2026-08-21:** re-run over §18 *staged candidate memory* (canonical authority still
+> absent): H1 SUPPORTED mechanically, H2 NOT SUPPORTED and negative beyond the noise floor on the
+> LLM lane. Pre-registration and results: `H1_H2_STAGED_RERUN_PREREGISTRATION.md`,
+> `H1_H2_STAGED_RERUN_RESULTS.md`. This section's Phase-10 text is preserved unchanged.
+
 ## H4 — MEASURED, HEAVILY CONFOUNDED
 
 > *Persistent identity improves negative-space reasoning.*

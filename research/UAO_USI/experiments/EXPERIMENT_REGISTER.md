@@ -10,6 +10,8 @@
 | E-3 | Benchmark lanes C/D/E vs frozen A/B | yes | **B = C = D** on task success | `temp/benchmark/lane_analysis.json` |
 | E-4 | Negative-space accuracy by lane | yes | B 0.70 → E 0.90, confounded | same |
 | E-5 | Context cost by lane | yes | +37% / +56% / +80% over B | same |
+| E-6 | H1 re-run: reconstruction from staged memory (§18) | no | **SUPPORTED** — 4/4 limbs; 558 manufactures, 0 unintended failures | `temp/benchmark/staged_h1.json` |
+| E-7 | H2 re-run: staged-graph precision + lane PID_F | yes | **NOT SUPPORTED** — graph ≪ extraction; F −0.167 vs B, beyond noise floor | `temp/benchmark/staged_rerun_analysis.json` |
 
 ## E-1 — Acceptance demonstration
 
@@ -84,3 +86,20 @@ Noise floor 0.083 (one run of twelve). Registry lookup median 0.214 s. Human int
   `ResolutionKeys`), but no experiment demonstrated two models resolving the same identity.
 - **Cross-modal (§19)** — out of scope for the Alpha; the schema admits any `ext:` scheme, so
   nothing forecloses it.
+
+## E-6 / E-7 — H1/H2 re-run over staged candidate memory (2026-08-21)
+
+Run after P9-1 was resolved and the §18 staging store landed, under a pre-registration written
+before any experiment code (`../falsification/H1_H2_STAGED_RERUN_PREREGISTRATION.md`). Session 1
+built six per-task registries + staged stores through the running USI Foundry application: 558
+manufactures, 0 unintended failures, accumulation depth 3 everywhere.
+
+- **E-6 (H1):** a restarted process answers every reference-graph query from the store, byte-equal
+  to fresh extraction, reading 0 repository bytes. SUPPORTED on all four limbs — with the recorded
+  caveat that at 19-file scale re-extraction is *faster*; the win is durability, not latency.
+- **E-7 (H2):** the staged reference graph predicts relevant files far worse than relational
+  extraction (precision 0.417 vs 0.625, recall 0.333 vs 0.806), and lane PID_F (B's file set +
+  staged edges) scored 0.583 vs B's 0.75 — negative beyond the noise floor, both lost runs on one
+  model, mechanisms recorded. NOT SUPPORTED.
+
+Full record: `../falsification/H1_H2_STAGED_RERUN_RESULTS.md`.
