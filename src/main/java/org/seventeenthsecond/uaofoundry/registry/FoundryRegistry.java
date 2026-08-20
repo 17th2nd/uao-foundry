@@ -1,6 +1,12 @@
 package org.seventeenthsecond.uaofoundry.registry;
 
+import org.seventeenthsecond.uaofoundry.identity.ExternalIdentifiers;
+import org.seventeenthsecond.uaofoundry.identity.IdentityOperation;
+import org.seventeenthsecond.uaofoundry.identity.IdentityReference;
+import org.seventeenthsecond.uaofoundry.identity.IdentityResolution;
+import org.seventeenthsecond.uaofoundry.identity.IdentityResolver;
 import org.seventeenthsecond.uaofoundry.json.Json;
+import org.seventeenthsecond.uaofoundry.significance.SignificanceInputs;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
 import org.seventeenthsecond.uaofoundry.verifier.PackageVerifier;
 
@@ -26,12 +32,14 @@ public final class FoundryRegistry {
 
     private final Path root;
     private final Path packageRoot;
+    private final Path operationRoot;
     private final Path indexPath;
     private final PackageVerifier verifier;
 
     public FoundryRegistry(Path root, Path schemaDir) {
         this.root = root.toAbsolutePath().normalize();
         this.packageRoot = this.root.resolve("packages");
+        this.operationRoot = this.root.resolve("identity-operations");
         this.indexPath = this.root.resolve("index.json");
         this.verifier = new PackageVerifier(schemaDir);
     }
@@ -63,6 +71,58 @@ public final class FoundryRegistry {
             return new RegistrationResult(packageId, digest, destination, alreadyPresent,
                     array(rebuilt.get("packages"), "index packages").size(),
                     array(rebuilt.get("identities"), "index identities").size());
+        } catch (RuntimeException ex) {
+            if (!alreadyPresent) FileOps.deleteTree(destination);
+            throw ex;
+        }
+    }
+
+    /**
+     * Records an identity lifecycle operation in the append-preserving journal.
+     *
+     * <p>The journal sits beside {@code packages/} as a second immutable content-addressed store.
+     * Operations cannot live inside packages — a package is manufactured from provider evidence,
+     * whereas an operation is a governed decision about relations between already-registered
+     * identities — and they cannot live in {@code index.json}, which is fully derived and rebuilt
+     * on every read. A separate immutable store keeps the derived-index invariant intact.
+     *
+     * <p>Nothing is ever deleted or edited. Recording {@code SUPERSEDE A → B} leaves every package
+     * that mentions {@code A} byte-identical; only the derived lifecycle view changes.
+     *
+     * <p>Admission is transactional and fail-closed. The rebuilt index is what validates the
+     * operation against everything already recorded, so a contradictory operation is rejected and
+     * its file removed before it can influence anything.
+     */
+    public OperationResult applyIdentityOperation(IdentityOperation operation) {
+        Map<String,Object> before = index(); // verified read; a tampered registry fails before mutation
+        Set<String> registered = new LinkedHashSet<>();
+        for (Object raw : array(before.get("identities"), "registry identities")) {
+            registered.add(string(object(raw, "registry identity").get("uid"), "uid"));
+        }
+        for (String uid : operation.subjects()) {
+            if (!registered.contains(uid)) throw new IllegalArgumentException("Identity operation subject is not a registered identity: " + uid);
+        }
+        for (String uid : operation.targets()) {
+            if (!registered.contains(uid)) throw new IllegalArgumentException("Identity operation target is not a registered identity: " + uid);
+        }
+
+        Path destination = operationRoot.resolve(operation.operationId() + ".json").normalize();
+        if (!destination.startsWith(operationRoot)) throw new IllegalArgumentException("Operation id escapes the journal root.");
+        boolean alreadyPresent = Files.isRegularFile(destination);
+        if (alreadyPresent) {
+            // Content-addressed: an identical id means identical bytes, so re-recording is a no-op.
+            if (!Json.canonical(FileOps.readJson(destination)).equals(Json.canonical(operation.toMap()))) {
+                throw new IllegalArgumentException("Identity operation id collision with different content: " + operation.operationId());
+            }
+        } else {
+            FileOps.writeJson(destination, operation.toMap());
+        }
+
+        try {
+            Map<String,Object> rebuilt = rebuildIndex();
+            FileOps.writeJson(indexPath, rebuilt);
+            return new OperationResult(operation.operationId(), operation.operation().name(), alreadyPresent,
+                    array(rebuilt.get("identityOperations"), "index identityOperations").size());
         } catch (RuntimeException ex) {
             if (!alreadyPresent) FileOps.deleteTree(destination);
             throw ex;
@@ -101,6 +161,11 @@ public final class FoundryRegistry {
                     if (stream.findAny().isPresent()) throw new IllegalArgumentException("Registry has packages but no verified index; rebuild explicitly.");
                 } catch (java.io.IOException ex) { throw new IllegalArgumentException("Unable to inspect registry packages: " + ex.getMessage(), ex); }
             }
+            if (Files.isDirectory(operationRoot)) {
+                try (var stream = Files.list(operationRoot)) {
+                    if (stream.findAny().isPresent()) throw new IllegalArgumentException("Registry has identity operations but no verified index; rebuild explicitly.");
+                } catch (java.io.IOException ex) { throw new IllegalArgumentException("Unable to inspect registry packages: " + ex.getMessage(), ex); }
+            }
             return emptyIndex();
         }
         Map<String,Object> stored = object(FileOps.readJson(indexPath), "registry index");
@@ -131,6 +196,7 @@ public final class FoundryRegistry {
 
             if (normalize(uid).equals(normalized)) kinds.add("UID");
             if (normalize(resolutionKey).equals(normalized)) kinds.add("RESOLUTION_KEY");
+            if (externalIdentifierTokens(identity).contains(query.strip())) kinds.add("EXTERNAL_IDENTIFIER");
             if (labels.stream().map(FoundryRegistry::normalize).anyMatch(normalized::equals)) kinds.add("LABEL");
             if (aliases.stream().map(FoundryRegistry::normalize).anyMatch(normalized::equals)) kinds.add("ALIAS");
             if (kinds.isEmpty() && tokenMatch(normalized, uid, resolutionKey, labels, aliases)) kinds.add("TOKEN");
@@ -145,6 +211,83 @@ public final class FoundryRegistry {
             out.add(record);
         }
         return out;
+    }
+
+    /**
+     * Resolves one reference to a single registered identity and returns its complete record:
+     * kernel material, semantic-variant state, every state version, every package occurrence and
+     * the full decision history.
+     *
+     * <p>This is the persistent-identity addressing surface. {@link #search(String)} ranks possible
+     * matches for discovery, including by loose token overlap; this method instead answers "give me
+     * <em>that</em> identity" and therefore refuses anything short of an exact, unambiguous address.
+     *
+     * <p>The resolution itself is delegated to {@link IdentityResolver}, so a lookup obeys exactly
+     * the same evidence rules as a manufacture-time decision: an alias never resolves, an ambiguous
+     * external identifier never picks a winner, and an identity with unreconciled semantic variants
+     * refuses to resolve at all. The unresolved outcome is returned as data, not thrown, because a
+     * caller asking "do you know this?" is entitled to a considered "not well enough".
+     */
+    public Map<String,Object> identityRecord(IdentityReference reference) {
+        Map<String,Object> current = index();
+        IdentityResolution resolution = new IdentityResolver(current).resolve(reference);
+        Map<String,Object> out = new LinkedHashMap<>();
+        out.put("registryVersion", REGISTRY_VERSION);
+        out.put("resolution", resolution.toMap());
+        if (resolution.isSame()) {
+            for (Object raw : array(current.get("identities"), "registry identities")) {
+                Map<String,Object> identity = object(raw, "registry identity");
+                if (resolution.uid().equals(identity.get("uid"))) { out.put("identity", deepCopy(identity)); break; }
+            }
+        } else {
+            List<Object> candidates = new ArrayList<>();
+            for (Object raw : array(current.get("identities"), "registry identities")) {
+                Map<String,Object> identity = object(raw, "registry identity");
+                if (resolution.candidateUids().contains(String.valueOf(identity.get("uid")))) candidates.add(deepCopy(identity));
+            }
+            out.put("candidates", candidates);
+        }
+        return out;
+    }
+
+    /**
+     * Exports the durable {@code A_x} / {@code R_x} inputs for one identity.
+     *
+     * <p>The Foundry supplies inputs to significance and never computes it. Assertions are gathered
+     * from the identity's immutable package occurrences, which is safe only because the export
+     * refuses an identity carrying unreconciled semantic variants — otherwise {@code A_x} would be
+     * assembled by silently unioning mutually inconsistent accounts of one object.
+     */
+    public Map<String,Object> significanceInputs(IdentityReference reference) {
+        Map<String,Object> current = index();
+        IdentityResolution resolution = new IdentityResolver(current).resolve(reference);
+        if (!resolution.isSame()) {
+            throw new IllegalArgumentException("Significance inputs require an exactly resolved identity; resolution was "
+                    + resolution.decision() + " (" + String.join(", ", resolution.reasonCodes()) + ").");
+        }
+        Map<String,Object> identity = null;
+        for (Object raw : array(current.get("identities"), "registry identities")) {
+            Map<String,Object> candidate = object(raw, "registry identity");
+            if (resolution.uid().equals(candidate.get("uid"))) { identity = candidate; break; }
+        }
+        if (identity == null) throw new IllegalArgumentException("Resolved identity is absent from the registry index: " + resolution.uid());
+
+        List<Object> assertions = List.of();
+        for (Object raw : array(identity.get("occurrences"), "registry identity occurrences")) {
+            Map<String,Object> occurrence = object(raw, "registry identity occurrence");
+            Path canonical = root.resolve(string(occurrence.get("canonicalPath"), "canonicalPath")).normalize();
+            if (!canonical.startsWith(packageRoot)) throw new IllegalArgumentException("Occurrence path escapes the registry package root.");
+            for (Object rawUao : array(FileOps.readJson(canonical), "canonical identities")) {
+                Map<String,Object> uao = object(rawUao, "canonical UAO");
+                if (resolution.uid().equals(uao.get("uid"))) {
+                    assertions = array(uao.get("assertions"), "canonical UAO assertions");
+                    break;
+                }
+            }
+            // Every occurrence shares one semantic variant here, so the first is representative.
+            if (!assertions.isEmpty()) break;
+        }
+        return SignificanceInputs.export(identity, assertions);
     }
 
     /** Provider-safe discovery material. No package source content or credentials are exposed here. */
@@ -223,6 +366,36 @@ public final class FoundryRegistry {
                             "packages/" + packageId));
                     if (previous != null) throw new IllegalArgumentException("Duplicate package id in registry: " + packageId);
 
+                    Map<String,List<Map<String,Object>>> decisionsByUid = new LinkedHashMap<>();
+                    Path resolutionFile = dir.resolve("identity-resolution.json");
+                    if (Files.isRegularFile(resolutionFile)) {
+                        Object recorded = object(FileOps.readJson(resolutionFile), "identity resolution").get("identityDecisions");
+                        if (recorded instanceof List<?> list) {
+                            for (Object rawDecision : list) {
+                                Map<String,Object> decision = object(rawDecision, "identity decision");
+                                decisionsByUid.computeIfAbsent(string(decision.get("uaoId"), "decision uaoId"),
+                                        ignored -> new ArrayList<>()).add(decision);
+                            }
+                        }
+                    }
+                    Map<String,List<Map<String,Object>>> bindingsByUid = new LinkedHashMap<>();
+                    Path unresolvedFile = dir.resolve("unresolved-items.json");
+                    if (Files.isRegularFile(unresolvedFile)) {
+                        for (Object rawItem : array(FileOps.readJson(unresolvedFile), "unresolved items")) {
+                            Map<String,Object> item = object(rawItem, "unresolved item");
+                            if (!(item.get("participants") instanceof List<?> participants)) continue;
+                            for (Object rawParticipant : participants) {
+                                Map<String,Object> participant = object(rawParticipant, "unresolved participant");
+                                if (!(participant.get("uaoId") instanceof String participantUid)) continue;
+                                bindingsByUid.computeIfAbsent(participantUid, ignored -> new ArrayList<>())
+                                        .add(Map.of(
+                                                "candidateId", String.valueOf(item.get("candidateId")),
+                                                "typeVersion", String.valueOf(item.get("typeVersion")),
+                                                "role", String.valueOf(participant.get("role")),
+                                                "status", String.valueOf(item.get("identityBindingStatus"))));
+                            }
+                        }
+                    }
                     for (Object raw : array(FileOps.readJson(dir.resolve("canonical-identities.json")), "canonical identities")) {
                         Map<String,Object> uao = object(raw, "canonical UAO");
                         String uid = string(uao.get("uid"), "uid");
@@ -231,21 +404,100 @@ public final class FoundryRegistry {
                         String label = string(foundryIdentity.get("canonical_label"), "canonical_label");
                         String resolutionKey = string(foundryIdentity.get("resolution_key"), "resolution_key");
                         List<String> aliases = strings(foundryIdentity.get("aliases"), "aliases");
-                        identities.computeIfAbsent(uid, ignored -> new IdentityAggregate(uid, resolutionKey))
-                                .addOccurrence(label, aliases, packageId,
+                        IdentityAggregate aggregate = identities.computeIfAbsent(uid, ignored -> new IdentityAggregate(uid, resolutionKey));
+                        aggregate.setSemanticType(foundryIdentity.get("semantic_type") instanceof String t ? t : null);
+                        aggregate.addExternalIdentifiers(ExternalIdentifiers.requireCanonical(
+                                foundryIdentity.get("external_identifiers"), "Registered identity external_identifiers"));
+                        for (Map<String,Object> decision : decisionsByUid.getOrDefault(uid, List.of())) {
+                            aggregate.addDecision(packageId, decision);
+                        }
+                        for (Map<String,Object> binding : bindingsByUid.getOrDefault(uid, List.of())) {
+                            aggregate.addRelationshipBinding(packageId, binding.get("candidateId").toString(),
+                                    binding.get("typeVersion").toString(), binding.get("role").toString(),
+                                    binding.get("status").toString());
+                        }
+                        aggregate.addOccurrence(label, aliases, packageId,
                                         "packages/" + packageId + "/canonical-identities.json",
-                                        SemanticVariants.digest(uao));
+                                        SemanticVariants.digest(uao),
+                                        string(foundryIdentity.get("state_version"), "state_version"));
                     }
                 }
             } catch (java.io.IOException ex) {
                 throw new IllegalArgumentException("Unable to scan registry packages: " + ex.getMessage(), ex);
             }
         }
+        List<IdentityOperation> operations = readOperations();
+        applyLifecycle(identities, operations);
+
         Map<String,Object> out = new LinkedHashMap<>();
         out.put("registryVersion", REGISTRY_VERSION);
         out.put("packages", packages.values().stream().map(PackageRecord::toMap).toList());
         out.put("identities", identities.values().stream().map(IdentityAggregate::toMap).toList());
+        out.put("identityOperations", operations.stream().map(IdentityOperation::toMap).toList());
         return out;
+    }
+
+    /** Reads the append-preserving journal, re-deriving every content address on the way in. */
+    private List<IdentityOperation> readOperations() {
+        List<IdentityOperation> operations = new ArrayList<>();
+        if (!Files.isDirectory(operationRoot)) return operations;
+        try (var stream = Files.list(operationRoot)) {
+            for (Path file : stream.filter(Files::isRegularFile).sorted().toList()) {
+                String name = file.getFileName().toString();
+                if (!name.endsWith(".json")) throw new IllegalArgumentException("Unexpected file in the identity-operation journal: " + name);
+                IdentityOperation operation = IdentityOperation.fromMap(object(FileOps.readJson(file), "identity operation"));
+                if (!name.equals(operation.operationId() + ".json")) {
+                    throw new IllegalArgumentException("Identity operation file name does not match its content address: " + name);
+                }
+                operations.add(operation);
+            }
+        } catch (java.io.IOException ex) {
+            throw new IllegalArgumentException("Unable to read the identity-operation journal: " + ex.getMessage(), ex);
+        }
+        operations.sort(Comparator.comparing(IdentityOperation::operationId));
+        return operations;
+    }
+
+    /**
+     * Derives each identity's lifecycle state from the journal.
+     *
+     * <p>An identity may be the subject of at most one terminal operation. A second would mean the
+     * registry held two contradictory accounts of the same identity's fate with no rule for
+     * choosing between them, so the index build fails closed rather than picking one. Chains are
+     * still expressible — {@code A → B} then {@code B → C} names {@code B} as subject only once.
+     *
+     * <p>Cycles are refused for the same reason: a cycle is a history that cannot have happened.
+     */
+    private void applyLifecycle(Map<String,IdentityAggregate> identities, List<IdentityOperation> operations) {
+        Map<String,IdentityOperation> terminal = new LinkedHashMap<>();
+        for (IdentityOperation operation : operations) {
+            for (String subject : operation.subjects()) {
+                // A MERGE names every participant as a subject, including the one that survives,
+                // because the record is about all of them. The survivor is not itself merged away,
+                // so it keeps its active state and is not a link in any supersession chain.
+                if (operation.targets().contains(subject)) continue;
+                IdentityOperation previous = terminal.putIfAbsent(subject, operation);
+                if (previous != null) {
+                    throw new IllegalArgumentException("Identity " + subject + " is the subject of two lifecycle operations ("
+                            + previous.operationId() + ", " + operation.operationId() + "); the registry has no rule for choosing between them.");
+                }
+            }
+        }
+        for (Map.Entry<String,IdentityOperation> entry : terminal.entrySet()) {
+            Set<String> visited = new LinkedHashSet<>();
+            String current = entry.getKey();
+            while (current != null && visited.add(current)) {
+                IdentityOperation operation = terminal.get(current);
+                current = operation == null || operation.targets().size() != 1 ? null : operation.targets().getFirst();
+                if (current != null && visited.contains(current)) {
+                    throw new IllegalArgumentException("Identity lifecycle operations form a cycle involving " + current + ".");
+                }
+            }
+        }
+        terminal.forEach((subject, operation) -> {
+            IdentityAggregate aggregate = identities.get(subject);
+            if (aggregate != null) aggregate.setLifecycle(operation.subjectState(), operation.targets(), operation.operationId());
+        });
     }
 
     private Map<String,Object> emptyIndex() {
@@ -253,6 +505,7 @@ public final class FoundryRegistry {
         out.put("registryVersion", REGISTRY_VERSION);
         out.put("packages", List.of());
         out.put("identities", List.of());
+        out.put("identityOperations", List.of());
         return out;
     }
 
@@ -276,9 +529,19 @@ public final class FoundryRegistry {
     private static int priority(Set<String> kinds) {
         if (kinds.contains("UID")) return 0;
         if (kinds.contains("RESOLUTION_KEY")) return 1;
-        if (kinds.contains("LABEL")) return 2;
-        if (kinds.contains("ALIAS")) return 3;
-        return 4;
+        if (kinds.contains("EXTERNAL_IDENTIFIER")) return 2;
+        if (kinds.contains("LABEL")) return 3;
+        if (kinds.contains("ALIAS")) return 4;
+        return 5;
+    }
+
+    /** Exact {@code scheme:identifier} tokens. Case-sensitive in the identifier half, matching the ext: key discipline. */
+    private static Set<String> externalIdentifierTokens(Map<String,Object> identity) {
+        Set<String> out = new LinkedHashSet<>();
+        if (identity.get("externalIdentifiers") instanceof Map<?,?> map) {
+            map.forEach((k, v) -> out.add(ExternalIdentifiers.token(String.valueOf(k), String.valueOf(v))));
+        }
+        return out;
     }
 
     private static String normalize(String value) { return value == null ? "" : Normalizer.normalize(value, Normalizer.Form.NFKC).strip().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT); }
@@ -316,36 +579,124 @@ public final class FoundryRegistry {
         private final String resolutionKey;
         private final Set<String> labels = new LinkedHashSet<>();
         private final Set<String> aliases = new LinkedHashSet<>();
+        private final Map<String,String> externalIdentifiers = new TreeMap<>();
+        private String semanticType;
+        private boolean semanticTypeSeen;
         private final List<Occurrence> occurrences = new ArrayList<>();
+        private final List<Object> decisionHistory = new ArrayList<>();
+        private final List<Object> relationshipBindings = new ArrayList<>();
+        private String lifecycleState = IdentityOperation.ACTIVE;
+        private List<String> successorUids = List.of();
+        private String lifecycleOperationId;
         private IdentityAggregate(String uid, String resolutionKey) { this.uid = uid; this.resolutionKey = resolutionKey; }
-        private void addOccurrence(String label, List<String> aliasValues, String packageId, String path, String semanticVariantDigest) {
+
+        /**
+         * Durable external identity is aggregated across occurrences and must not disagree. Two
+         * immutable packages naming one uid under contradicting third-party identifiers is a
+         * genuine conflict, not a semantic variant, and fails the index build closed.
+         */
+        private void addExternalIdentifiers(Map<String,String> declared) {
+            for (Map.Entry<String,String> entry : declared.entrySet()) {
+                String previous = externalIdentifiers.putIfAbsent(entry.getKey(), entry.getValue());
+                if (previous != null && !previous.equals(entry.getValue())) {
+                    throw new IllegalArgumentException("EXTERNAL_IDENTIFIER_CONTRADICTION: registry occurrences for uid "
+                            + uid + " declare conflicting " + entry.getKey() + " identifiers.");
+                }
+            }
+        }
+
+        /**
+         * Accumulates the identity decisions recorded by each immutable package occurrence. This is
+         * the identity's history: every determination ever made about it, in package order, none
+         * of them revisable. Later entries do not supersede earlier ones — they sit beside them.
+         */
+        private void addDecision(String packageId, Map<String,Object> decision) {
+            Map<String,Object> entry = new LinkedHashMap<>();
+            entry.put("packageId", packageId);
+            entry.put("decision", decision.get("decision"));
+            entry.put("reasonCodes", decision.get("reasonCodes"));
+            entry.put("reference", decision.get("reference"));
+            entry.put("candidateUids", decision.get("candidateUids"));
+            entry.put("sourceRefs", decision.get("sourceRefs"));
+            decisionHistory.add(entry);
+            decisionHistory.sort(Comparator.comparing(Json::canonical));
+        }
+
+        /**
+         * Records that a retained relationship candidate names this identity in a role.
+         *
+         * <p>These are <em>not</em> canonical UROs and never become them here — canonical URO
+         * publication stays fail-closed pending 17th2nd/ASA#29. What this gives is traceability:
+         * once participants are bound to persistent uids, a relationship stated in one package
+         * remains findable from the identity it mentions, in any later package. Before binding, a
+         * relationship pointed only at bundle-local handles and was unfindable outside its own
+         * package.
+         */
+        private void addRelationshipBinding(String packageId, String candidateId, String typeVersion, String role, String bindingStatus) {
+            Map<String,Object> entry = new LinkedHashMap<>();
+            entry.put("packageId", packageId);
+            entry.put("relationshipCandidateId", candidateId);
+            entry.put("typeVersion", typeVersion);
+            entry.put("role", role);
+            entry.put("identityBindingStatus", bindingStatus);
+            entry.put("canonicalUroPublished", Boolean.FALSE);
+            entry.put("blockedBy", "URO_TYPE_AUTHORITY_UNAVAILABLE");
+            relationshipBindings.add(entry);
+            relationshipBindings.sort(Comparator.comparing(Json::canonical));
+        }
+
+        private void setLifecycle(String state, List<String> successors, String operationId) {
+            this.lifecycleState = state;
+            this.successorUids = List.copyOf(successors);
+            this.lifecycleOperationId = operationId;
+        }
+
+        private void setSemanticType(String value) {
+            if (semanticTypeSeen && !java.util.Objects.equals(semanticType, value)) {
+                throw new IllegalArgumentException("Registry occurrences for uid " + uid + " declare conflicting semantic types.");
+            }
+            semanticType = value; semanticTypeSeen = true;
+        }
+
+        private void addOccurrence(String label, List<String> aliasValues, String packageId, String path, String semanticVariantDigest, String stateVersion) {
             Set<String> priorNames = new LinkedHashSet<>();
             labels.forEach(v -> priorNames.add(normalize(v))); aliases.forEach(v -> priorNames.add(normalize(v)));
             Set<String> nextNames = new LinkedHashSet<>(); nextNames.add(normalize(label)); aliasValues.forEach(v -> nextNames.add(normalize(v)));
             if (!priorNames.isEmpty() && java.util.Collections.disjoint(priorNames, nextNames)) {
                 throw new IllegalArgumentException("Stable UAO name-continuity conflict for resolutionKey " + resolutionKey + " (uid " + uid + ")");
             }
-            labels.add(label); aliases.addAll(aliasValues); occurrences.add(new Occurrence(packageId, path, semanticVariantDigest));
+            labels.add(label); aliases.addAll(aliasValues); occurrences.add(new Occurrence(packageId, path, semanticVariantDigest, stateVersion));
             occurrences.sort(Comparator.comparing(Occurrence::packageId));
         }
         private Map<String,Object> toMap() {
             Set<String> variants = new LinkedHashSet<>();
             occurrences.forEach(v -> variants.add(v.semanticVariantDigest()));
+            Set<String> stateVersions = new java.util.TreeSet<>();
+            occurrences.forEach(v -> stateVersions.add(v.stateVersion()));
             Map<String,Object> out = new LinkedHashMap<>();
             out.put("uid", uid); out.put("resolutionKey", resolutionKey);
+            out.put("semanticType", semanticType);
             out.put("canonicalLabels", labels.stream().sorted().toList()); out.put("aliases", aliases.stream().sorted().toList());
+            out.put("externalIdentifiers", new LinkedHashMap<String,Object>(externalIdentifiers));
             out.put("semanticVariantStatus", variants.size() > 1
                     ? SemanticVariants.MULTIPLE_UNRECONCILED_VARIANTS : SemanticVariants.SINGLE_VARIANT);
+            out.put("stateVersions", new ArrayList<>(stateVersions));
+            out.put("lifecycleState", lifecycleState);
+            out.put("successorUids", new ArrayList<>(successorUids));
+            out.put("lifecycleOperationId", lifecycleOperationId);
+            out.put("decisionHistory", new ArrayList<>(decisionHistory));
+            out.put("relationshipBindings", new ArrayList<>(relationshipBindings));
             out.put("occurrences", occurrences.stream().map(Occurrence::toMap).toList()); return out;
         }
     }
 
-    private record Occurrence(String packageId, String path, String semanticVariantDigest) {
+    private record Occurrence(String packageId, String path, String semanticVariantDigest, String stateVersion) {
         Map<String,Object> toMap() {
             Map<String,Object> out = new LinkedHashMap<>();
             out.put("packageId", packageId);
             out.put("canonicalPath", path);
             out.put("semanticVariantDigest", semanticVariantDigest);
+            out.put("stateVersion", stateVersion);
             return out;
         }
     }
@@ -357,6 +708,16 @@ public final class FoundryRegistry {
             out.put("packageId", packageId); out.put("packageDigest", packageDigest); out.put("registryPath", registryPath.toString());
             out.put("alreadyPresent", alreadyPresent); out.put("packageCount", new java.math.BigDecimal(packageCount));
             out.put("identityCount", new java.math.BigDecimal(identityCount)); return out;
+        }
+    }
+
+    public record OperationResult(String operationId, String operation, boolean alreadyPresent, int operationCount) {
+        public Map<String,Object> toMap() {
+            Map<String,Object> out = new LinkedHashMap<>();
+            out.put("operationId", operationId); out.put("operation", operation);
+            out.put("alreadyPresent", alreadyPresent);
+            out.put("operationCount", new java.math.BigDecimal(operationCount));
+            return out;
         }
     }
 

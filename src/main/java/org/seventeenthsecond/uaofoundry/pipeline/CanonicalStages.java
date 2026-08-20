@@ -1,6 +1,8 @@
 package org.seventeenthsecond.uaofoundry.pipeline;
 
 import org.seventeenthsecond.uaofoundry.identifiers.StableIdentifiers;
+import org.seventeenthsecond.uaofoundry.identity.IdentityKernel;
+import org.seventeenthsecond.uaofoundry.identity.IdentityProjections;
 import org.seventeenthsecond.uaofoundry.json.Json;
 import org.seventeenthsecond.uaofoundry.model.ManufacturingRequest;
 import org.seventeenthsecond.uaofoundry.provider.FoundryProvider;
@@ -54,11 +56,7 @@ class CanonicalStages extends AcquisitionStages {
         for (Object raw : list(resolution.get("resolvedIdentities"), "resolvedIdentities")) {
             Map<String, Object> identity = map(raw);
             String uid = string(identity.get("uaoId"), "uaoId");
-            Map<String, Object> foundryIdentity = new LinkedHashMap<>();
-            foundryIdentity.put("canonical_label", identity.get("label"));
-            foundryIdentity.put("aliases", identity.get("aliases"));
-            foundryIdentity.put("resolution_key", identity.get("resolutionKey"));
-            foundryIdentity.put("source_refs", identity.get("sourceRefs"));
+            Map<String, Object> foundryIdentity = identityKernel(identity);
             Map<String, Object> internal = new LinkedHashMap<>();
             internal.put("foundry_identity", foundryIdentity);
 
@@ -102,6 +100,10 @@ class CanonicalStages extends AcquisitionStages {
             uao.put("relationship_references", List.of());
             uao.put("provenance", provenance);
             uao.put("disclaimer", "AUTHORITY_SNAPSHOT_ONLY");
+            // The state version is derived last because it covers the assembled state projection.
+            // Identity material above is complete before this point and is not affected by it.
+            foundryIdentity.put("state_version", IdentityProjections.stateVersion(uao));
+            validate(foundryIdentity, "foundry-identity.schema.json", "Foundry identity kernel " + uid);
             validate(uao, "canonical-uao.schema.json", "Canonical UAO " + uid);
             rejectForbiddenFields(uao, "$uao[" + uid + "]");
             uaos.add(uao);
@@ -115,6 +117,16 @@ class CanonicalStages extends AcquisitionStages {
         out.put("provenanceLedger", ledger);
         out.put("unresolvedItems", relationships.get("unresolvedRelationships"));
         return out;
+    }
+
+    /**
+     * Builds the identity-bearing half of the persistent identity kernel. Delegated so that the
+     * package verifier assembles the identical shape from its own independently reconstructed
+     * resolved identities; the independence lies in reconstructing the inputs, not in duplicating
+     * the projection.
+     */
+    private Map<String, Object> identityKernel(Map<String, Object> resolvedIdentity) {
+        return IdentityKernel.build(resolvedIdentity);
     }
 
     protected Map<String, Object> completeness(Map<String, Object> plan, FoundryProvider provider) {

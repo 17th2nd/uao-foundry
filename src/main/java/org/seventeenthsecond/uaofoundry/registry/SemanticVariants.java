@@ -11,8 +11,9 @@ import java.util.Map;
 
 /**
  * Derives a deterministic digest for one stable UAO's meaning-bearing canonical projection.
- * Occurrence provenance and Foundry source references are deliberately excluded so the same
- * semantic variant may be supported by different immutable package occurrences.
+ * Occurrence provenance, Foundry source references and alias provenance are deliberately excluded
+ * so that one semantic variant may be supported by different immutable package occurrences drawn
+ * from different sources.
  */
 public final class SemanticVariants {
     public static final String SINGLE_VARIANT = "SINGLE_VARIANT";
@@ -31,7 +32,14 @@ public final class SemanticVariants {
 
         Map<String,Object> internal = object(deepCopy(required(uao, "internal_state")), "canonical UAO internal_state");
         Map<String,Object> foundryIdentity = object(internal.get("foundry_identity"), "canonical UAO foundry_identity");
+        // Both removals are provenance, not meaning. source_refs and alias_provenance record how
+        // the identity was evidenced; the names themselves stay, in canonical_label and aliases.
+        // Leaving alias_provenance in would make the digest sensitive to which sources happened to
+        // supply a name, so the same identity acquired from different sources would be flagged as
+        // an unreconciled variant and refused for reuse -- defeating the point of persistent
+        // identity, which is that one identity may be evidenced repeatedly from different places.
         foundryIdentity.remove("source_refs");
+        foundryIdentity.remove("alias_provenance");
         if (foundryIdentity.get("aliases") instanceof List<?> aliases) {
             List<Object> sortedAliases = new ArrayList<>();
             for (Object alias : aliases) sortedAliases.add(alias);

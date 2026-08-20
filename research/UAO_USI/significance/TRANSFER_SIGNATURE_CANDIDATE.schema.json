@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://17th2nd.github.io/uao-foundry/schemas/transfer-signature-candidate.schema.json",
+  "$comment": "RESEARCH CANDIDATE. Not implemented, not validated against, not referenced by any manufacturing stage. This is a shape proposal for how a future governed Relationship Type version might declare its significance transfer semantics, recorded so that the seam is designed rather than improvised when 17th2nd/ASA#29 closes. Providers must never invent transfer modes; the vocabulary is closed here precisely so that a model cannot extend it dynamically. Nothing in this file creates ASA authority or Foundry behaviour.",
+  "title": "Relationship Type Significance Transfer Signature (Candidate)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidateStatus", "typeVersion", "roleTransfer"],
+  "properties": {
+    "candidateStatus": {
+      "$comment": "Present and constant so that no consumer can mistake this record for a ratified contract.",
+      "const": "RESEARCH_CANDIDATE_NOT_RATIFIED"
+    },
+    "typeVersion": {"type": "string", "pattern": "^asa\\.core/[a-z_]+@[0-9]+$"},
+    "roleTransfer": {
+      "$comment": "Transfer is declared per role, not per relationship. The same relationship transfers differently in each direction: what a container emits toward a member is not what the member emits toward the container. A single relationship-level mode would force those to be equal.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "mode"],
+        "properties": {
+          "role": {"type": "string", "minLength": 1},
+          "mode": {
+            "$comment": "Closed vocabulary. A provider or model may not extend it: dynamically invented transfer modes would let a model define how significance propagates, which is a governance decision.",
+            "type": "string",
+            "enum": ["emits", "absorbs", "attests", "challenges", "gates", "hastens", "inhibits", "inert"]
+          },
+          "notes": {"type": "string"}
+        }
+      }
+    },
+    "symmetric": {"type": "boolean"},
+    "ordered": {"type": "boolean"},
+    "openQuestions": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  }
+}

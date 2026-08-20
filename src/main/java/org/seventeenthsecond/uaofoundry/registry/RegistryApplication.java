@@ -1,5 +1,7 @@
 package org.seventeenthsecond.uaofoundry.registry;
 
+import org.seventeenthsecond.uaofoundry.identity.IdentityOperation;
+import org.seventeenthsecond.uaofoundry.identity.IdentityReference;
 import org.seventeenthsecond.uaofoundry.json.Json;
 
 import java.io.PrintStream;
@@ -32,6 +34,13 @@ public final class RegistryApplication {
             return switch (command) {
                 case "register" -> register(registry, parsed);
                 case "search" -> search(registry, parsed);
+                case "identity" -> identity(registry, parsed);
+                case "supersede" -> operation(registry, parsed, IdentityOperation.Kind.SUPERSEDE);
+                case "retire" -> operation(registry, parsed, IdentityOperation.Kind.RETIRE);
+                case "merge" -> operation(registry, parsed, IdentityOperation.Kind.MERGE);
+                case "split" -> operation(registry, parsed, IdentityOperation.Kind.SPLIT);
+                case "operations" -> operations(registry, parsed);
+                case "significance-inputs" -> significanceInputs(registry, parsed);
                 case "list" -> list(registry, parsed);
                 case "verify" -> verify(registry, parsed);
                 case "context" -> context(registry, parsed);
@@ -54,6 +63,81 @@ public final class RegistryApplication {
         Map<String,Object> response = new LinkedHashMap<>();
         response.put("query", parsed.positionals().getFirst());
         response.put("matches", registry.search(parsed.positionals().getFirst()));
+        out.println(Json.canonical(response));
+        return 0;
+    }
+
+    /**
+     * Exact persistent-identity lookup, as opposed to {@code search}'s discovery ranking.
+     *
+     * <p>The reference kind is inferred from the argument's shape rather than from a flag: a
+     * {@code uao-} address, a canonical resolution key, a {@code scheme:identifier} external
+     * identifier, or otherwise an alias. Inference is safe here because an alias can never
+     * establish identity anyway, so the worst case of a misread argument is an honest
+     * {@code UNRESOLVED}.
+     */
+    private int identity(FoundryRegistry registry, Parsed parsed) {
+        requirePositionals(parsed, 1, "identity requires exactly one reference (uid, resolution key, scheme:identifier or alias).");
+        Map<String,Object> record = registry.identityRecord(reference(parsed.positionals().getFirst()));
+        out.println(Json.canonical(record));
+        // A considered "not well enough" is a distinct outcome from success and from failure.
+        return "SAME".equals(object(record.get("resolution")).get("decision")) ? 0 : 4;
+    }
+
+    /** Infers the reference kind from the argument's shape; a misread argument can only under-resolve. */
+    private static IdentityReference reference(String value) {
+        if (value.matches("uao-[a-f0-9]{12}")) return IdentityReference.uid(value);
+        if (value.startsWith("foundry:") || value.startsWith("fixture:") || value.startsWith("ext:")) {
+            return IdentityReference.resolutionKey(value);
+        }
+        if (value.matches("[a-z][a-z0-9._-]*:\\S+")) {
+            int split = value.indexOf(':');
+            return IdentityReference.externalIdentifier(value.substring(0, split), value.substring(split + 1));
+        }
+        return IdentityReference.alias(value);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String,Object> object(Object value) { return (Map<String,Object>) value; }
+
+    /**
+     * Records an identity lifecycle operation.
+     *
+     * <p>{@code --reason} and {@code --justification} are mandatory rather than convenient: an
+     * identity operation without a stated reason is indistinguishable from a mistake once its
+     * author has moved on. {@code --recorded-at} is likewise explicit rather than defaulted to the
+     * wall clock, so a recorded operation is reproducible and testable.
+     */
+    private int operation(FoundryRegistry registry, Parsed parsed, IdentityOperation.Kind kind) {
+        List<String> subjects = parsed.subjects();
+        List<String> targets = parsed.targets();
+        if (subjects.isEmpty()) throw new IllegalArgumentException(kind + " requires at least one --subject.");
+        if (parsed.reasonCodes().isEmpty()) throw new IllegalArgumentException(kind + " requires at least one --reason.");
+        if (parsed.justification() == null) throw new IllegalArgumentException(kind + " requires --justification.");
+        if (parsed.recordedAt() == null) throw new IllegalArgumentException(kind + " requires --recorded-at (an explicit timestamp, not the wall clock).");
+        requirePositionals(parsed, 0, kind + " takes no positional arguments; use --subject and --target.");
+
+        IdentityOperation operation = IdentityOperation.create(kind, subjects, targets, parsed.reasonCodes(),
+                parsed.justification(), List.of(), parsed.authority(), parsed.recordedAt());
+        out.println(Json.canonical(registry.applyIdentityOperation(operation).toMap()));
+        return 0;
+    }
+
+    /**
+     * Exports the durable A_x / R_x inputs for one identity. The Foundry supplies inputs to
+     * significance and never computes it; the payload names the boundary explicitly so a consumer
+     * cannot mistake a supply surface for a result.
+     */
+    private int significanceInputs(FoundryRegistry registry, Parsed parsed) {
+        requirePositionals(parsed, 1, "significance-inputs requires exactly one identity reference.");
+        out.println(Json.canonical(registry.significanceInputs(reference(parsed.positionals().getFirst()))));
+        return 0;
+    }
+
+    private int operations(FoundryRegistry registry, Parsed parsed) {
+        requirePositionals(parsed, 0, "operations accepts no positional arguments.");
+        Map<String,Object> response = new LinkedHashMap<>();
+        response.put("identityOperations", registry.index().get("identityOperations"));
         out.println(Json.canonical(response));
         return 0;
     }
@@ -84,6 +168,12 @@ public final class RegistryApplication {
         Path schemaDir = Path.of("schemas");
         int catalogLimit = 5000;
         java.util.ArrayList<String> positionals = new java.util.ArrayList<>();
+        java.util.ArrayList<String> subjects = new java.util.ArrayList<>();
+        java.util.ArrayList<String> targets = new java.util.ArrayList<>();
+        java.util.ArrayList<String> reasonCodes = new java.util.ArrayList<>();
+        String justification = null;
+        String authority = null;
+        String recordedAt = null;
         for (int i=0;i<args.length;i++) {
             String token = args[i];
             if (!token.startsWith("--")) { positionals.add(token); continue; }
@@ -97,10 +187,17 @@ public final class RegistryApplication {
                     catch (NumberFormatException ex) { throw new IllegalArgumentException("--catalog-limit must be an integer."); }
                     if (catalogLimit < 1 || catalogLimit > 100000) throw new IllegalArgumentException("--catalog-limit must be between 1 and 100000.");
                 }
+                case "--subject" -> subjects.add(value);
+                case "--target" -> targets.add(value);
+                case "--reason" -> reasonCodes.add(value);
+                case "--justification" -> justification = value;
+                case "--authority" -> authority = value;
+                case "--recorded-at" -> recordedAt = value;
                 default -> throw new IllegalArgumentException("Unknown registry option: " + token);
             }
         }
-        return new Parsed(registry, schemaDir, catalogLimit, List.copyOf(positionals));
+        return new Parsed(registry, schemaDir, catalogLimit, List.copyOf(positionals),
+                List.copyOf(subjects), List.copyOf(targets), List.copyOf(reasonCodes), justification, authority, recordedAt);
     }
 
     private static void requirePositionals(Parsed parsed, int count, String message) {
@@ -110,13 +207,22 @@ public final class RegistryApplication {
     private void usage() {
         out.println("UAO Foundry Registry " + FoundryRegistry.REGISTRY_VERSION);
         out.println("Usage:");
-        out.println("  java -cp target/uao-foundry-0.1.0-SNAPSHOT.jar org.seventeenthsecond.uaofoundry.registry.RegistryApplication register <package> [--registry .uao-registry]");
+        out.println("  java -cp target/uao-foundry-0.1.0.jar org.seventeenthsecond.uaofoundry.registry.RegistryApplication register <package> [--registry .uao-registry]");
         out.println("  ... RegistryApplication search <query> [--registry .uao-registry]");
+        out.println("  ... RegistryApplication identity <uid|resolution-key|scheme:identifier|alias>");
         out.println("  ... RegistryApplication context <query> [--catalog-limit 5000]");
         out.println("  ... RegistryApplication list");
         out.println("  ... RegistryApplication verify");
         out.println("  ... RegistryApplication rebuild");
+        out.println("  ... RegistryApplication supersede --subject <uid> --target <uid> --reason <CODE> --justification <text> --recorded-at <iso8601>");
+        out.println("  ... RegistryApplication retire    --subject <uid> --reason <CODE> --justification <text> --recorded-at <iso8601>");
+        out.println("  ... RegistryApplication merge     --subject <uid> --subject <uid> --target <uid> --reason <CODE> --justification <text> --recorded-at <iso8601>");
+        out.println("  ... RegistryApplication split     --subject <uid> --target <uid> --target <uid> --reason <CODE> --justification <text> --recorded-at <iso8601>");
+        out.println("  ... RegistryApplication operations");
+        out.println("  ... RegistryApplication significance-inputs <uid|resolution-key|scheme:identifier>");
     }
 
-    private record Parsed(Path registry, Path schemaDir, int catalogLimit, List<String> positionals) {}
+    private record Parsed(Path registry, Path schemaDir, int catalogLimit, List<String> positionals,
+                          List<String> subjects, List<String> targets, List<String> reasonCodes,
+                          String justification, String authority, String recordedAt) {}
 }
