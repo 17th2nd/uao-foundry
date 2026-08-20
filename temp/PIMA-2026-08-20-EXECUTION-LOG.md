@@ -269,3 +269,49 @@ Neither would have been found without writing the attacks first.
 No automatic semantic reconciliation. A recorded merge does not union, rank, choose or discard
 assertions and does not clear `MULTIPLE_UNRECONCILED_VARIANTS`. Relationship effects are deferred
 to Phase 5, when relationship candidates are bound to persistent uids.
+
+---
+
+## Phase 5 — Relationship binding
+
+**Status:** COMPLETE
+**Tests:** 90/90 green (7 new). `BUILD SUCCESS`.
+
+### Built
+
+- `schemas/unresolved-relationship.schema.json` — retained candidates now carry `typeVersion`,
+  bound participants, `identityBindingStatus`, identity literals, contextual bindings, sources.
+- Participant binding to persistent uids in `relationshipConstruction`, mirrored in the verifier's
+  independent reconstruction.
+- Registry `relationshipBindings` per identity, marked `canonicalUroPublished: false` /
+  `blockedBy: URO_TYPE_AUTHORITY_UNAVAILABLE`.
+
+### Closed
+
+- **G-12** — relationship participants bound to persistent identity.
+
+### The distinction that made this possible
+
+Identity binding and type-role authority are **separable**. Resolving `cid-x → uao-y` is an
+identity operation needing no ASA#29 authority; validating that `container` is a legal role of
+`asa.core/contains@1` does. Previously both were treated as blocked together, and the retained
+finding discarded its participants — retaining a relationship "as evidence" while throwing away
+the part saying what it was about.
+
+**The publication boundary did not move.** `canonicalUros = 0`, `URO_TYPE_AUTHORITY_UNAVAILABLE`,
+`EVIDENCE_INCOMPLETE`, empty `relationship_references`. One test exists solely to stop
+`ALL_PARTICIPANTS_BOUND` being misread as publishable.
+
+### Finding P5-1
+
+`relationship-bearing-cow.json` names participant `cid-species`, which is **not among its candidate
+identities**. The Foundry accepted this silently for as long as the fixture has existed, because
+participants were discarded. Candidate *claims* with an unmapped subject throw; relationships did
+not. Now visible as `UNRESOLVED` / `PARTIALLY_BOUND`. Test fixture only — no manufactured knowledge
+affected — but it is exactly the defect class the binding closes.
+
+### Honest limitation
+
+A package carrying a relationship candidate is `EVIDENCE_INCOMPLETE` and therefore not
+registry-admissible, so cross-package relationship tracing is **latent** rather than demonstrable
+today. The test asserts the inadmissibility rather than pretending otherwise.

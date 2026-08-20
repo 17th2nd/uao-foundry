@@ -337,6 +337,24 @@ public final class FoundryRegistry {
                             }
                         }
                     }
+                    Map<String,List<Map<String,Object>>> bindingsByUid = new LinkedHashMap<>();
+                    Path unresolvedFile = dir.resolve("unresolved-items.json");
+                    if (Files.isRegularFile(unresolvedFile)) {
+                        for (Object rawItem : array(FileOps.readJson(unresolvedFile), "unresolved items")) {
+                            Map<String,Object> item = object(rawItem, "unresolved item");
+                            if (!(item.get("participants") instanceof List<?> participants)) continue;
+                            for (Object rawParticipant : participants) {
+                                Map<String,Object> participant = object(rawParticipant, "unresolved participant");
+                                if (!(participant.get("uaoId") instanceof String participantUid)) continue;
+                                bindingsByUid.computeIfAbsent(participantUid, ignored -> new ArrayList<>())
+                                        .add(Map.of(
+                                                "candidateId", String.valueOf(item.get("candidateId")),
+                                                "typeVersion", String.valueOf(item.get("typeVersion")),
+                                                "role", String.valueOf(participant.get("role")),
+                                                "status", String.valueOf(item.get("identityBindingStatus"))));
+                            }
+                        }
+                    }
                     for (Object raw : array(FileOps.readJson(dir.resolve("canonical-identities.json")), "canonical identities")) {
                         Map<String,Object> uao = object(raw, "canonical UAO");
                         String uid = string(uao.get("uid"), "uid");
@@ -351,6 +369,11 @@ public final class FoundryRegistry {
                                 foundryIdentity.get("external_identifiers"), "Registered identity external_identifiers"));
                         for (Map<String,Object> decision : decisionsByUid.getOrDefault(uid, List.of())) {
                             aggregate.addDecision(packageId, decision);
+                        }
+                        for (Map<String,Object> binding : bindingsByUid.getOrDefault(uid, List.of())) {
+                            aggregate.addRelationshipBinding(packageId, binding.get("candidateId").toString(),
+                                    binding.get("typeVersion").toString(), binding.get("role").toString(),
+                                    binding.get("status").toString());
                         }
                         aggregate.addOccurrence(label, aliases, packageId,
                                         "packages/" + packageId + "/canonical-identities.json",
@@ -520,6 +543,7 @@ public final class FoundryRegistry {
         private boolean semanticTypeSeen;
         private final List<Occurrence> occurrences = new ArrayList<>();
         private final List<Object> decisionHistory = new ArrayList<>();
+        private final List<Object> relationshipBindings = new ArrayList<>();
         private String lifecycleState = IdentityOperation.ACTIVE;
         private List<String> successorUids = List.of();
         private String lifecycleOperationId;
@@ -555,6 +579,29 @@ public final class FoundryRegistry {
             entry.put("sourceRefs", decision.get("sourceRefs"));
             decisionHistory.add(entry);
             decisionHistory.sort(Comparator.comparing(Json::canonical));
+        }
+
+        /**
+         * Records that a retained relationship candidate names this identity in a role.
+         *
+         * <p>These are <em>not</em> canonical UROs and never become them here — canonical URO
+         * publication stays fail-closed pending 17th2nd/ASA#29. What this gives is traceability:
+         * once participants are bound to persistent uids, a relationship stated in one package
+         * remains findable from the identity it mentions, in any later package. Before binding, a
+         * relationship pointed only at bundle-local handles and was unfindable outside its own
+         * package.
+         */
+        private void addRelationshipBinding(String packageId, String candidateId, String typeVersion, String role, String bindingStatus) {
+            Map<String,Object> entry = new LinkedHashMap<>();
+            entry.put("packageId", packageId);
+            entry.put("relationshipCandidateId", candidateId);
+            entry.put("typeVersion", typeVersion);
+            entry.put("role", role);
+            entry.put("identityBindingStatus", bindingStatus);
+            entry.put("canonicalUroPublished", Boolean.FALSE);
+            entry.put("blockedBy", "URO_TYPE_AUTHORITY_UNAVAILABLE");
+            relationshipBindings.add(entry);
+            relationshipBindings.sort(Comparator.comparing(Json::canonical));
         }
 
         private void setLifecycle(String state, List<String> successors, String operationId) {
@@ -597,6 +644,7 @@ public final class FoundryRegistry {
             out.put("successorUids", new ArrayList<>(successorUids));
             out.put("lifecycleOperationId", lifecycleOperationId);
             out.put("decisionHistory", new ArrayList<>(decisionHistory));
+            out.put("relationshipBindings", new ArrayList<>(relationshipBindings));
             out.put("occurrences", occurrences.stream().map(Occurrence::toMap).toList()); return out;
         }
     }

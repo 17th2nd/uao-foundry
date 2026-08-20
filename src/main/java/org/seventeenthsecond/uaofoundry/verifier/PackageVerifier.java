@@ -404,6 +404,29 @@ public final class PackageVerifier {
                 item.put("candidateId", rel.get("candidateId"));
                 item.put("code", "URO_TYPE_AUTHORITY_UNAVAILABLE");
                 item.put("description", "Current ASA CSS defines URO structure but the Foundry has no current authoritative domain Relationship Type role registry to validate this candidate. Publication of this URO is fail-closed.");
+                item.put("typeVersion", rel.get("typeVersion"));
+                List<Object> participants = new ArrayList<>();
+                int bound = 0;
+                if (rel.get("participants") instanceof List<?> rawParticipants) {
+                    for (Object rawParticipant : rawParticipants) {
+                        Map<String,Object> participant = object(rawParticipant, "candidate relationship participant", errors);
+                        if (participant == null) continue;
+                        String ref = String.valueOf(participant.get("candidateIdentityRef"));
+                        Object uaoId = candidateToUao.get(ref);
+                        Map<String,Object> record = new LinkedHashMap<>();
+                        record.put("role", participant.get("role"));
+                        record.put("candidateIdentityRef", ref);
+                        record.put("binding", uaoId == null ? "UNRESOLVED" : "RESOLVED");
+                        if (uaoId != null) { record.put("uaoId", uaoId); bound++; }
+                        participants.add(record);
+                    }
+                }
+                item.put("participants", participants);
+                item.put("identityBindingStatus", bound == 0 ? "UNBOUND"
+                        : bound == participants.size() ? "ALL_PARTICIPANTS_BOUND" : "PARTIALLY_BOUND");
+                item.put("identityLiterals", rel.get("identityLiterals"));
+                item.put("contextualBindings", rel.get("contextualBindings"));
+                item.put("sourceRefs", rel.get("sourceRefs"));
                 expectedUnresolved.add(item);
             }
             if (!canonicalEquals(expectedUnresolved, unresolved)) errors.add("Unresolved relationship projection does not reconstruct exactly from candidate relationships while ASA type-role authority is unavailable.");

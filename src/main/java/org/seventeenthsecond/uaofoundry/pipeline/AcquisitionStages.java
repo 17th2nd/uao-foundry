@@ -357,6 +357,7 @@ class AcquisitionStages extends PipelineBase {
     protected Map<String, Object> relationshipConstruction(Map<String, Object> candidateValidation, Map<String, Object> resolution) {
         Map<String, Object> valid = map(candidateValidation.get("valid"));
         List<Object> candidateRelationships = list(valid.get("relationships"), "relationships");
+        Map<String, Object> candidateToUao = map(resolution.get("candidateToUao"));
         List<Object> unresolved = new ArrayList<>();
         for (Object raw : candidateRelationships) {
             Map<String, Object> rel = map(raw);
@@ -364,6 +365,35 @@ class AcquisitionStages extends PipelineBase {
             finding.put("candidateId", rel.get("candidateId"));
             finding.put("code", "URO_TYPE_AUTHORITY_UNAVAILABLE");
             finding.put("description", "Current ASA CSS defines URO structure but the Foundry has no current authoritative domain Relationship Type role registry to validate this candidate. Publication of this URO is fail-closed.");
+            finding.put("typeVersion", rel.get("typeVersion"));
+
+            // Identity binding and type-role authority are separable problems. Resolving cid-x to
+            // uao-y is an identity operation the Foundry can already perform; deciding whether
+            // "container" is a legal role of asa.core/contains@1 needs the authority ASA#29 tracks.
+            // Binding the first does not smuggle the candidate one step closer to publication --
+            // it only stops the retained evidence pointing at bundle-local handles that mean
+            // nothing outside this package.
+            List<Object> participants = new ArrayList<>();
+            int bound = 0;
+            for (Object rawParticipant : list(rel.get("participants"), "relationship participants")) {
+                Map<String, Object> participant = map(rawParticipant);
+                String ref = string(participant.get("candidateIdentityRef"), "candidateIdentityRef");
+                Object uaoId = candidateToUao.get(ref);
+                Map<String, Object> record = new LinkedHashMap<>();
+                record.put("role", participant.get("role"));
+                record.put("candidateIdentityRef", ref);
+                // Never invent a uid to make a relation look complete.
+                record.put("binding", uaoId == null ? "UNRESOLVED" : "RESOLVED");
+                if (uaoId != null) { record.put("uaoId", uaoId); bound++; }
+                participants.add(record);
+            }
+            finding.put("participants", participants);
+            finding.put("identityBindingStatus", bound == 0 ? "UNBOUND"
+                    : bound == participants.size() ? "ALL_PARTICIPANTS_BOUND" : "PARTIALLY_BOUND");
+            finding.put("identityLiterals", rel.get("identityLiterals"));
+            finding.put("contextualBindings", rel.get("contextualBindings"));
+            finding.put("sourceRefs", rel.get("sourceRefs"));
+            validate(finding, "unresolved-relationship.schema.json", "Unresolved relationship " + rel.get("candidateId"));
             unresolved.add(finding);
         }
         Map<String, Object> out = new LinkedHashMap<>();
