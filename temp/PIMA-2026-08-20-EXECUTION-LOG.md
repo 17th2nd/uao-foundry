@@ -468,3 +468,66 @@ showing numbers the packages do not support is worse than no demonstration. Asse
 
 With no registry, the report says so explicitly: "no registry was consulted, so every identity is
 reported as new. that is not evidence that none existed."
+
+---
+
+## Phases 9 & 10 — ASALLM benchmark integration and falsification
+
+**Status:** COMPLETE
+**Data:** `temp/benchmark/{pid_lanes.jsonl, lane_analysis.json, cumulative_identity.json}`
+
+### Integration
+
+Lanes A (`SIM`) and B (`ASA`) already existed and were **not re-run, re-graded or altered**; their
+results are read from the frozen `traces/runs.jsonl`. The oracle is **imported** from
+`run_llm_benchmark.py`, not copied. `~/asallm_empirical` is byte-unchanged at `e7a2afa`.
+
+> **Operator error:** the harness was first written into `~/asallm_empirical/benchmark/pima/`
+> because the shell working directory had drifted to that repository. Moved into `uao-foundry` and
+> the stray directory removed before any run; that repository's tracked state was verified clean.
+> Modifying it was never authorised.
+
+### Result — H7 is not refuted
+
+6 tasks × 2 models × default effort, identical file sets across C/D/E and B.
+
+| lane | success | recall | median prompt tokens |
+|---|---:|---:|---:|
+| A similarity | 0.58 | 0.53 | 581 |
+| B relational | **0.75** | 0.81 | 1211 |
+| C + persistent identity | **0.75** | 0.81 | 1656 |
+| D + provenance | **0.75** | 0.81 | 1888 |
+| E + negative space | 0.83 | 0.81 | 2178 |
+
+**B, C and D are identical.** Persistent identity plus provenance changed task success by exactly
+zero while costing 37% and 56% more context. Lane E is one run higher — at the noise floor (0.083)
+and separately confounded.
+
+| H | verdict |
+|---|---|
+| H1 reduces relationship reconstruction | **NOT TESTABLE** — no persistent relationship graph can exist (ASA#29) |
+| H2 relationship precision | **NOT TESTABLE** — same |
+| H3 fewer duplicate entities | **SUPPORTED** — 0 duplicates over 6 observations; mechanical, weakest kind of gain |
+| H4 negative-space reasoning | **MEASURED, CONFOUNDED** — B 0.70 → E 0.90, near-oracular on absence tasks |
+| H5 reduces context | **CONTRADICTED** — it increases context, monotonically |
+| H6 provenance tracing | **NOT TESTABLE by this benchmark** — no task requires it |
+| H7 no material gain | **NOT REFUTED** |
+
+Two comparability corrections were applied *against* the programme's own interest: reasoning-effort
+variants were excluded (they gave lane B four extra runs), and one errored baseline run was
+excluded rather than scored incorrect.
+
+### FINDING P9-1 — pre-existing defect in accepted main
+
+`reuse-report.json` is written inside the content-addressed package but excluded from
+`PackageContentDigest.CORE_FILES`. It embeds `registryIndexHash`, which moves as the registry
+grows. Manufacturing the same material a **third** time against a moved-on registry yields the same
+`packageId` with different bytes; both the dist guard and the registry's collision guard refuse it.
+
+Measured: **69 of 114** cumulative manufactures refused by P9-1, versus 8 by intended fail-closed
+behaviour. **The registry cannot accumulate observations past the third**, which caps H1
+independently of ASA#29.
+
+`PackageContentDigest.java` is byte-unchanged from `2bc2871d` — pre-existing, surfaced not caused.
+**Not fixed:** every option is a design decision on an audited surface. Options and a recommendation
+are in `research/UAO_USI/falsification/IDENTITY_ERRORS.md`.
