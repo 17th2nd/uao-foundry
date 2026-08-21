@@ -60,7 +60,14 @@ jobs:
           printf '%s\n' "$output" | grep -F '"newUaoCount":0'
           printf '%s\n' "$output" | grep -F '"registrySourceCount":1'
           package_path="$(printf '%s' "$output" | python3 -c 'import json,sys; print(json.load(sys.stdin)["packagePath"])')"
-          test -f "$package_path/reuse-report.json"
+          # ADR-0006 / finding P9-1: reuse evidence is run evidence recorded beside the registry,
+          # not attached to the content-addressed package. The assertion moved location, not
+          # intent -- the evidence must still be produced and still be inspectable.
+          test ! -f "$package_path/reuse-report.json"
+          run_store="$(printf '%s' "$output" | python3 -c 'import json,sys; print(json.load(sys.stdin)["runStore"])')"
+          run_id="$(printf '%s' "$output" | python3 -c 'import json,sys; print(json.load(sys.stdin)["runId"])')"
+          test -f "$run_store/$run_id.json"
+          python3 -c "import json,sys; r=json.load(open('$run_store/$run_id.json')); assert r['reuseReport']['counts']['reusedUaoCount']==2, r"
           java -jar target/uao-foundry-0.1.0.jar verify "$package_path" | grep -F '"passed":true'
           java -cp target/uao-foundry-0.1.0.jar org.seventeenthsecond.uaofoundry.registry.RegistryApplication verify --registry .delta-registry | grep -F '"passed":true'
           python3 - <<'PY'

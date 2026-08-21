@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://17th2nd.github.io/uao-foundry/schemas/staged-relationship.schema.json",
+  "$comment": "NON-CANONICAL research record. A relationship candidate retained across manufactures so that persistent relationship reconstruction can be studied while 17th2nd/ASA#29 remains open. This is candidate relationship MEMORY, not a certified relationship graph: it creates no URO, no ASA authority and no publication eligibility, and every record carries authorityStatus URO_TYPE_AUTHORITY_UNAVAILABLE by construction. The staging store is deliberately separate from the registry index so that nothing here can be mistaken for, or promoted into, governed relationship authority.",
+  "title": "UAO Foundry Staged Relationship Candidate (Non-Canonical)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["recordVersion", "stagedId", "status", "authorityStatus", "certifying", "typeVersion", "participants", "identityBindingStatus", "sourceRefs", "packageId", "recordedAt"],
+  "properties": {
+    "recordVersion": {"const": "0.1.0"},
+    "stagedId": {"type": "string", "pattern": "^stg-[a-f0-9]{16}$"},
+    "status": {
+      "$comment": "Constant. Present so no consumer can read a staged record as anything else.",
+      "const": "NON_CANONICAL_CANDIDATE_MEMORY"
+    },
+    "authorityStatus": {"const": "URO_TYPE_AUTHORITY_UNAVAILABLE"},
+    "certifying": {
+      "$comment": "Constant false. Observing a staged candidate means someone asserted the relationship, not that ASA governs it.",
+      "const": false
+    },
+    "typeVersion": {"type": "string", "pattern": "^asa\\.core/[a-z_]+@[0-9]+$"},
+    "participants": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "candidateIdentityRef", "binding"],
+        "properties": {
+          "role": {"type": "string", "minLength": 1},
+          "candidateIdentityRef": {"type": "string", "pattern": "^cid-[a-z0-9._-]+$"},
+          "binding": {"type": "string", "enum": ["RESOLVED", "UNRESOLVED"]},
+          "uaoId": {"type": "string", "pattern": "^uao-[a-f0-9]{12}$"}
+        }
+      }
+    },
+    "identityBindingStatus": {"type": "string", "enum": ["ALL_PARTICIPANTS_BOUND", "PARTIALLY_BOUND", "UNBOUND"]},
+    "identityLiterals": {"type": "object", "additionalProperties": {"type": "string"}},
+    "contextualBindings": {"type": "array", "items": {"type": "object"}},
+    "sourceRefs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^src-[a-z0-9._-]+$"}},
+    "packageId": {"type": "string", "pattern": "^pkg-[a-f0-9]{16}$"},
+    "candidateId": {"type": "string", "pattern": "^rel-[a-z0-9._-]+$"},
+    "recordedAt": {"type": "string", "format": "date-time"}
+  }
+}

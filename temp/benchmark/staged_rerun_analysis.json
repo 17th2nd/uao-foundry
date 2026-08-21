@@ -1,0 +1,222 @@
+{
+ "lanes": {
+  "SIM": {
+   "n": 12,
+   "success": 0.583,
+   "recall": 0.528,
+   "medianPromptTokens": 581.5
+  },
+  "ASA": {
+   "n": 12,
+   "success": 0.75,
+   "recall": 0.806,
+   "medianPromptTokens": 1211.5
+  },
+  "PID_C": {
+   "n": 12,
+   "success": 0.75,
+   "recall": 0.806,
+   "medianPromptTokens": 1656.0
+  },
+  "PID_D": {
+   "n": 12,
+   "success": 0.75,
+   "recall": 0.806,
+   "medianPromptTokens": 1888.5
+  },
+  "PID_E": {
+   "n": 12,
+   "success": 0.833,
+   "recall": 0.806,
+   "medianPromptTokens": 2178.0
+  },
+  "PID_F": {
+   "n": 12,
+   "success": 0.583,
+   "recall": 0.806,
+   "medianPromptTokens": 1711.5
+  }
+ },
+ "errored_frozen_runs": [
+  {
+   "task": "T03",
+   "model": "gpt-oss:20b",
+   "lane": "BRUTE",
+   "error": "HTTP Error 500: Internal Server Error"
+  }
+ ],
+ "H1": {
+  "limbs": {
+   "1_edge_sets_equal_everywhere": true,
+   "2_memory_path_reads_zero_repo_bytes": true,
+   "3_identical_after_restart": true,
+   "4_accumulation_depth_reached": true
+  },
+  "supported": true,
+  "perTask": {
+   "T01": {
+    "freshEdgeCount": 12,
+    "memoryEdgeCount": 12,
+    "edgeSetsEqual": true,
+    "freshBytesRead": 8237,
+    "memoryRepoBytesRead": 0,
+    "freshSeconds": 0.003,
+    "memorySeconds": 1.147,
+    "observationDepthMin": 3,
+    "observationDepthMax": 3,
+    "unintendedRefusals": 0
+   },
+   "T03": {
+    "freshEdgeCount": 12,
+    "memoryEdgeCount": 12,
+    "edgeSetsEqual": true,
+    "freshBytesRead": 8201,
+    "memoryRepoBytesRead": 0,
+    "freshSeconds": 0.002,
+    "memorySeconds": 1.134,
+    "observationDepthMin": 3,
+    "observationDepthMax": 3,
+    "unintendedRefusals": 0
+   },
+   "T04": {
+    "freshEdgeCount": 12,
+    "memoryEdgeCount": 12,
+    "edgeSetsEqual": true,
+    "freshBytesRead": 8115,
+    "memoryRepoBytesRead": 0,
+    "freshSeconds": 0.002,
+    "memorySeconds": 1.141,
+    "observationDepthMin": 3,
+    "observationDepthMax": 3,
+    "unintendedRefusals": 0
+   },
+   "T06": {
+    "freshEdgeCount": 12,
+    "memoryEdgeCount": 12,
+    "edgeSetsEqual": true,
+    "freshBytesRead": 8201,
+    "memoryRepoBytesRead": 0,
+    "freshSeconds": 0.002,
+    "memorySeconds": 1.132,
+    "observationDepthMin": 3,
+    "observationDepthMax": 3,
+    "unintendedRefusals": 0
+   },
+   "T07": {
+    "freshEdgeCount": 12,
+    "memoryEdgeCount": 12,
+    "edgeSetsEqual": true,
+    "freshBytesRead": 8195,
+    "memoryRepoBytesRead": 0,
+    "freshSeconds": 0.002,
+    "memorySeconds": 1.254,
+    "observationDepthMin": 3,
+    "observationDepthMax": 3,
+    "unintendedRefusals": 0
+   },
+   "T08": {
+    "freshEdgeCount": 12,
+    "memoryEdgeCount": 12,
+    "edgeSetsEqual": true,
+    "freshBytesRead": 8270,
+    "memoryRepoBytesRead": 0,
+    "freshSeconds": 0.002,
+    "memorySeconds": 1.145,
+    "observationDepthMin": 3,
+    "observationDepthMax": 3,
+    "unintendedRefusals": 0
+   }
+  }
+ },
+ "H2_mechanical": {
+  "perTask": {
+   "T01": {
+    "graph": {
+     "predicted": [],
+     "precision": 0.0,
+     "recall": 0.0
+    },
+    "observer_frozen": {
+     "precision": 0.25,
+     "recall": 1.0
+    }
+   },
+   "T03": {
+    "graph": {
+     "predicted": [],
+     "precision": 0.0,
+     "recall": 0.0
+    },
+    "observer_frozen": {
+     "precision": 0.75,
+     "recall": 0.667
+    }
+   },
+   "T04": {
+    "graph": {
+     "predicted": [
+      ".ci/pipeline.yml"
+     ],
+     "precision": 1.0,
+     "recall": 0.5
+    },
+    "observer_frozen": {
+     "precision": 1.0,
+     "recall": 1.0
+    }
+   },
+   "T06": {
+    "graph": {
+     "predicted": [],
+     "precision": 0.0,
+     "recall": 0.0
+    },
+    "observer_frozen": {
+     "precision": 0.75,
+     "recall": 1.0
+    }
+   },
+   "T07": {
+    "graph": {
+     "predicted": [
+      "docs/USAGE.md"
+     ],
+     "precision": 1.0,
+     "recall": 0.5
+    },
+    "observer_frozen": {
+     "precision": 0.5,
+     "recall": 0.5
+    }
+   },
+   "T08": {
+    "graph": {
+     "predicted": [
+      "CHANGELOG.md",
+      "src/orbitkit/passes.py",
+      "src/orbitkit/propagate.py",
+      "src/orbitkit/schedule.py",
+      "src/orbitkit/tle.py",
+      "tests/test_passes.py"
+     ],
+     "precision": 0.5,
+     "recall": 1.0
+    },
+    "observer_frozen": {
+     "precision": 0.5,
+     "recall": 0.667
+    }
+   }
+  },
+  "graphMeanPrecision": 0.417,
+  "graphMeanRecall": 0.333,
+  "observerMeanPrecision": 0.625,
+  "observerMeanRecall": 0.806,
+  "supported": false
+ },
+ "H2_llm": {
+  "successDeltaFvsB": -0.167,
+  "noiseFloor": 0.083,
+  "verdict": "above noise floor, negative"
+ }
+}

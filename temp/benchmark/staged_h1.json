@@ -1,0 +1,83 @@
+{
+ "tasks": {
+  "T01": {
+   "freshEdgeCount": 12,
+   "memoryEdgeCount": 12,
+   "edgeSetsEqual": true,
+   "freshBytesRead": 8237,
+   "memoryRepoBytesRead": 0,
+   "freshSeconds": 0.003,
+   "memorySeconds": 1.147,
+   "observationDepthMin": 3,
+   "observationDepthMax": 3,
+   "unintendedRefusals": 0
+  },
+  "T03": {
+   "freshEdgeCount": 12,
+   "memoryEdgeCount": 12,
+   "edgeSetsEqual": true,
+   "freshBytesRead": 8201,
+   "memoryRepoBytesRead": 0,
+   "freshSeconds": 0.002,
+   "memorySeconds": 1.134,
+   "observationDepthMin": 3,
+   "observationDepthMax": 3,
+   "unintendedRefusals": 0
+  },
+  "T04": {
+   "freshEdgeCount": 12,
+   "memoryEdgeCount": 12,
+   "edgeSetsEqual": true,
+   "freshBytesRead": 8115,
+   "memoryRepoBytesRead": 0,
+   "freshSeconds": 0.002,
+   "memorySeconds": 1.141,
+   "observationDepthMin": 3,
+   "observationDepthMax": 3,
+   "unintendedRefusals": 0
+  },
+  "T06": {
+   "freshEdgeCount": 12,
+   "memoryEdgeCount": 12,
+   "edgeSetsEqual": true,
+   "freshBytesRead": 8201,
+   "memoryRepoBytesRead": 0,
+   "freshSeconds": 0.002,
+   "memorySeconds": 1.132,
+   "observationDepthMin": 3,
+   "observationDepthMax": 3,
+   "unintendedRefusals": 0
+  },
+  "T07": {
+   "freshEdgeCount": 12,
+   "memoryEdgeCount": 12,
+   "edgeSetsEqual": true,
+   "freshBytesRead": 8195,
+   "memoryRepoBytesRead": 0,
+   "freshSeconds": 0.002,
+   "memorySeconds": 1.254,
+   "observationDepthMin": 3,
+   "observationDepthMax": 3,
+   "unintendedRefusals": 0
+  },
+  "T08": {
+   "freshEdgeCount": 12,
+   "memoryEdgeCount": 12,
+   "edgeSetsEqual": true,
+   "freshBytesRead": 8270,
+   "memoryRepoBytesRead": 0,
+   "freshSeconds": 0.002,
+   "memorySeconds": 1.145,
+   "observationDepthMin": 3,
+   "observationDepthMax": 3,
+   "unintendedRefusals": 0
+  }
+ },
+ "limbs": {
+  "1_edge_sets_equal_everywhere": true,
+  "2_memory_path_reads_zero_repo_bytes": true,
+  "3_identical_after_restart": true,
+  "4_accumulation_depth_reached": true
+ },
+ "H1_supported": true
+}

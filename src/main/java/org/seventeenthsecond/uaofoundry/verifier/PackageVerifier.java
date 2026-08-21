@@ -1,8 +1,13 @@
 package org.seventeenthsecond.uaofoundry.verifier;
 
 import org.seventeenthsecond.uaofoundry.identifiers.StableIdentifiers;
+import org.seventeenthsecond.uaofoundry.identity.ExternalIdentifiers;
+import org.seventeenthsecond.uaofoundry.identity.IdentityReference;
+import org.seventeenthsecond.uaofoundry.identity.IdentityKernel;
+import org.seventeenthsecond.uaofoundry.identity.IdentityProjections;
 import org.seventeenthsecond.uaofoundry.identifiers.ResolutionKeys;
 import org.seventeenthsecond.uaofoundry.json.Json;
+import org.seventeenthsecond.uaofoundry.significance.SignificanceBoundary;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
 import org.seventeenthsecond.uaofoundry.util.Hashes;
 import org.seventeenthsecond.uaofoundry.validation.SchemaValidator;
@@ -287,6 +292,17 @@ public final class PackageVerifier {
 
         Map<String,Object> expectedResolution = reconstructIdentityResolution(identities, errors);
         if (expectedResolution == null) return;
+
+        // Identity decisions are the one part of the resolution stage that a package cannot fully
+        // re-derive from its own bytes: whether a registry held a matching identity depends on
+        // registry state that is deliberately not copied into the package. They are therefore
+        // separated from the strict reconstruction comparison and checked for internal consistency
+        // against the reconstructed identities instead. Everything else must still reconstruct
+        // exactly.
+        Map<String,Object> resolutionCore = new LinkedHashMap<>(resolution);
+        Object recordedDecisions = resolutionCore.remove("identityDecisions");
+        verifyIdentityDecisions(recordedDecisions, expectedResolution, errors);
+        resolution = resolutionCore;
         if (!canonicalEquals(expectedResolution, resolution)) {
             errors.add("Identity resolution does not reconstruct exactly from accepted candidate identities.");
         }
@@ -329,17 +345,10 @@ public final class PackageVerifier {
             Map<String,Object> actual = actualByUid.get(uid);
             if (actual == null) { errors.add("Reconstructed UAO is absent from canonical identities: " + uid); continue; }
 
-            Map<String,Object> expectedFoundryIdentity = new LinkedHashMap<>();
-            expectedFoundryIdentity.put("canonical_label", identity.get("label"));
-            expectedFoundryIdentity.put("aliases", identity.get("aliases"));
-            expectedFoundryIdentity.put("resolution_key", identity.get("resolutionKey"));
-            expectedFoundryIdentity.put("source_refs", identity.get("sourceRefs"));
+            Map<String,Object> expectedFoundryIdentity = IdentityKernel.build(identity);
             Map<String,Object> actualInternal = object(actual.get("internal_state"), "canonical UAO internal_state", errors);
             Map<String,Object> actualFoundryIdentity = actualInternal == null ? null
                     : object(actualInternal.get("foundry_identity"), "canonical UAO foundry_identity", errors);
-            if (!canonicalEquals(expectedFoundryIdentity, actualFoundryIdentity)) {
-                errors.add("Canonical Foundry identity does not reconstruct from candidate identities for UAO " + uid + ".");
-            }
 
             List<Object> expectedAssertions = new ArrayList<>();
             for (Map<String,Object> claim : claimsByUao.getOrDefault(uid, List.of())) {
@@ -370,6 +379,16 @@ public final class PackageVerifier {
             if (!canonicalEquals(List.of(), actual.get("relationship_references"))) {
                 errors.add("Canonical UAO relationship references are non-empty while Relationship Type role authority remains unavailable: " + uid + ".");
             }
+
+            // The identity kernel's two digests are derived, never authored. Re-derive both from
+            // the independently reconstructed identity and state projections so a package cannot
+            // carry an identity_digest or state_version that its own content does not support.
+            expectedFoundryIdentity.put("state_version", IdentityProjections.stateVersion(
+                    actual.get("lifecycle_status"), actual.get("successor_identity_ref"),
+                    expectedAssertions, List.of()));
+            if (!canonicalEquals(expectedFoundryIdentity, actualFoundryIdentity)) {
+                errors.add("Canonical Foundry identity kernel does not reconstruct from candidate identities for UAO " + uid + ".");
+            }
         }
         if (!actualByUid.keySet().equals(expectedUids)) errors.add("Canonical UAO set differs from reconstructed candidate identities.");
         expectedLedger.sort(Comparator.comparing(v -> String.valueOf(object(v, "expected provenance", errors).get("candidateId"))));
@@ -386,6 +405,29 @@ public final class PackageVerifier {
                 item.put("candidateId", rel.get("candidateId"));
                 item.put("code", "URO_TYPE_AUTHORITY_UNAVAILABLE");
                 item.put("description", "Current ASA CSS defines URO structure but the Foundry has no current authoritative domain Relationship Type role registry to validate this candidate. Publication of this URO is fail-closed.");
+                item.put("typeVersion", rel.get("typeVersion"));
+                List<Object> participants = new ArrayList<>();
+                int bound = 0;
+                if (rel.get("participants") instanceof List<?> rawParticipants) {
+                    for (Object rawParticipant : rawParticipants) {
+                        Map<String,Object> participant = object(rawParticipant, "candidate relationship participant", errors);
+                        if (participant == null) continue;
+                        String ref = String.valueOf(participant.get("candidateIdentityRef"));
+                        Object uaoId = candidateToUao.get(ref);
+                        Map<String,Object> record = new LinkedHashMap<>();
+                        record.put("role", participant.get("role"));
+                        record.put("candidateIdentityRef", ref);
+                        record.put("binding", uaoId == null ? "UNRESOLVED" : "RESOLVED");
+                        if (uaoId != null) { record.put("uaoId", uaoId); bound++; }
+                        participants.add(record);
+                    }
+                }
+                item.put("participants", participants);
+                item.put("identityBindingStatus", bound == 0 ? "UNBOUND"
+                        : bound == participants.size() ? "ALL_PARTICIPANTS_BOUND" : "PARTIALLY_BOUND");
+                item.put("identityLiterals", rel.get("identityLiterals"));
+                item.put("contextualBindings", rel.get("contextualBindings"));
+                item.put("sourceRefs", rel.get("sourceRefs"));
                 expectedUnresolved.add(item);
             }
             if (!canonicalEquals(expectedUnresolved, unresolved)) errors.add("Unresolved relationship projection does not reconstruct exactly from candidate relationships while ASA type-role authority is unavailable.");
@@ -404,6 +446,78 @@ public final class PackageVerifier {
                 errors.add("Publication decision cannot be reconstructed from scope/quarantine/URO/coverage/verification state; expected " + expectedStatus + "/" + expectedEligible + ".");
             }
         }
+    }
+
+    /**
+     * Checks what a package can prove about its own identity decisions.
+     *
+     * <p>Verifiable here: exactly one decision per resolved identity, each naming that identity's
+     * reconstructed resolution key and candidate/source refs, and a {@code SAME} decision binding
+     * the uid that the key actually derives. That last check matters — it means a package cannot
+     * claim to have reused some other registered identity while carrying this one.
+     *
+     * <p>Not verifiable here, and deliberately not claimed: whether the registry genuinely held a
+     * match at manufacture time. That requires the registry, and an auditor holding it can
+     * re-derive the decision from the recorded key and external identifiers.
+     */
+    private void verifyIdentityDecisions(Object recordedDecisions, Map<String,Object> expectedResolution, List<String> errors) {
+        if (!(recordedDecisions instanceof List<?> decisions)) {
+            errors.add("identity-resolution.json does not carry an identityDecisions array.");
+            return;
+        }
+        Map<String,Map<String,Object>> expectedByUid = new LinkedHashMap<>();
+        for (Object raw : Json.array(expectedResolution.get("resolvedIdentities"), "reconstructed resolved identities")) {
+            Map<String,Object> identity = object(raw, "reconstructed resolved identity", errors);
+            if (identity != null) expectedByUid.put(String.valueOf(identity.get("uaoId")), identity);
+        }
+
+        Set<String> seen = new LinkedHashSet<>();
+        for (Object raw : decisions) {
+            Map<String,Object> decision = object(raw, "identity decision", errors);
+            if (decision == null) continue;
+            ValidationResult schema = validator.validate(decision, schemaDir.resolve("identity-decision.schema.json"));
+            errors.addAll(prefix(schema.errors(), "Identity decision: "));
+
+            String uaoId = String.valueOf(decision.get("uaoId"));
+            if (!seen.add(uaoId)) errors.add("Duplicate identity decision for UAO " + uaoId + ".");
+            Map<String,Object> identity = expectedByUid.get(uaoId);
+            if (identity == null) {
+                errors.add("Identity decision references an unreconstructed UAO: " + uaoId + ".");
+                continue;
+            }
+            Object expectedKey = identity.get("resolutionKey");
+            if (!canonicalEquals(expectedKey, decision.get("resolutionKey"))) {
+                errors.add("Identity decision resolutionKey does not match the reconstructed identity for " + uaoId + ".");
+            }
+            if (!canonicalEquals(IdentityReference.resolutionKey(String.valueOf(expectedKey)).toMap(), decision.get("reference"))) {
+                errors.add("Identity decision reference does not match the reconstructed identity for " + uaoId + ".");
+            }
+            if (!canonicalEquals(identity.get("candidateRefs"), decision.get("candidateRefs"))) {
+                errors.add("Identity decision candidateRefs do not reconstruct for " + uaoId + ".");
+            }
+            if (!canonicalEquals(identity.get("sourceRefs"), decision.get("sourceRefs"))) {
+                errors.add("Identity decision sourceRefs do not reconstruct for " + uaoId + ".");
+            }
+            if ("SAME".equals(decision.get("decision")) && !uaoId.equals(decision.get("uid"))) {
+                errors.add("Identity decision claims reuse of a different registered identity than the one manufactured: " + uaoId + ".");
+            }
+        }
+        for (String uaoId : expectedByUid.keySet()) {
+            if (!seen.contains(uaoId)) errors.add("No identity decision was recorded for UAO " + uaoId + ".");
+        }
+    }
+
+    /** Mirrors the manufacture-side alias provenance assembly from independently grouped candidates. */
+    private static List<Object> reconstructAliasProvenance(Map<String,Set<String>> nameCandidates, Map<String,Set<String>> nameSources) {
+        List<Object> out = new ArrayList<>();
+        for (Map.Entry<String,Set<String>> entry : nameCandidates.entrySet()) {
+            Map<String,Object> record = new LinkedHashMap<>();
+            record.put("alias", entry.getKey());
+            record.put("candidateRefs", new ArrayList<>(entry.getValue()));
+            record.put("sourceRefs", new ArrayList<>(nameSources.getOrDefault(entry.getKey(), Set.of())));
+            out.add(record);
+        }
+        return out;
     }
 
     private Map<String,Object> reconstructIdentityResolution(List<?> identities, List<String> errors) {
@@ -434,14 +548,40 @@ public final class PackageVerifier {
             Set<String> aliases = new LinkedHashSet<>();
             Set<String> sources = new LinkedHashSet<>();
             List<Object> candidateRefs = new ArrayList<>();
+            Map<String,String> externalIdentifiers = new TreeMap<>();
+            Map<String,Set<String>> nameCandidates = new TreeMap<>();
+            Map<String,Set<String>> nameSources = new TreeMap<>();
             for (Map<String,Object> candidate : group) {
                 Object candidateId = candidate.get("candidateId");
                 candidateRefs.add(candidateId);
                 candidateToUao.put(String.valueOf(candidateId), uaoId);
-                if (candidate.get("label") instanceof String label) aliases.add(label);
-                if (candidate.get("aliases") instanceof List<?> values) for (Object value : values) aliases.add(String.valueOf(value));
-                if (candidate.get("sourceRefs") instanceof List<?> values) for (Object value : values) sources.add(String.valueOf(value));
+                List<String> candidateSources = new ArrayList<>();
+                if (candidate.get("sourceRefs") instanceof List<?> values) for (Object value : values) candidateSources.add(String.valueOf(value));
+                sources.addAll(candidateSources);
+                List<String> names = new ArrayList<>();
+                if (candidate.get("label") instanceof String label) names.add(label);
+                if (candidate.get("aliases") instanceof List<?> values) for (Object value : values) names.add(String.valueOf(value));
+                for (String name : names) {
+                    aliases.add(name);
+                    nameCandidates.computeIfAbsent(name, ignored -> new LinkedHashSet<>()).add(String.valueOf(candidateId));
+                    nameSources.computeIfAbsent(name, ignored -> new LinkedHashSet<>()).addAll(candidateSources);
+                }
+                try {
+                    Map<String,String> declared = ExternalIdentifiers.requireCanonical(
+                            candidate.get("externalIdentifiers"), "Candidate " + candidateId + " externalIdentifiers");
+                    for (Map.Entry<String,String> external : declared.entrySet()) {
+                        String previous = externalIdentifiers.putIfAbsent(external.getKey(), external.getValue());
+                        if (previous != null && !previous.equals(external.getValue())) {
+                            errors.add("Candidates sharing resolutionKey " + entry.getKey()
+                                    + " declare conflicting " + external.getKey() + " identifiers during reconstruction.");
+                        }
+                    }
+                } catch (IllegalArgumentException ex) {
+                    errors.add("Candidate external identifier is not canonical during reconstruction: " + ex.getMessage());
+                }
             }
+            try { ExternalIdentifiers.requireConsistentWithResolutionKey(entry.getKey(), externalIdentifiers); }
+            catch (IllegalArgumentException ex) { errors.add(ex.getMessage()); }
             String label = String.valueOf(group.getFirst().get("label"));
             aliases.remove(label);
             Map<String,Object> item = new LinkedHashMap<>();
@@ -449,8 +589,11 @@ public final class PackageVerifier {
             item.put("candidateRefs", candidateRefs);
             item.put("label", label);
             item.put("resolutionKey", entry.getKey());
+            item.put("semanticType", ResolutionKeys.semanticType(entry.getKey()));
             item.put("root", root);
             item.put("aliases", new ArrayList<>(aliases));
+            item.put("aliasProvenance", reconstructAliasProvenance(nameCandidates, nameSources));
+            item.put("externalIdentifiers", ExternalIdentifiers.toCanonicalMap(externalIdentifiers));
             item.put("sourceRefs", new ArrayList<>(sources));
             resolved.add(item);
         }
@@ -556,16 +699,7 @@ public final class PackageVerifier {
     }
 
     private void collectForbidden(Object value, String path, List<String> errors) {
-        Set<String> forbidden = Set.of("score", "significance_value", "belief", "stance");
-        if (value instanceof Map<?,?> m) {
-            for (Map.Entry<?,?> e : m.entrySet()) {
-                String key = String.valueOf(e.getKey());
-                if (forbidden.contains(key)) errors.add("Forbidden ASA field at " + path + "." + key);
-                collectForbidden(e.getValue(), path + "." + key, errors);
-            }
-        } else if (value instanceof List<?> l) {
-            for (int i=0;i<l.size();i++) collectForbidden(l.get(i), path + "[" + i + "]", errors);
-        }
+        SignificanceBoundary.collect(value, path, errors);
     }
 
     private static List<String> prefix(List<String> errors, String prefix) { return errors.stream().map(e -> prefix + e).toList(); }

@@ -1,6 +1,7 @@
 # ADR-0001 — Retain UAO During Prototype; Review USI at Clean Migration
 
-**Status:** Accepted  
+**Status:** Superseded by ADR-0003 for forward-facing terminology  
+**Original status:** Accepted  
 **Date:** 2026-08-09
 
 ## Context
@@ -9,7 +10,7 @@ UAO originally means **Universal ASA Object**. As the architecture evolved towar
 
 Renaming during active prototype, demonstration, Foundry and TAFE work would create unnecessary terminology churn before the architecture has proven that semantic identity is the correct stable abstraction.
 
-## Decision
+## Original Decision
 
 1. Retain **UAO** as the canonical prototype term.
 2. Do not perform a cosmetic UAO-to-USI rename in the current repository.
@@ -21,6 +22,8 @@ Renaming during active prototype, demonstration, Foundry and TAFE work would cre
    - USI Registry
 5. Adopt USI only if it describes the demonstrated architecture more accurately than UAO.
 
-## Consequence
+## Supersession
 
-Repository names, package documentation and prototype artifacts use `UAO` today. This decision does not prejudge the mature public terminology.
+The deferred naming question was resolved on 2026-08-21 by **ADR-0003 — Adopt USI as the Canonical Target Identity Terminology**.
+
+UAO remains historical/transitional terminology for the audited prototype and existing immutable artefacts. New user-facing development targets USI terminology through a controlled compatibility-preserving migration.

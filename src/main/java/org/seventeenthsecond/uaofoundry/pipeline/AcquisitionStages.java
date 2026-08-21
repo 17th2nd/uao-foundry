@@ -1,6 +1,11 @@
 package org.seventeenthsecond.uaofoundry.pipeline;
 
 import org.seventeenthsecond.uaofoundry.identifiers.StableIdentifiers;
+import org.seventeenthsecond.uaofoundry.identity.ExternalIdentifiers;
+import org.seventeenthsecond.uaofoundry.identity.IdentityDecision;
+import org.seventeenthsecond.uaofoundry.identity.IdentityReference;
+import org.seventeenthsecond.uaofoundry.identity.IdentityResolution;
+import org.seventeenthsecond.uaofoundry.identity.IdentityResolver;
 import org.seventeenthsecond.uaofoundry.identifiers.ResolutionKeys;
 import org.seventeenthsecond.uaofoundry.json.Json;
 import org.seventeenthsecond.uaofoundry.model.ManufacturingRequest;
@@ -213,14 +218,41 @@ class AcquisitionStages extends PipelineBase {
             Set<String> aliases = new LinkedHashSet<>();
             Set<String> sources = new LinkedHashSet<>();
             List<Object> refs = new ArrayList<>();
+            Map<String, String> externalIdentifiers = new TreeMap<>();
+            Map<String, Set<String>> nameCandidates = new TreeMap<>();
+            Map<String, Set<String>> nameSources = new TreeMap<>();
             for (Map<String, Object> candidate : group) {
                 String cid = string(candidate.get("candidateId"), "candidateId");
                 candidateToUao.put(cid, uaoId);
                 refs.add(cid);
-                aliases.add(string(candidate.get("label"), "label"));
-                for (Object alias : listOrEmpty(candidate.get("aliases"))) aliases.add(string(alias, "alias"));
-                for (Object source : list(candidate.get("sourceRefs"), "sourceRefs")) sources.add(string(source, "sourceRef"));
+                List<String> candidateSources = new ArrayList<>();
+                for (Object source : list(candidate.get("sourceRefs"), "sourceRefs")) candidateSources.add(string(source, "sourceRef"));
+                sources.addAll(candidateSources);
+                // Every name is recorded with the candidate that used it and the sources behind
+                // that candidate. A name without provenance cannot later be weighed against a
+                // competing name, which is what alias-driven ambiguity resolution will need.
+                List<String> names = new ArrayList<>();
+                names.add(string(candidate.get("label"), "label"));
+                for (Object alias : listOrEmpty(candidate.get("aliases"))) names.add(string(alias, "alias"));
+                for (String name : names) {
+                    aliases.add(name);
+                    nameCandidates.computeIfAbsent(name, ignored -> new LinkedHashSet<>()).add(cid);
+                    nameSources.computeIfAbsent(name, ignored -> new LinkedHashSet<>()).addAll(candidateSources);
+                }
+                // Candidates grouped under one resolution key must agree on durable external
+                // identity. Disagreement means the provider named two different objects with one
+                // address, which cannot be repaired here without inventing a winner.
+                Map<String, String> declared = ExternalIdentifiers.requireCanonical(
+                        candidate.get("externalIdentifiers"), "Candidate " + cid + " externalIdentifiers");
+                for (Map.Entry<String, String> external : declared.entrySet()) {
+                    String previous = externalIdentifiers.putIfAbsent(external.getKey(), external.getValue());
+                    if (previous != null && !previous.equals(external.getValue())) {
+                        throw new IllegalArgumentException("EXTERNAL_IDENTIFIER_CONTRADICTION: candidates sharing resolutionKey "
+                                + entry.getKey() + " declare conflicting " + external.getKey() + " identifiers.");
+                    }
+                }
             }
+            ExternalIdentifiers.requireConsistentWithResolutionKey(entry.getKey(), externalIdentifiers);
             String label = string(group.getFirst().get("label"), "label");
             aliases.remove(label);
             Map<String, Object> item = new LinkedHashMap<>();
@@ -228,8 +260,11 @@ class AcquisitionStages extends PipelineBase {
             item.put("candidateRefs", refs);
             item.put("label", label);
             item.put("resolutionKey", entry.getKey());
+            item.put("semanticType", ResolutionKeys.semanticType(entry.getKey()));
             item.put("root", root);
             item.put("aliases", new ArrayList<>(aliases));
+            item.put("aliasProvenance", aliasProvenance(nameCandidates, nameSources));
+            item.put("externalIdentifiers", ExternalIdentifiers.toCanonicalMap(externalIdentifiers));
             item.put("sourceRefs", new ArrayList<>(sources));
             resolved.add(item);
         }
@@ -238,12 +273,91 @@ class AcquisitionStages extends PipelineBase {
         out.put("rootUaoId", rootUao);
         out.put("candidateToUao", candidateToUao);
         out.put("resolvedIdentities", resolved);
+        out.put("identityDecisions", identityDecisions(resolved));
         return out;
+    }
+
+    /**
+     * Turns the observed names into provenance-bearing alias records.
+     *
+     * <p>Covers every name the identity was seen under, the canonical label included: §9 of the
+     * programme treats a human label as one alias kind among many, and a label carries no more
+     * inherent authority than any other name. Sorted by name for determinism.
+     */
+    private static List<Object> aliasProvenance(Map<String, Set<String>> nameCandidates, Map<String, Set<String>> nameSources) {
+        List<Object> out = new ArrayList<>();
+        for (Map.Entry<String, Set<String>> entry : nameCandidates.entrySet()) {
+            Map<String, Object> record = new LinkedHashMap<>();
+            record.put("alias", entry.getKey());
+            record.put("candidateRefs", new ArrayList<>(entry.getValue()));
+            record.put("sourceRefs", new ArrayList<>(nameSources.getOrDefault(entry.getKey(), Set.of())));
+            out.add(record);
+        }
+        return out;
+    }
+
+    /**
+     * Records, for every resolved identity, why the Foundry believes it does or does not denote an
+     * already-registered object.
+     *
+     * <p>Before this existed the resolution key was an <em>assertion</em> of identity that the
+     * pipeline treated as <em>evidence</em> of identity, and no artefact could answer the question
+     * afterwards. Each decision now carries its reference, verdict, reason codes, the registered
+     * identities the evidence pointed at, and the candidate and source refs that supported it.
+     *
+     * <p>History is preserved by accretion rather than by mutation: decisions live inside an
+     * immutable package, so a later manufacture adds a new package carrying its own decisions and
+     * can never rewrite an earlier determination.
+     *
+     * <p>When no registry is supplied the Foundry does not pretend to have looked. Every decision
+     * is {@code UNRESOLVED / REGISTRY_NOT_CONSULTED}, which is deliberately distinguishable from
+     * having looked and found nothing.
+     */
+    private List<Object> identityDecisions(List<Object> resolvedIdentities) {
+        IdentityResolver resolver = registryIndex == null ? null : new IdentityResolver(registryIndex);
+        List<Object> decisions = new ArrayList<>();
+        for (Object raw : resolvedIdentities) {
+            Map<String, Object> identity = map(raw);
+            String uaoId = string(identity.get("uaoId"), "uaoId");
+            String resolutionKey = string(identity.get("resolutionKey"), "resolutionKey");
+            Map<String, String> externalIdentifiers = new TreeMap<>();
+            map(identity.get("externalIdentifiers")).forEach((k, v) -> externalIdentifiers.put(k, String.valueOf(v)));
+
+            Map<String, Object> decision = new LinkedHashMap<>();
+            decision.put("uaoId", uaoId);
+            decision.put("reference", IdentityReference.resolutionKey(resolutionKey).toMap());
+            if (resolver == null) {
+                decision.put("decision", "UNRESOLVED");
+                decision.put("reasonCodes", List.of("REGISTRY_NOT_CONSULTED"));
+                decision.put("candidateUids", List.of());
+            } else {
+                IdentityResolution resolution = resolver.resolveCandidate(resolutionKey, externalIdentifiers);
+                if (resolution.decision() == IdentityDecision.DIFFERENT) {
+                    // Positive evidence of difference under one address. There is no winner to pick,
+                    // and repairing it here would fabricate identity certainty, so manufacture stops.
+                    throw new IllegalArgumentException("EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey "
+                            + resolutionKey + " contradicts the durable external identity already registered for "
+                            + String.join(", ", resolution.candidateUids()) + ".");
+                }
+                decision.put("decision", resolution.decision().name());
+                decision.put("reasonCodes", new ArrayList<>(resolution.reasonCodes()));
+                if (resolution.uid() != null) decision.put("uid", resolution.uid());
+                decision.put("candidateUids", new ArrayList<>(resolution.candidateUids()));
+            }
+            decision.put("resolutionKey", resolutionKey);
+            decision.put("candidateRefs", deepCopyList(list(identity.get("candidateRefs"), "candidateRefs")));
+            decision.put("sourceRefs", deepCopyList(list(identity.get("sourceRefs"), "sourceRefs")));
+            validate(decision, "identity-decision.schema.json", "Identity decision " + uaoId);
+            decisions.add(decision);
+        }
+        decisions.sort(Comparator.comparing(v -> string(map(v).get("uaoId"), "uaoId")));
+        return decisions;
     }
 
     protected Map<String, Object> relationshipConstruction(Map<String, Object> candidateValidation, Map<String, Object> resolution) {
         Map<String, Object> valid = map(candidateValidation.get("valid"));
         List<Object> candidateRelationships = list(valid.get("relationships"), "relationships");
+        Map<String, Object> candidateToUao = map(resolution.get("candidateToUao"));
         List<Object> unresolved = new ArrayList<>();
         for (Object raw : candidateRelationships) {
             Map<String, Object> rel = map(raw);
@@ -251,6 +365,35 @@ class AcquisitionStages extends PipelineBase {
             finding.put("candidateId", rel.get("candidateId"));
             finding.put("code", "URO_TYPE_AUTHORITY_UNAVAILABLE");
             finding.put("description", "Current ASA CSS defines URO structure but the Foundry has no current authoritative domain Relationship Type role registry to validate this candidate. Publication of this URO is fail-closed.");
+            finding.put("typeVersion", rel.get("typeVersion"));
+
+            // Identity binding and type-role authority are separable problems. Resolving cid-x to
+            // uao-y is an identity operation the Foundry can already perform; deciding whether
+            // "container" is a legal role of asa.core/contains@1 needs the authority ASA#29 tracks.
+            // Binding the first does not smuggle the candidate one step closer to publication --
+            // it only stops the retained evidence pointing at bundle-local handles that mean
+            // nothing outside this package.
+            List<Object> participants = new ArrayList<>();
+            int bound = 0;
+            for (Object rawParticipant : list(rel.get("participants"), "relationship participants")) {
+                Map<String, Object> participant = map(rawParticipant);
+                String ref = string(participant.get("candidateIdentityRef"), "candidateIdentityRef");
+                Object uaoId = candidateToUao.get(ref);
+                Map<String, Object> record = new LinkedHashMap<>();
+                record.put("role", participant.get("role"));
+                record.put("candidateIdentityRef", ref);
+                // Never invent a uid to make a relation look complete.
+                record.put("binding", uaoId == null ? "UNRESOLVED" : "RESOLVED");
+                if (uaoId != null) { record.put("uaoId", uaoId); bound++; }
+                participants.add(record);
+            }
+            finding.put("participants", participants);
+            finding.put("identityBindingStatus", bound == 0 ? "UNBOUND"
+                    : bound == participants.size() ? "ALL_PARTICIPANTS_BOUND" : "PARTIALLY_BOUND");
+            finding.put("identityLiterals", rel.get("identityLiterals"));
+            finding.put("contextualBindings", rel.get("contextualBindings"));
+            finding.put("sourceRefs", rel.get("sourceRefs"));
+            validate(finding, "unresolved-relationship.schema.json", "Unresolved relationship " + rel.get("candidateId"));
             unresolved.add(finding);
         }
         Map<String, Object> out = new LinkedHashMap<>();

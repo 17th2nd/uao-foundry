@@ -1,0 +1,836 @@
+{
+ "tasks": [
+  "T01",
+  "T03",
+  "T04",
+  "T06",
+  "T07",
+  "T08"
+ ],
+ "lanes": {
+  "BRUTE": {
+   "name": "(reference) whole repository",
+   "n": 12,
+   "tasks": [
+    "T01",
+    "T03",
+    "T04",
+    "T06",
+    "T07",
+    "T08"
+   ],
+   "models": [
+    "gpt-oss:20b",
+    "qwen3-coder:30b"
+   ],
+   "success": 0.75,
+   "correct": 9,
+   "relevant_file_recall": 1.0,
+   "median_prompt_tokens": 3317,
+   "median_latency_s": 14.88,
+   "source": [
+    "frozen-asallm"
+   ],
+   "context_reduction_vs_brute": 0.0
+  },
+  "SIM": {
+   "name": "A  similarity retrieval",
+   "n": 12,
+   "tasks": [
+    "T01",
+    "T03",
+    "T04",
+    "T06",
+    "T07",
+    "T08"
+   ],
+   "models": [
+    "gpt-oss:20b",
+    "qwen3-coder:30b"
+   ],
+   "success": 0.583,
+   "correct": 7,
+   "relevant_file_recall": 0.528,
+   "median_prompt_tokens": 581,
+   "median_latency_s": 13.05,
+   "source": [
+    "frozen-asallm"
+   ],
+   "context_reduction_vs_brute": 0.825
+  },
+  "ASA": {
+   "name": "B  relational extraction",
+   "n": 12,
+   "tasks": [
+    "T01",
+    "T03",
+    "T04",
+    "T06",
+    "T07",
+    "T08"
+   ],
+   "models": [
+    "gpt-oss:20b",
+    "qwen3-coder:30b"
+   ],
+   "success": 0.75,
+   "correct": 9,
+   "relevant_file_recall": 0.806,
+   "median_prompt_tokens": 1211,
+   "median_latency_s": 10.16,
+   "source": [
+    "frozen-asallm"
+   ],
+   "context_reduction_vs_brute": 0.635
+  },
+  "PID_C": {
+   "name": "C  relational + persistent identity",
+   "n": 12,
+   "tasks": [
+    "T01",
+    "T03",
+    "T04",
+    "T06",
+    "T07",
+    "T08"
+   ],
+   "models": [
+    "gpt-oss:20b",
+    "qwen3-coder:30b"
+   ],
+   "success": 0.75,
+   "correct": 9,
+   "relevant_file_recall": 0.806,
+   "median_prompt_tokens": 1656,
+   "median_latency_s": 29.83,
+   "source": [
+    "pima"
+   ],
+   "context_reduction_vs_brute": 0.501
+  },
+  "PID_D": {
+   "name": "D  + identity provenance",
+   "n": 12,
+   "tasks": [
+    "T01",
+    "T03",
+    "T04",
+    "T06",
+    "T07",
+    "T08"
+   ],
+   "models": [
+    "gpt-oss:20b",
+    "qwen3-coder:30b"
+   ],
+   "success": 0.75,
+   "correct": 9,
+   "relevant_file_recall": 0.806,
+   "median_prompt_tokens": 1888,
+   "median_latency_s": 27.45,
+   "source": [
+    "pima"
+   ],
+   "context_reduction_vs_brute": 0.431
+  },
+  "PID_E": {
+   "name": "E  + negative space",
+   "n": 12,
+   "tasks": [
+    "T01",
+    "T03",
+    "T04",
+    "T06",
+    "T07",
+    "T08"
+   ],
+   "models": [
+    "gpt-oss:20b",
+    "qwen3-coder:30b"
+   ],
+   "success": 0.833,
+   "correct": 10,
+   "relevant_file_recall": 0.806,
+   "median_prompt_tokens": 2178,
+   "median_latency_s": 29.59,
+   "source": [
+    "pima"
+   ],
+   "context_reduction_vs_brute": 0.343
+  }
+ },
+ "excludedErroredRuns": [
+  {
+   "task": "T03",
+   "model": "gpt-oss:20b",
+   "lane": "BRUTE",
+   "error": "HTTP Error 500: Internal Server Error"
+  }
+ ],
+ "negativeSpaceAccuracy": {
+  "BRUTE": {
+   "n": 10,
+   "correct": 8,
+   "accuracy": 0.8
+  },
+  "SIM": {
+   "n": 10,
+   "correct": 6,
+   "accuracy": 0.6
+  },
+  "ASA": {
+   "n": 10,
+   "correct": 7,
+   "accuracy": 0.7
+  },
+  "PID_C": {
+   "n": 10,
+   "correct": 8,
+   "accuracy": 0.8
+  },
+  "PID_D": {
+   "n": 10,
+   "correct": 8,
+   "accuracy": 0.8
+  },
+  "PID_E": {
+   "n": 10,
+   "correct": 9,
+   "accuracy": 0.9
+  }
+ },
+ "cumulativeIdentityExperiment": {
+  "experiment": "cumulative-identity-across-repository-variants",
+  "tasks": [
+   "T01",
+   "T03",
+   "T04",
+   "T06",
+   "T07",
+   "T08"
+  ],
+  "steps": [
+   {
+    "task": "T01",
+    "reused": 0,
+    "created": 19,
+    "refused": 0,
+    "registryIdentities": 19,
+    "registryPackages": 19
+   },
+   {
+    "task": "T03",
+    "reused": 18,
+    "created": 0,
+    "refused": 1,
+    "registryIdentities": 19,
+    "registryPackages": 37
+   },
+   {
+    "task": "T04",
+    "reused": 0,
+    "created": 0,
+    "refused": 19,
+    "registryIdentities": 19,
+    "registryPackages": 37
+   },
+   {
+    "task": "T06",
+    "reused": 0,
+    "created": 0,
+    "refused": 19,
+    "registryIdentities": 19,
+    "registryPackages": 37
+   },
+   {
+    "task": "T07",
+    "reused": 0,
+    "created": 0,
+    "refused": 19,
+    "registryIdentities": 19,
+    "registryPackages": 37
+   },
+   {
+    "task": "T08",
+    "reused": 0,
+    "created": 0,
+    "refused": 19,
+    "registryIdentities": 19,
+    "registryPackages": 37
+   }
+  ],
+  "finalIdentities": 19,
+  "finalPackages": 37,
+  "duplicateIdentities": {},
+  "duplicateIdentityCount": 0,
+  "unreconciledIdentities": [],
+  "unreconciledCount": 0,
+  "refusedManufactures": [
+   {
+    "task": "T03",
+    "file": "src/orbitkit/schedule.py",
+    "reason": "error: EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey foundry:v0.1:file:src-orbitkit-schedule.py contradicts the durable external identity already registered for uao-3614dc9dc76e.",
+    "cause": "CONTENT_CHANGED_UNDER_STABLE_ADDRESS"
+   },
+   {
+    "task": "T04",
+    "file": ".ci/pipeline.yml",
+    "reason": "error: EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey foundry:v0.1:file:.ci-pipeline.yml contradicts the durable external identity already registered for uao-7a2065eca8d3.",
+    "cause": "CONTENT_CHANGED_UNDER_STABLE_ADDRESS"
+   },
+   {
+    "task": "T04",
+    "file": "CHANGELOG.md",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-b2e6ba9164927b66",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T04",
+    "file": "README.md",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-c2fd52007b0e03be",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T04",
+    "file": "data/tle_catalog.txt",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-9d43ae916651de55",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T04",
+    "file": "docs/USAGE.md",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-74138000174b561a",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T04",
+    "file": "pyproject.toml",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-8a5ecdc00d8985e9",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T04",
+    "file": "src/orbitkit/__init__.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-3e6e7f456fd574dd",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T04",
+    "file": "src/orbitkit/config.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-ad08534c252225aa",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T04",
+    "file": "src/orbitkit/passes.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-7102dfb8a78110ba",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T04",
+    "file": "src/orbitkit/propagate.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-e71e49eeb5e721fa",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T04",
+    "file": "src/orbitkit/report.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-bc3ab60fd9d256e9",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T04",
+    "file": "src/orbitkit/schedule.py",
+    "reason": "error: EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey foundry:v0.1:file:src-orbitkit-schedule.py contradicts the durable external identity already registered for uao-3614dc9dc76e.",
+    "cause": "CONTENT_CHANGED_UNDER_STABLE_ADDRESS"
+   },
+   {
+    "task": "T04",
+    "file": "src/orbitkit/tle.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-799bf0070c8e4bde",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T04",
+    "file": "station.toml",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-25f21e5f95901692",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T04",
+    "file": "tests/__init__.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-8c99a4b277395884",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T04",
+    "file": "tests/test_passes.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-0c5740a9ce1548f9",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T04",
+    "file": "tests/test_propagate.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-ed6489bbfa3ad545",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T04",
+    "file": "tests/test_schedule.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-5677e2aab443641e",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T04",
+    "file": "tests/test_tle.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-c1afdcf3c74d51ee",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": ".ci/pipeline.yml",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-b325f6430ab90765",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": "CHANGELOG.md",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-b2e6ba9164927b66",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": "README.md",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-c2fd52007b0e03be",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": "data/tle_catalog.txt",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-9d43ae916651de55",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": "docs/USAGE.md",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-74138000174b561a",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": "pyproject.toml",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-8a5ecdc00d8985e9",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": "src/orbitkit/__init__.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-3e6e7f456fd574dd",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": "src/orbitkit/config.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-ad08534c252225aa",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": "src/orbitkit/passes.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-7102dfb8a78110ba",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": "src/orbitkit/propagate.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-e71e49eeb5e721fa",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": "src/orbitkit/report.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-bc3ab60fd9d256e9",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": "src/orbitkit/schedule.py",
+    "reason": "error: EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey foundry:v0.1:file:src-orbitkit-schedule.py contradicts the durable external identity already registered for uao-3614dc9dc76e.",
+    "cause": "CONTENT_CHANGED_UNDER_STABLE_ADDRESS"
+   },
+   {
+    "task": "T06",
+    "file": "src/orbitkit/tle.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-799bf0070c8e4bde",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": "station.toml",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-25f21e5f95901692",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": "tests/__init__.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-8c99a4b277395884",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": "tests/test_passes.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-0c5740a9ce1548f9",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": "tests/test_propagate.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-ed6489bbfa3ad545",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": "tests/test_schedule.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-5677e2aab443641e",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T06",
+    "file": "tests/test_tle.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-c1afdcf3c74d51ee",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T07",
+    "file": ".ci/pipeline.yml",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-b325f6430ab90765",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T07",
+    "file": "CHANGELOG.md",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-b2e6ba9164927b66",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T07",
+    "file": "README.md",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-c2fd52007b0e03be",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T07",
+    "file": "data/tle_catalog.txt",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-9d43ae916651de55",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T07",
+    "file": "docs/USAGE.md",
+    "reason": "error: EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey foundry:v0.1:file:docs-usage.md contradicts the durable external identity already registered for uao-3c2a0c625461.",
+    "cause": "CONTENT_CHANGED_UNDER_STABLE_ADDRESS"
+   },
+   {
+    "task": "T07",
+    "file": "pyproject.toml",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-8a5ecdc00d8985e9",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T07",
+    "file": "src/orbitkit/__init__.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-3e6e7f456fd574dd",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T07",
+    "file": "src/orbitkit/config.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-ad08534c252225aa",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T07",
+    "file": "src/orbitkit/passes.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-7102dfb8a78110ba",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T07",
+    "file": "src/orbitkit/propagate.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-e71e49eeb5e721fa",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T07",
+    "file": "src/orbitkit/report.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-bc3ab60fd9d256e9",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T07",
+    "file": "src/orbitkit/schedule.py",
+    "reason": "error: EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey foundry:v0.1:file:src-orbitkit-schedule.py contradicts the durable external identity already registered for uao-3614dc9dc76e.",
+    "cause": "CONTENT_CHANGED_UNDER_STABLE_ADDRESS"
+   },
+   {
+    "task": "T07",
+    "file": "src/orbitkit/tle.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-799bf0070c8e4bde",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T07",
+    "file": "station.toml",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-25f21e5f95901692",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T07",
+    "file": "tests/__init__.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-8c99a4b277395884",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T07",
+    "file": "tests/test_passes.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-0c5740a9ce1548f9",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T07",
+    "file": "tests/test_propagate.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-ed6489bbfa3ad545",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T07",
+    "file": "tests/test_schedule.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-5677e2aab443641e",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T07",
+    "file": "tests/test_tle.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-c1afdcf3c74d51ee",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T08",
+    "file": ".ci/pipeline.yml",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-b325f6430ab90765",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T08",
+    "file": "CHANGELOG.md",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-b2e6ba9164927b66",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T08",
+    "file": "README.md",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-c2fd52007b0e03be",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T08",
+    "file": "data/tle_catalog.txt",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-9d43ae916651de55",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T08",
+    "file": "docs/USAGE.md",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-74138000174b561a",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T08",
+    "file": "pyproject.toml",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-8a5ecdc00d8985e9",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T08",
+    "file": "src/orbitkit/__init__.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-3e6e7f456fd574dd",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T08",
+    "file": "src/orbitkit/config.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-ad08534c252225aa",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T08",
+    "file": "src/orbitkit/passes.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-7102dfb8a78110ba",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T08",
+    "file": "src/orbitkit/propagate.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-e71e49eeb5e721fa",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T08",
+    "file": "src/orbitkit/report.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-bc3ab60fd9d256e9",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T08",
+    "file": "src/orbitkit/schedule.py",
+    "reason": "error: EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey foundry:v0.1:file:src-orbitkit-schedule.py contradicts the durable external identity already registered for uao-3614dc9dc76e.",
+    "cause": "CONTENT_CHANGED_UNDER_STABLE_ADDRESS"
+   },
+   {
+    "task": "T08",
+    "file": "src/orbitkit/tle.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-799bf0070c8e4bde",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T08",
+    "file": "station.toml",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-25f21e5f95901692",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T08",
+    "file": "tests/__init__.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-8c99a4b277395884",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T08",
+    "file": "tests/test_passes.py",
+    "reason": "error: EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey foundry:v0.1:file:tests-test_passes.py contradicts the durable external identity already registered for uao-3a47882097ae.",
+    "cause": "CONTENT_CHANGED_UNDER_STABLE_ADDRESS"
+   },
+   {
+    "task": "T08",
+    "file": "tests/test_propagate.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-ed6489bbfa3ad545",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T08",
+    "file": "tests/test_schedule.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-5677e2aab443641e",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   },
+   {
+    "task": "T08",
+    "file": "tests/test_tle.py",
+    "reason": "REFUSED: Registry package-id collision with different immutable content: pkg-c1afdcf3c74d51ee",
+    "cause": "PACKAGE_ID_COLLISION_P9_1"
+   }
+  ],
+  "refusedCount": 77,
+  "refusalsByCause": {
+   "CONTENT_CHANGED_UNDER_STABLE_ADDRESS": 8,
+   "PACKAGE_ID_COLLISION_P9_1": 69
+  }
+ },
+ "hypotheses": {
+  "H1": {
+   "claim": "Persistent identity reduces repeated relationship reconstruction.",
+   "verdict": "NOT TESTABLE",
+   "why": "A persistent relationship graph cannot be built. Any package carrying a relationship candidate is EVIDENCE_INCOMPLETE under ASA#29 and is refused registry admission, so relationship bindings never reach the index and there is nothing to reconstruct from. Blocked upstream, not disproved."
+  },
+  "H2": {
+   "claim": "Persistent identity improves relationship precision across tasks/sessions.",
+   "verdict": "NOT TESTABLE",
+   "why": "Same blockage as H1. No canonical relationship is ever published."
+  },
+  "H3": {
+   "claim": "Persistent identity reduces duplicate/conflicting entities.",
+   "verdict": "SUPPORTED (mechanically, not via the model)",
+   "evidence": {
+    "duplicateIdentities": 0,
+    "identitiesAfterRepeatedObservation": 19,
+    "observations": 6
+   },
+   "why": "Repeated observation of one codebase yielded one identity per addressed file and zero duplicates. This is a property of the addressing scheme, demonstrated without a model, and is the clearest gain measured. It is also the weakest kind of gain: it shows the machine does what it says, not that anything downstream benefits."
+  },
+  "H4": {
+   "claim": "Persistent identity improves negative-space reasoning.",
+   "verdict": "MEASURED",
+   "evidence": {
+    "BRUTE": {
+     "n": 10,
+     "correct": 8,
+     "accuracy": 0.8
+    },
+    "SIM": {
+     "n": 10,
+     "correct": 6,
+     "accuracy": 0.6
+    },
+    "ASA": {
+     "n": 10,
+     "correct": 7,
+     "accuracy": 0.7
+    },
+    "PID_C": {
+     "n": 10,
+     "correct": 8,
+     "accuracy": 0.8
+    },
+    "PID_D": {
+     "n": 10,
+     "correct": 8,
+     "accuracy": 0.8
+    },
+    "PID_E": {
+     "n": 10,
+     "correct": 9,
+     "accuracy": 0.9
+    }
+   },
+   "caveat": "Lane E supplies repo-derived absence records. On a task whose answer IS the missing artefact, those records are close to an oracle for that task. Treat any lane E gain as an upper bound, not an unbiased estimate.",
+   "noiseFloor": "n=10; one run is 0.1 accuracy. B 0.7 -> E 0.9 is two runs."
+  },
+  "H5": {
+   "claim": "Persistent identity reduces active context requirements.",
+   "verdict": "CONTRADICTED",
+   "evidence": {
+    "BRUTE": 3317,
+    "SIM": 581,
+    "ASA": 1211,
+    "PID_C": 1656,
+    "PID_D": 1888,
+    "PID_E": 2178
+   },
+   "why": "Identity, provenance and absence material are added to the context, so lanes C/D/E carry strictly more tokens than lane B over the same file set. Persistent identity as implemented costs context; it does not save it."
+  },
+  "H6": {
+   "claim": "Persistent identity improves provenance tracing.",
+   "verdict": "PARTIALLY MEASURED",
+   "evidence": {
+    "laneB_success": 0.75,
+    "laneD_success": 0.75
+   },
+   "why": "The benchmark's ten tasks were not written to require provenance tracing, so task success is a weak proxy. The provenance surface demonstrably exists and is queryable; whether it helps a model needs tasks designed to ask for it."
+  },
+  "H7": {
+   "claim": "Persistent identity provides no material gain.",
+   "verdict": "NOT REFUTED on task success",
+   "evidence": {
+    "BRUTE": 0.75,
+    "SIM": 0.583,
+    "ASA": 0.75,
+    "PID_C": 0.75,
+    "PID_D": 0.75,
+    "PID_E": 0.833
+   },
+   "noiseFloor": "One run of twelve is 0.083 success. Any difference smaller than that is a single run and carries no weight at this sample size.",
+   "why": "Lanes B, C and D score identically. Adding persistent identity, and then provenance on top of it, changed task success by exactly zero while increasing prompt tokens by 37% and 56%. Lane E is one run higher, which is at the noise floor and is separately confounded (see H4). On this benchmark H7 stands: persistent identity as implemented buys no task-success gain."
+  }
+ },
+ "humanInterventions": 0,
+ "registryLookupMedianSeconds": 0.214
+}

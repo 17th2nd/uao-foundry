@@ -95,7 +95,8 @@ See [`docs/REGISTRY.md`](docs/REGISTRY.md).
 
 Registry-aware live manufacture verifies the registry **before** provider acquisition, supplies bounded discovery context, binds registry state into the provider transaction, then computes reuse inside the Foundry from stable UAO identities.
 
-A checksum-covered `reuse-report.json` distinguishes:
+A `reuse-report.json` is computed by the Foundry and recorded as **run evidence beside the
+registry**, not inside the immutable package (ADR-0006, finding P9-1). It distinguishes:
 
 - previously registered UAO identities reused by the new package;
 - genuinely new UAO identities;
@@ -105,6 +106,16 @@ A checksum-covered `reuse-report.json` distinguishes:
 The model/provider cannot simply declare canonical reuse. `registry://` evidence is admitted only through verified registry custody in the core acquisition stage and is SHA-256 checked against the prior immutable package. Reuse requires exact canonical `resolutionKey` continuity, lexical name continuity and the same deterministic semantic-variant digest. Differing or already-unreconciled variants fail closed; none is selected heuristically. This remains a bounded reuse discipline, not a claim of universal semantic equivalence.
 
 See [`docs/SEMANTIC-DELTA.md`](docs/SEMANTIC-DELTA.md).
+
+### Relationship staging (non-canonical)
+
+Identity-bound relationship candidates retained by a manufacture are additionally copied into a
+content-addressed staging store **beside** the registry, so persistent relationship reconstruction
+can be studied while `17th2nd/ASA#29` remains open. Every staged record is schema-pinned as
+`NON_CANONICAL_CANDIDATE_MEMORY` with `certifying: false`; staging changes no publication decision,
+buys no registry admission, and is consulted by nothing in manufacture, verification or admission.
+
+See [`docs/RELATIONSHIP-STAGING.md`](docs/RELATIONSHIP-STAGING.md).
 
 ### Claude Code adapter
 
@@ -233,7 +244,7 @@ The dependency is tracked in:
 - `17th2nd/uao-foundry#3`;
 - `17th2nd/ASA#29`.
 
-Until upstream authority exists, the Foundry does **not** invent one. A non-empty unsupported relationship candidate is preserved as unresolved evidence, excluded from canonical URO publication, and forces an incomplete publication status. The Claude adapter rejects such candidates even earlier.
+Until upstream authority exists, the Foundry does **not** invent one. A non-empty unsupported relationship candidate is preserved as unresolved evidence, excluded from canonical URO publication, and forces an incomplete publication status. The Claude adapter rejects such candidates even earlier. Retained candidates are additionally staged as non-canonical memory beside the registry ([`docs/RELATIONSHIP-STAGING.md`](docs/RELATIONSHIP-STAGING.md)); this studies the gap and does not close it.
 
 This limitation does not block UAO identity/evidence manufacture, package verification, registry admission or semantic-delta reuse when no unsupported relationship candidate is required.
 
@@ -265,7 +276,6 @@ verification-report.json
 unresolved-items.json
 publication-decision.json
 manufactured-package.json
-reuse-report.json       # registry-aware manufacture
 checksums.sha256
 ```
 

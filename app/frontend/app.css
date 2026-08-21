@@ -1,0 +1,274 @@
+/*
+  USI Foundry — operator interface.
+
+  Design intent: a manufacturing instrument, not an AI dashboard. Bordered sections, a single
+  restrained accent, monospace for anything an operator might copy, and no gradients, glow,
+  animation or chat furniture. Status is carried by a small number of clearly distinct states so
+  that PASS, REFUSED and BLOCKED never have to be read carefully to be told apart.
+*/
+
+:root {
+  --ink:        #16181c;
+  --ink-soft:   #5b6068;
+  --ink-faint:  #8b9098;
+  --rule:       #c9ccd1;
+  --rule-soft:  #e2e4e7;
+  --panel:      #ffffff;
+  --ground:     #f4f5f6;
+  --accent:     #1f4e79;
+  --pass:       #1c6b3a;
+  --fail:       #9c2323;
+  --hold:       #8a5a00;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink:       #e6e8ea;
+    --ink-soft:  #a2a8b0;
+    --ink-faint: #767c85;
+    --rule:      #3a3f46;
+    --rule-soft: #2a2e34;
+    --panel:     #1a1d21;
+    --ground:    #121417;
+    --accent:    #6ba3d6;
+    --pass:      #57b37c;
+    --fail:      #e07a7a;
+    --hold:      #d8a94a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ── masthead ─────────────────────────────────────────────────────────── */
+
+.masthead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  padding: 1.1rem 1.5rem 0.9rem;
+  background: var(--panel);
+  border-bottom: 2px solid var(--ink);
+}
+
+.mark h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: 0.22em;
+  font-weight: 650;
+}
+
+.mark p {
+  margin: 0.15rem 0 0;
+  font-size: 0.74rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.plant-state { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+.chip {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--rule);
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.chip.pass   { border-color: var(--pass); color: var(--pass); }
+.chip.fail   { border-color: var(--fail); color: var(--fail); }
+.chip.hold   { border-color: var(--hold); color: var(--hold); }
+
+/* ── tabs ─────────────────────────────────────────────────────────────── */
+
+.tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 1.5rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
+  overflow-x: auto;
+}
+
+.tab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0.6rem 0.9rem;
+  font: inherit;
+  font-size: 0.82rem;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tab:hover { color: var(--ink); }
+.tab[aria-current="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* ── layout ───────────────────────────────────────────────────────────── */
+
+main { padding: 1.25rem 1.5rem 2.5rem; max-width: 1180px; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 1rem; }
+@media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  padding: 1rem 1.1rem 1.15rem;
+  margin: 0 0 1rem;
+  min-width: 0;
+}
+
+.panel legend {
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding: 0 0.4rem;
+}
+
+label {
+  display: block;
+  margin: 0.85rem 0 0.28rem;
+  font-size: 0.76rem;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+}
+
+label.check { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
+label.check input { margin: 0; }
+
+input[type="text"], select {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--ink);
+  background: var(--ground);
+  border: 1px solid var(--rule);
+}
+
+input[type="text"]:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.row { display: flex; gap: 0.5rem; align-items: stretch; }
+.row input[type="text"] { flex: 1 1 auto; }
+
+button {
+  appearance: none;
+  font: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 0.09em;
+  padding: 0.5rem 1rem;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--ink-soft);
+  cursor: pointer;
+}
+
+button:hover { border-color: var(--ink); }
+button:disabled { opacity: 0.45; cursor: default; }
+
+button.primary {
+  display: block;
+  width: 100%;
+  margin-top: 1.15rem;
+  padding: 0.7rem;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+}
+
+button.primary:disabled { background: var(--ink-faint); border-color: var(--ink-faint); }
+
+.hint { margin: 0.6rem 0 0; font-size: 0.75rem; color: var(--ink-faint); }
+.hint.warn { color: var(--hold); }
+.hint.err  { color: var(--fail); }
+
+/* ── stages ───────────────────────────────────────────────────────────── */
+
+.stages { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: 0.75rem; }
+
+.stages li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.24rem 0;
+  border-bottom: 1px solid var(--rule-soft);
+  color: var(--ink-faint);
+}
+
+.stages li.idle { border: none; color: var(--ink-faint); }
+.stages li.complete { color: var(--ink); }
+.stages li.complete .state { color: var(--pass); }
+.stages li.active { color: var(--ink); font-weight: 600; }
+.stages li.active .state { color: var(--accent); }
+.stages li .state { letter-spacing: 0.08em; }
+
+/* ── readouts ─────────────────────────────────────────────────────────── */
+
+.readout { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.readout th, .readout td { text-align: left; padding: 0.35rem 0.5rem 0.35rem 0; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+.readout th { width: 15.5rem; font-weight: 500; color: var(--ink-soft); }
+.readout td { font-family: var(--mono); word-break: break-word; }
+
+.counters { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1px; background: var(--rule-soft); border: 1px solid var(--rule-soft); margin: 0.9rem 0; }
+.counter { background: var(--panel); padding: 0.6rem 0.7rem; }
+.counter .n { display: block; font-family: var(--mono); font-size: 1.35rem; line-height: 1.15; }
+.counter .k { display: block; font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); margin-top: 0.15rem; }
+.counter.zero .n { color: var(--ink-faint); }
+
+.verdict { font-family: var(--mono); font-weight: 700; letter-spacing: 0.1em; }
+.verdict.pass { color: var(--pass); }
+.verdict.fail { color: var(--fail); }
+.verdict.hold { color: var(--hold); }
+
+.card { background: var(--panel); border: 1px solid var(--rule); padding: 0.85rem 1rem; margin-bottom: 0.6rem; }
+.card h3 { margin: 0 0 0.4rem; font-size: 0.9rem; font-family: var(--mono); font-weight: 600; }
+.card .sub { font-size: 0.76rem; color: var(--ink-faint); margin: 0 0 0.5rem; }
+
+.tag { display: inline-block; font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.05em; padding: 0.1rem 0.4rem; border: 1px solid var(--rule); color: var(--ink-soft); margin: 0 0.3rem 0.3rem 0; }
+.tag.pass { border-color: var(--pass); color: var(--pass); }
+.tag.hold { border-color: var(--hold); color: var(--hold); }
+.tag.fail { border-color: var(--fail); color: var(--fail); }
+
+.notice { border-left: 3px solid var(--hold); padding: 0.55rem 0.8rem; margin: 0.8rem 0 0; background: var(--ground); font-size: 0.8rem; }
+.notice.err { border-left-color: var(--fail); }
+.notice strong { font-family: var(--mono); letter-spacing: 0.05em; }
+
+.legacy-note { font-size: 0.68rem; color: var(--ink-faint); letter-spacing: 0.04em; }
+
+pre { font-family: var(--mono); font-size: 0.74rem; background: var(--ground); border: 1px solid var(--rule-soft); padding: 0.6rem; overflow-x: auto; margin: 0.5rem 0 0; }
+
+.empty { color: var(--ink-faint); font-size: 0.82rem; padding: 0.6rem 0; }
+
+footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 1.5rem;
+  border-top: 1px solid var(--rule);
+  background: var(--panel);
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+  font-family: var(--mono);
+}

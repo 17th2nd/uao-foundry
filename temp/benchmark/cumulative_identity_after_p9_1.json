@@ -1,0 +1,121 @@
+{
+ "experiment": "cumulative-identity-across-repository-variants",
+ "tasks": [
+  "T01",
+  "T03",
+  "T04",
+  "T06",
+  "T07",
+  "T08"
+ ],
+ "steps": [
+  {
+   "task": "T01",
+   "reused": 0,
+   "created": 19,
+   "refused": 0,
+   "registryIdentities": 19,
+   "registryPackages": 19
+  },
+  {
+   "task": "T03",
+   "reused": 18,
+   "created": 0,
+   "refused": 1,
+   "registryIdentities": 19,
+   "registryPackages": 37
+  },
+  {
+   "task": "T04",
+   "reused": 17,
+   "created": 0,
+   "refused": 2,
+   "registryIdentities": 19,
+   "registryPackages": 37
+  },
+  {
+   "task": "T06",
+   "reused": 18,
+   "created": 0,
+   "refused": 1,
+   "registryIdentities": 19,
+   "registryPackages": 37
+  },
+  {
+   "task": "T07",
+   "reused": 17,
+   "created": 0,
+   "refused": 2,
+   "registryIdentities": 19,
+   "registryPackages": 37
+  },
+  {
+   "task": "T08",
+   "reused": 17,
+   "created": 0,
+   "refused": 2,
+   "registryIdentities": 19,
+   "registryPackages": 37
+  }
+ ],
+ "finalIdentities": 19,
+ "finalPackages": 37,
+ "duplicateIdentities": {},
+ "duplicateIdentityCount": 0,
+ "unreconciledIdentities": [],
+ "unreconciledCount": 0,
+ "refusedManufactures": [
+  {
+   "task": "T03",
+   "file": "src/orbitkit/schedule.py",
+   "reason": "error: EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey foundry:v0.1:file:src-orbitkit-schedule.py contradicts the durable external identity already registered for uao-3614dc9dc76e.",
+   "cause": "CONTENT_CHANGED_UNDER_STABLE_ADDRESS"
+  },
+  {
+   "task": "T04",
+   "file": ".ci/pipeline.yml",
+   "reason": "error: EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey foundry:v0.1:file:.ci-pipeline.yml contradicts the durable external identity already registered for uao-7a2065eca8d3.",
+   "cause": "CONTENT_CHANGED_UNDER_STABLE_ADDRESS"
+  },
+  {
+   "task": "T04",
+   "file": "src/orbitkit/schedule.py",
+   "reason": "error: EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey foundry:v0.1:file:src-orbitkit-schedule.py contradicts the durable external identity already registered for uao-3614dc9dc76e.",
+   "cause": "CONTENT_CHANGED_UNDER_STABLE_ADDRESS"
+  },
+  {
+   "task": "T06",
+   "file": "src/orbitkit/schedule.py",
+   "reason": "error: EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey foundry:v0.1:file:src-orbitkit-schedule.py contradicts the durable external identity already registered for uao-3614dc9dc76e.",
+   "cause": "CONTENT_CHANGED_UNDER_STABLE_ADDRESS"
+  },
+  {
+   "task": "T07",
+   "file": "docs/USAGE.md",
+   "reason": "error: EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey foundry:v0.1:file:docs-usage.md contradicts the durable external identity already registered for uao-3c2a0c625461.",
+   "cause": "CONTENT_CHANGED_UNDER_STABLE_ADDRESS"
+  },
+  {
+   "task": "T07",
+   "file": "src/orbitkit/schedule.py",
+   "reason": "error: EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey foundry:v0.1:file:src-orbitkit-schedule.py contradicts the durable external identity already registered for uao-3614dc9dc76e.",
+   "cause": "CONTENT_CHANGED_UNDER_STABLE_ADDRESS"
+  },
+  {
+   "task": "T08",
+   "file": "src/orbitkit/schedule.py",
+   "reason": "error: EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey foundry:v0.1:file:src-orbitkit-schedule.py contradicts the durable external identity already registered for uao-3614dc9dc76e.",
+   "cause": "CONTENT_CHANGED_UNDER_STABLE_ADDRESS"
+  },
+  {
+   "task": "T08",
+   "file": "tests/test_passes.py",
+   "reason": "error: EXTERNAL_IDENTIFIER_CONTRADICTION: candidate resolutionKey foundry:v0.1:file:tests-test_passes.py contradicts the durable external identity already registered for uao-3a47882097ae.",
+   "cause": "CONTENT_CHANGED_UNDER_STABLE_ADDRESS"
+  }
+ ],
+ "refusedCount": 8,
+ "refusalsByCause": {
+  "CONTENT_CHANGED_UNDER_STABLE_ADDRESS": 8
+ }
+}

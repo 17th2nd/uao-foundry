@@ -1,0 +1,185 @@
+{
+  "fixtureVersion": "0.1.0",
+  "identitySeed": "tidal barrage",
+  "fixedClock": "2026-08-20T00:00:00Z",
+  "knowledgeHorizon": "2026-08-20T00:00:00Z",
+  "interpretations": [
+    {
+      "candidateId": "int-tidal-barrage",
+      "label": "tidal barrage as an engineered artefact class",
+      "definition": "A demonstration interpretation of 'tidal barrage' as an engineered artefact class.",
+      "semanticTypeProposal": "EngineeredArtefactClass",
+      "confidence": 0.97,
+      "status": "SELECTED",
+      "references": [
+        "fixture://src-barrage"
+      ]
+    }
+  ],
+  "scopeResolution": {
+    "selectedInterpretation": "int-tidal-barrage",
+    "scopeStatus": "FIXTURE_SELECTED",
+    "canonicalWorkingLabel": "tidal barrage",
+    "includedBoundaries": [
+      "artefact class",
+      "principal components"
+    ],
+    "excludedBoundaries": [
+      "individual manufactured units",
+      "commercial product listings"
+    ],
+    "excludedInterpretations": [],
+    "unresolvedQuestions": []
+  },
+  "manufacturingPlan": {
+    "planVersion": "0.1.0",
+    "selectedIdentity": "tidal barrage",
+    "dimensions": [
+      "operating-principle",
+      "principal-components"
+    ],
+    "neighbouringIdentities": [
+      "dam",
+      "turbine"
+    ],
+    "anticipatedSourceClasses": [
+      "engineering-reference",
+      "component-reference"
+    ],
+    "risks": [
+      "class-versus-instance ambiguity"
+    ],
+    "completionQuestions": [
+      {
+        "questionId": "q-principle",
+        "prompt": "Is principle represented?",
+        "required": true
+      },
+      {
+        "questionId": "q-components",
+        "prompt": "Is components represented?",
+        "required": true
+      }
+    ],
+    "exclusions": [
+      "individual units"
+    ]
+  },
+  "sourceStrategy": {
+    "strategyVersion": "0.1.0",
+    "sourceClasses": [
+      {
+        "classId": "engineering-reference",
+        "purpose": "principal artefact evidence",
+        "priority": 1
+      },
+      {
+        "classId": "component-reference",
+        "purpose": "component evidence",
+        "priority": 2
+      }
+    ],
+    "authorityNotes": [
+      "Demonstration evidence is synthetic and non-authoritative."
+    ],
+    "safetyConstraints": [
+      "No network access in fixture mode."
+    ]
+  },
+  "sources": [
+    {
+      "sourceId": "src-barrage",
+      "locator": "fixture://src-barrage",
+      "sourceClass": "engineering-reference",
+      "retrievedAt": "2026-08-20T00:00:00Z",
+      "license": "DEMONSTRATION-FIXTURE",
+      "content": "Demonstration source: a tidal barrage impounds a tidal basin to drive turbines on the ebb and flood."
+    },
+    {
+      "sourceId": "src-sluice",
+      "locator": "fixture://src-sluice",
+      "sourceClass": "component-reference",
+      "retrievedAt": "2026-08-20T00:00:00Z",
+      "license": "DEMONSTRATION-FIXTURE",
+      "content": "Demonstration source: sluice gates regulate flow through a tidal barrage."
+    }
+  ],
+  "candidates": {
+    "identities": [
+      {
+        "candidateId": "cid-barrage",
+        "label": "tidal barrage",
+        "resolutionKey": "foundry:v0.1:structure:tidal-barrage",
+        "root": true,
+        "aliases": [
+          "barrage"
+        ],
+        "sourceRefs": [
+          "src-barrage"
+        ],
+        "externalIdentifiers": {}
+      },
+      {
+        "candidateId": "cid-sluice",
+        "label": "sluice gate",
+        "resolutionKey": "foundry:v0.1:component:sluice-gate",
+        "root": false,
+        "aliases": [
+          "sluice"
+        ],
+        "sourceRefs": [
+          "src-sluice"
+        ],
+        "externalIdentifiers": {}
+      }
+    ],
+    "claims": [
+      {
+        "candidateId": "clm-barrage",
+        "subjectIdentityRef": "cid-barrage",
+        "statement": "A tidal barrage impounds a tidal basin to drive turbines.",
+        "channels": [
+          "foundry"
+        ],
+        "sourceRefs": [
+          "src-barrage"
+        ]
+      },
+      {
+        "candidateId": "clm-sluice",
+        "subjectIdentityRef": "cid-sluice",
+        "statement": "A sluice gate regulates flow through a barrage.",
+        "channels": [
+          "foundry"
+        ],
+        "sourceRefs": [
+          "src-sluice"
+        ]
+      }
+    ],
+    "relationships": [],
+    "evidence": [
+      {
+        "evidenceId": "ev-barrage",
+        "sourceRef": "src-barrage",
+        "supportsCandidateRef": "clm-barrage",
+        "extract": "Demonstration evidence for the barrage.",
+        "locatorWithinSource": "sentence-1"
+      },
+      {
+        "evidenceId": "ev-sluice",
+        "sourceRef": "src-sluice",
+        "supportsCandidateRef": "clm-sluice",
+        "extract": "Demonstration evidence for the sluice gate.",
+        "locatorWithinSource": "sentence-1"
+      }
+    ],
+    "states": [],
+    "events": [],
+    "languageMappings": []
+  },
+  "coverageAnswers": {
+    "q-principle": "covered",
+    "q-components": "covered"
+  }
+}

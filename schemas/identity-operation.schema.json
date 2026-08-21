@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://17th2nd.github.io/uao-foundry/schemas/identity-operation.schema.json",
+  "$comment": "Foundry-owned append-preserving identity lifecycle operation. Not ASA authority. These records live in the registry's identity-operations journal rather than inside a UAO, because uid is a pure function of resolution_key: two uids can never become one by rewriting, so merge and split can only exist as a mapping layer above the derivation. SUPERSEDE and RETIRE additionally have ASA-governed canonical representations (lifecycle_status plus successor_identity_ref) which a future manufacture may carry; this journal records the governed decision, not a rewrite of any immutable package.",
+  "title": "UAO Foundry Identity Operation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["recordVersion", "operationId", "operation", "subjects", "targets", "reasonCodes", "justification", "recordedAt"],
+  "properties": {
+    "recordVersion": {"const": "0.1.0"},
+    "operationId": {
+      "$comment": "Content address over the meaning-bearing projection, so the record is self-verifying and cannot be edited in place.",
+      "type": "string",
+      "pattern": "^idop-[a-f0-9]{16}$"
+    },
+    "operation": {
+      "type": "string",
+      "enum": ["SUPERSEDE", "RETIRE", "MERGE", "SPLIT"]
+    },
+    "subjects": {
+      "$comment": "Registered identities the operation acts upon. Every subject must already exist in the registry; an operation may not act on an identity that was never manufactured.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^uao-[a-f0-9]{12}$"}
+    },
+    "targets": {
+      "$comment": "Resulting identities. Empty for RETIRE, which has no successor by definition.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^uao-[a-f0-9]{12}$"}
+    },
+    "reasonCodes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"}
+    },
+    "justification": {
+      "$comment": "Required and non-blank. An identity operation without a stated reason is indistinguishable from a mistake once its author is gone.",
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "ref"],
+        "properties": {
+          "kind": {"type": "string", "minLength": 1},
+          "ref": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "authority": {
+      "$comment": "Who decided. The Foundry does not adjudicate authority; it records the claim so an auditor can.",
+      "type": "string",
+      "minLength": 1
+    },
+    "recordedAt": {"type": "string", "format": "date-time"}
+  }
+}

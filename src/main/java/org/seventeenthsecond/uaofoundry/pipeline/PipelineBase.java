@@ -2,6 +2,7 @@ package org.seventeenthsecond.uaofoundry.pipeline;
 
 import org.seventeenthsecond.uaofoundry.identifiers.StableIdentifiers;
 import org.seventeenthsecond.uaofoundry.json.Json;
+import org.seventeenthsecond.uaofoundry.significance.SignificanceBoundary;
 import org.seventeenthsecond.uaofoundry.model.ManufacturingRequest;
 import org.seventeenthsecond.uaofoundry.provider.FoundryProvider;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
@@ -157,16 +158,7 @@ class PipelineBase {
     }
 
     protected void collectForbiddenFields(Object value, String path, List<String> errors) {
-        Set<String> forbidden = Set.of("score", "significance_value", "belief", "stance");
-        if (value instanceof Map<?, ?> raw) {
-            for (Map.Entry<?, ?> entry : raw.entrySet()) {
-                String key = String.valueOf(entry.getKey());
-                if (forbidden.contains(key)) errors.add("Forbidden ASA field at " + path + "." + key);
-                collectForbiddenFields(entry.getValue(), path + "." + key, errors);
-            }
-        } else if (value instanceof List<?> list) {
-            for (int i=0;i<list.size();i++) collectForbiddenFields(list.get(i), path + "[" + i + "]", errors);
-        }
+        SignificanceBoundary.collect(value, path, errors);
     }
 
     protected Set<String> sourceIds(Map<String, Object> registry) {

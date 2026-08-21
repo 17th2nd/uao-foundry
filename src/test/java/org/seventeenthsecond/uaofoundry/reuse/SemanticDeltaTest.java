@@ -54,7 +54,17 @@ class SemanticDeltaTest {
         assertEquals(java.math.BigDecimal.ONE, counts.get("registrySourceCount"));
         assertEquals(java.math.BigDecimal.ZERO, counts.get("newSourceCount"));
         Path packagePath = Path.of((String) response.get("packagePath"));
-        assertTrue(Files.isRegularFile(packagePath.resolve("reuse-report.json")));
+        // ADR-0006 / finding P9-1: reuse evidence is recorded beside the registry, not inside the
+        // content-addressed package. The evidence must still exist and still be inspectable -- the
+        // assertion moved location, not intent.
+        assertFalse(Files.isRegularFile(packagePath.resolve("reuse-report.json")),
+                "volatile run evidence must not live inside an immutable package");
+        Path runStore = Path.of((String) response.get("runStore"));
+        Path runFile = runStore.resolve(response.get("runId") + ".json");
+        assertTrue(Files.isRegularFile(runFile), "reuse evidence must be recorded as run evidence");
+        assertEquals(Json.canonical(report),
+                Json.canonical(object(object(FileOps.readJson(runFile)).get("reuseReport"))),
+                "the recorded reuse report must be the one the analyzer computed");
         assertTrue(new PackageVerifier(SCHEMAS).verify(packagePath).passed());
         assertTrue(registry.verify().passed());
         Map<String,Object> providerInput = object(FileOps.readJson(capture));

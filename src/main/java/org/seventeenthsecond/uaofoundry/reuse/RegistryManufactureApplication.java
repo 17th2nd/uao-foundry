@@ -7,6 +7,9 @@ import org.seventeenthsecond.uaofoundry.pipeline.FoundryPipeline;
 import org.seventeenthsecond.uaofoundry.pipeline.PipelineResult;
 import org.seventeenthsecond.uaofoundry.registry.FoundryRegistry;
 import org.seventeenthsecond.uaofoundry.registry.SemanticVariants;
+import org.seventeenthsecond.uaofoundry.runs.RunRecord;
+import org.seventeenthsecond.uaofoundry.runs.RunStore;
+import org.seventeenthsecond.uaofoundry.util.FileOps;
 import org.seventeenthsecond.uaofoundry.util.Hashes;
 import org.seventeenthsecond.uaofoundry.validation.SchemaValidator;
 
@@ -14,7 +17,9 @@ import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Registry-aware live manufacture entry point with Foundry-computed reuse/delta reporting. */
@@ -52,7 +57,6 @@ public final class RegistryManufactureApplication {
             ReuseAnalyzer analyzer = new ReuseAnalyzer(schemaDir);
             Map<String,Object> report = analyzer.analyze(preIndex, parsed.registry(), result.packagePath(), registryContextHash);
             new SchemaValidator().validate(report, schemaDir.resolve("reuse-report.schema.json")).requireValid("Reuse report");
-            analyzer.attachAndVerify(result.packagePath(), report);
 
             Map<String,Object> response = new LinkedHashMap<>();
             response.put("phase", "REGISTRY_AWARE_PACKAGE_MANUFACTURED");
@@ -63,10 +67,30 @@ public final class RegistryManufactureApplication {
             response.put("verificationPassed", result.verificationPassed());
             response.put("registryContextHash", registryContextHash);
             response.put("reuse", report);
+            String admissionStatus = RunRecord.COMPLETED;
             if (parsed.register()) {
                 FoundryRegistry.RegistrationResult registration = registry.register(result.packagePath());
                 response.put("registryRegistration", registration.toMap());
             }
+            if (!result.verificationPassed()) admissionStatus = RunRecord.VERIFICATION_FAILED;
+
+            // ADR-0006: reuse evidence is recorded beside the registry, never attached to the
+            // content-addressed package, so repeated manufacture of identical material remains
+            // byte-identical and registry admission remains idempotent.
+            List<String> usiIds = new ArrayList<>();
+            for (Object raw : Json.array(FileOps.readJson(result.packagePath().resolve("canonical-identities.json")), "canonical identities")) {
+                usiIds.add(String.valueOf(Json.object(raw, "canonical UAO").get("uid")));
+            }
+            RunStore store = RunStore.besideRegistry(parsed.registry());
+            String stamp = java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS).toString();
+            RunRecord run = store.record(RunRecord.create(
+                    parsed.identity(), null, "command", admissionStatus,
+                    String.valueOf(Json.object(FileOps.readJson(result.packagePath().resolve("manifest.json")), "manifest").get("packageId")),
+                    usiIds, Hashes.canonicalJson(preIndex), Hashes.canonicalJson(registry.index()),
+                    report, stamp, stamp, null, null));
+            response.put("runId", run.runId());
+            response.put("runStore", store.root().toString());
+
             out.println(Json.canonical(response));
             return result.verificationPassed() && isEligibleStatus(result.publicationStatus()) ? 0 : 4;
         } catch (IllegalArgumentException ex) {
