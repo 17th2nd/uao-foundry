@@ -30,7 +30,9 @@ def lane_summary(rows, truths, lane):
         "n": len(lane_rows),
         "success": round(sum(r["correct"] for r in lane_rows) / len(lane_rows), 3),
         "recall": round(sum(recalls) / len(recalls), 3) if recalls else None,
-        "medianPromptTokens": int(statistics.median(r["prompt_tokens"] for r in lane_rows)),
+        # True median, not truncated: an even lane count yields a genuine x.5 that int() silently
+        # dropped, understating the reported token cost by half a token.
+        "medianPromptTokens": statistics.median(r["prompt_tokens"] for r in lane_rows),
     }
 
 

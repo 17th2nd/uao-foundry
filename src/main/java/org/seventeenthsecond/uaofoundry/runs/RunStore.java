@@ -44,10 +44,30 @@ public final class RunStore {
     /**
      * Records a run. Idempotent for identical content; fail-closed on an id collision with
      * different content, which would mean the content address had been broken.
+     *
+     * <p>Reference discipline (finding F-R3). Run records carry two kinds of reference with
+     * deliberately different obligations:
+     * <ul>
+     *   <li>{@code supersedesRunId} is <b>MUST_RESOLVE</b>: a correction that claims a local
+     *       predecessor must name one that already exists in this store, so a run cannot supersede
+     *       a run that was never recorded. This is enforced below.</li>
+     *   <li>{@code packageId} is <b>MAY_BE_HISTORICAL</b>: a run may reference a package that is not
+     *       (or is no longer) in any registry — e.g. a relationship-bearing package that was refused
+     *       admission — so it is recorded as a pointer and not required to resolve.</li>
+     * </ul>
+     * An unresolvable historical pointer is not an invalid one; only a dangling
+     * {@code supersedesRunId} is rejected.
      */
     public RunRecord record(RunRecord run) {
         Path destination = root.resolve(run.runId() + ".json").normalize();
         if (!destination.startsWith(root)) throw new IllegalArgumentException("Run id escapes the run store root.");
+        if (run.supersedesRunId() != null && !run.supersedesRunId().isBlank()) {
+            Path predecessor = root.resolve(run.supersedesRunId() + ".json").normalize();
+            if (!predecessor.startsWith(root) || !Files.isRegularFile(predecessor)) {
+                throw new IllegalArgumentException(
+                        "Run record supersedes a run that is not in this store: " + run.supersedesRunId());
+            }
+        }
         if (Files.isRegularFile(destination)) {
             if (!Json.canonical(FileOps.readJson(destination)).equals(Json.canonical(run.toMap()))) {
                 throw new IllegalArgumentException("Run id collision with different content: " + run.runId());

@@ -4,37 +4,37 @@
    "n": 12,
    "success": 0.583,
    "recall": 0.528,
-   "medianPromptTokens": 581
+   "medianPromptTokens": 581.5
   },
   "ASA": {
    "n": 12,
    "success": 0.75,
    "recall": 0.806,
-   "medianPromptTokens": 1211
+   "medianPromptTokens": 1211.5
   },
   "PID_C": {
    "n": 12,
    "success": 0.75,
    "recall": 0.806,
-   "medianPromptTokens": 1656
+   "medianPromptTokens": 1656.0
   },
   "PID_D": {
    "n": 12,
    "success": 0.75,
    "recall": 0.806,
-   "medianPromptTokens": 1888
+   "medianPromptTokens": 1888.5
   },
   "PID_E": {
    "n": 12,
    "success": 0.833,
    "recall": 0.806,
-   "medianPromptTokens": 2178
+   "medianPromptTokens": 2178.0
   },
   "PID_F": {
    "n": 12,
    "success": 0.583,
    "recall": 0.806,
-   "medianPromptTokens": 1711
+   "medianPromptTokens": 1711.5
   }
  },
  "errored_frozen_runs": [

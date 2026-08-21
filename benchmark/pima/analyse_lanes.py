@@ -115,7 +115,8 @@ def main() -> int:
             "success": round(sum(r["correct"] for r in sub) / len(sub), 3),
             "correct": sum(r["correct"] for r in sub),
             "relevant_file_recall": round(statistics.mean(recalls), 3) if recalls else None,
-            "median_prompt_tokens": int(statistics.median(r["prompt_tokens"] for r in sub)),
+            # True median, not truncated (an even count yields a real x.5 that int() dropped).
+            "median_prompt_tokens": statistics.median(r["prompt_tokens"] for r in sub),
             "median_latency_s": round(statistics.median(r["latency_s"] for r in sub), 2),
             "source": sorted({r["source"] for r in sub}),
         }
@@ -196,7 +197,7 @@ def main() -> int:
         s = per_lane[lane]
         rec = f"{s['relevant_file_recall']:.2f}" if s["relevant_file_recall"] is not None else "  -  "
         print(f"{s['name']:38} {s['n']:3d} {s['success']:8.2f} {rec:>7} "
-              f"{s['median_prompt_tokens']:8d} {s['median_latency_s']:7.1f}")
+              f"{s['median_prompt_tokens']:8.1f} {s['median_latency_s']:7.1f}")
     print()
     if errored:
         print(f"excluded {len(errored)} errored baseline run(s): "

@@ -97,18 +97,35 @@ public final class StagedRelationshipStore {
         return staged;
     }
 
-    private Map<String,Object> record(Map<String,Object> item, String packageId, String recordedAt) {
+    /**
+     * The identity-bearing projection a staged record's content address is derived from.
+     *
+     * <p>Deliberately the single source of truth for that derivation: the writer builds a record's
+     * {@code stagedId} from it, and {@link #verifyContentAddress} re-derives from the very same
+     * function on read, so a stored record cannot silently carry a content address its own contents
+     * would not produce. Every meaning-bearing field lives here; the non-canonical label triple and
+     * {@code stagedId} itself do not (they are checked separately).
+     */
+    private static Map<String,Object> projectionOf(Map<String,Object> source) {
         Map<String,Object> projection = new LinkedHashMap<>();
         projection.put("recordVersion", RECORD_VERSION);
-        projection.put("typeVersion", item.get("typeVersion"));
-        projection.put("participants", Json.parse(Json.canonical(item.get("participants"))));
-        projection.put("identityBindingStatus", item.get("identityBindingStatus"));
-        projection.put("identityLiterals", Json.parse(Json.canonical(item.get("identityLiterals"))));
-        projection.put("contextualBindings", Json.parse(Json.canonical(item.get("contextualBindings"))));
-        projection.put("sourceRefs", Json.parse(Json.canonical(item.get("sourceRefs"))));
-        projection.put("packageId", packageId);
-        projection.put("candidateId", item.get("candidateId"));
-        projection.put("recordedAt", recordedAt);
+        projection.put("typeVersion", source.get("typeVersion"));
+        projection.put("participants", Json.parse(Json.canonical(source.get("participants"))));
+        projection.put("identityBindingStatus", source.get("identityBindingStatus"));
+        projection.put("identityLiterals", Json.parse(Json.canonical(source.get("identityLiterals"))));
+        projection.put("contextualBindings", Json.parse(Json.canonical(source.get("contextualBindings"))));
+        projection.put("sourceRefs", Json.parse(Json.canonical(source.get("sourceRefs"))));
+        projection.put("packageId", source.get("packageId"));
+        projection.put("candidateId", source.get("candidateId"));
+        projection.put("recordedAt", source.get("recordedAt"));
+        return projection;
+    }
+
+    private Map<String,Object> record(Map<String,Object> item, String packageId, String recordedAt) {
+        Map<String,Object> source = new LinkedHashMap<>(item);
+        source.put("packageId", packageId);
+        source.put("recordedAt", recordedAt);
+        Map<String,Object> projection = projectionOf(source);
 
         Map<String,Object> out = new LinkedHashMap<>();
         out.put("recordVersion", RECORD_VERSION);
@@ -130,7 +147,15 @@ public final class StagedRelationshipStore {
         return out;
     }
 
-    /** Every staged candidate, re-deriving each content address on the way in. */
+    /**
+     * Every staged candidate, re-deriving each content address on the way in.
+     *
+     * <p>Each record must survive three fail-closed checks before it is served: its non-canonical
+     * label triple is intact ({@link #requireNonCanonical}); its {@code stagedId} equals the content
+     * address independently re-derived from its own projection ({@link #verifyContentAddress}), so a
+     * tampered participant, source reference or package id cannot pass while the id and filename are
+     * left untouched; and its file name matches its {@code stagedId}.
+     */
     public List<Map<String,Object>> list() {
         List<Map<String,Object>> out = new ArrayList<>();
         if (!Files.isDirectory(root)) return out;
@@ -140,6 +165,7 @@ public final class StagedRelationshipStore {
                 if (!name.endsWith(".json")) continue;
                 Map<String,Object> record = Json.object(FileOps.readJson(file), "staged relationship");
                 requireNonCanonical(record);
+                verifyContentAddress(record);
                 if (!name.equals(record.get("stagedId") + ".json")) {
                     throw new IllegalArgumentException("Staged relationship file name does not match its id: " + name);
                 }
@@ -185,6 +211,28 @@ public final class StagedRelationshipStore {
         out.put("caveat", "Candidate relationship memory only. These edges are asserted, not governed. "
                 + "No canonical URO exists and none is implied; publication remains fail-closed pending 17th2nd/ASA#29.");
         return out;
+    }
+
+    /**
+     * Fail closed if a stored record's content address does not match its own contents.
+     *
+     * <p>Re-derives the {@code stagedId} from {@link #projectionOf} — the identical function the
+     * writer used — so mutation of any meaning-bearing field (participants, source references,
+     * package id, type version, binding status, literals, contextual bindings, candidate id or
+     * recorded time) is detected even when the {@code stagedId}, file name and label triple are left
+     * intact. {@code recordVersion} is additionally pinned, since the derivation uses the constant.
+     */
+    private static void verifyContentAddress(Map<String,Object> record) {
+        if (!RECORD_VERSION.equals(record.get("recordVersion"))) {
+            throw new IllegalArgumentException(
+                    "Unsupported staged relationship recordVersion: " + record.get("recordVersion"));
+        }
+        String derived = StableIdentifiers.forJson("stg", 16, projectionOf(record));
+        if (!derived.equals(record.get("stagedId"))) {
+            throw new IllegalArgumentException(
+                    "Staged relationship content address does not match its contents: "
+                            + record.get("stagedId") + " expected " + derived + ".");
+        }
     }
 
     /** Fail closed if a stored record has lost the labels that mark it non-canonical. */

@@ -166,6 +166,84 @@ class StagedRelationshipTest {
     }
 
     @Test
+    void aParticipantTamperWithUnchangedIdAndFilenameFailsClosed() {
+        // The vector the label/filename checks alone did not catch: mutate a meaning-bearing field
+        // while leaving stagedId, filename and the non-canonical labels intact.
+        Path packageDir = manufacture("ptamper");
+        StagedRelationshipStore store = new StagedRelationshipStore(temp.resolve("staged"));
+        Map<String,Object> record = store.stageFrom(packageDir, AT).getFirst();
+        Path file = store.root().resolve(record.get("stagedId") + ".json");
+
+        Map<String,Object> tampered = object(FileOps.readJson(file));
+        List<Object> participants = array(tampered.get("participants"));
+        object(participants.getFirst()).put("uaoId", "uao-000000000000");
+        FileOps.writeJson(file, tampered);   // stagedId, filename, labels all unchanged
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, store::list);
+        assertTrue(failure.getMessage().contains("content address does not match"), failure.getMessage());
+    }
+
+    @Test
+    void aSourceRefTamperWithUnchangedIdAndFilenameFailsClosed() {
+        Path packageDir = manufacture("stamper");
+        StagedRelationshipStore store = new StagedRelationshipStore(temp.resolve("staged"));
+        Map<String,Object> record = store.stageFrom(packageDir, AT).getFirst();
+        Path file = store.root().resolve(record.get("stagedId") + ".json");
+
+        Map<String,Object> tampered = object(FileOps.readJson(file));
+        tampered.put("sourceRefs", List.of("src-forged"));
+        FileOps.writeJson(file, tampered);
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, store::list);
+        assertTrue(failure.getMessage().contains("content address does not match"), failure.getMessage());
+    }
+
+    @Test
+    void aPackageIdTamperWithUnchangedIdAndFilenameFailsClosed() {
+        Path packageDir = manufacture("pkgtamper");
+        StagedRelationshipStore store = new StagedRelationshipStore(temp.resolve("staged"));
+        Map<String,Object> record = store.stageFrom(packageDir, AT).getFirst();
+        Path file = store.root().resolve(record.get("stagedId") + ".json");
+
+        Map<String,Object> tampered = object(FileOps.readJson(file));
+        tampered.put("packageId", "pkg-0000000000000000");
+        FileOps.writeJson(file, tampered);
+
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, store::list);
+        assertTrue(failure.getMessage().contains("content address does not match"), failure.getMessage());
+    }
+
+    @Test
+    void anUntamperedRecordStillReadsSuccessfully() {
+        Path packageDir = manufacture("clean-read");
+        StagedRelationshipStore store = new StagedRelationshipStore(temp.resolve("staged"));
+        store.stageFrom(packageDir, AT);
+        assertEquals(1, store.list().size(), "a valid staged record must still read back");
+    }
+
+    @Test
+    void stagedMemorySurvivesRestartDeterministically() {
+        // Directive §9: prove persisted staged memory survives a process restart and reconstructs
+        // the same edge set, with no live provider. A fresh store object over the same directory
+        // stands in for a restarted process: it carries no in-memory edge collection.
+        Path packageDir = manufacture("restart");
+        Path stagedRoot = temp.resolve("staged");
+        new StagedRelationshipStore(stagedRoot).stageFrom(packageDir, AT);
+
+        StagedRelationshipStore afterRestart = new StagedRelationshipStore(stagedRoot);
+        List<Map<String,Object>> reloaded = afterRestart.list();
+        assertEquals(1, reloaded.size(), "the staged record must survive the restart");
+
+        String uid = String.valueOf(object(array(reloaded.getFirst().get("participants")).stream()
+                .map(StagedRelationshipTest::object)
+                .filter(p -> "RESOLVED".equals(p.get("binding"))).findFirst().orElseThrow()).get("uaoId"));
+        Map<String,Object> neighbourhood = afterRestart.neighbourhood(uid);
+        assertEquals(1, array(neighbourhood.get("edges")).size(),
+                "the identity's staged edge must be reachable after restart");
+        assertEquals(Boolean.FALSE, neighbourhood.get("certifying"));
+    }
+
+    @Test
     void aPackageWithoutRelationshipCandidatesStagesNothing() {
         Path clean = manufactureFrom("empty", Path.of("examples/demonstration/electric-motor.json"),
                 temp.resolve("registry-empty"), true);
