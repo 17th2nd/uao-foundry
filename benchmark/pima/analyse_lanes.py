@@ -15,6 +15,15 @@ LANE_NAMES = {"SIM": "A  similarity retrieval", "ASA": "B  relational extraction
 ORDER = ["BRUTE", "SIM", "ASA", "PID_C", "PID_D", "PID_E"]
 
 
+def median_prompt_tokens(rows):
+    """Median prompt-token count for a set of runs, not truncated (finding F-R4).
+
+    Factored out so the aggregation itself is unit-testable: an even run count yields a genuine
+    half-token median that must survive rather than be floored by int().
+    """
+    return statistics.median(r["prompt_tokens"] for r in rows)
+
+
 def recall(exact, truth):
     """Fraction of ground-truth relevant files supplied in full. Directory entries match by prefix."""
     if not truth:
@@ -116,7 +125,7 @@ def main() -> int:
             "correct": sum(r["correct"] for r in sub),
             "relevant_file_recall": round(statistics.mean(recalls), 3) if recalls else None,
             # True median, not truncated (an even count yields a real x.5 that int() dropped).
-            "median_prompt_tokens": statistics.median(r["prompt_tokens"] for r in sub),
+            "median_prompt_tokens": median_prompt_tokens(sub),
             "median_latency_s": round(statistics.median(r["latency_s"] for r in sub), 2),
             "source": sorted({r["source"] for r in sub}),
         }
