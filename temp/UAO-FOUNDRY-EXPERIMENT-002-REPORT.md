@@ -1,6 +1,7 @@
 # UAO-FOUNDRY-EXPERIMENT-002-REPORT
 
 **Semantic Relationships · Concept Manufacture · Visual Identity Bridge**
+**Report page:** https://claude.ai/code/artifact/41fc9897-c92c-48c4-8fc1-ea2f3896dff2 · **Baseline page:** https://claude.ai/code/artifact/1458d27f-40c4-4066-8d0a-12fccba4a223
 **Date:** 2026-09-05 · **Authority:** founder-authorised experimental continuation · **Status:** EXPERIMENTAL, returned for founder review
 **Branch:** `experiment/002-relationships-visual-bridge` (from `3a15bd2`, PR #16 head; commits 613e1d6 → 04ea6df) · **Operator:** Claude (Fable 5.1); provider Claude Code 2.1.261 / sonnet
 **Evidence root (gitignored):** `work/usi-people/{registry,runs,visual-evidence}`, `work/exp002/{phase3,phase45,visual,spriteforge-input,spriteforge-output,graph}` · **Registry at close:** 16 packages · 29 identities · 22 typed relationships · verification PASS · 0 unreconciled
