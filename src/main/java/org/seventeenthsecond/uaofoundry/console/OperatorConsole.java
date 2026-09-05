@@ -304,6 +304,13 @@ public final class OperatorConsole {
         response.put("profile", FileOps.readJson(store.resolve("profile.json")));
         Path description = store.resolve("description.json");
         response.put("description", java.nio.file.Files.isRegularFile(description) ? FileOps.readJson(description) : null);
+        // Controlled-vocabulary descriptors (spriteforge.visual-descriptor/v0.1), one per depiction epoch:
+        // descriptor.json is the latest epoch, descriptor-<year>.json any earlier one.
+        List<Object> descriptors = new ArrayList<>();
+        try (var stream = java.nio.file.Files.list(store)) {
+            for (Path p : stream.filter(f -> f.getFileName().toString().matches("descriptor(-\\d{4})?\\.json")).sorted().toList()) descriptors.add(FileOps.readJson(p));
+        } catch (java.io.IOException ex) { throw new IllegalArgumentException("Unable to list visual evidence: " + ex.getMessage(), ex); }
+        response.put("descriptors", descriptors);
         if (options.json()) { out.println(Json.canonical(response)); return 0; }
         Map<String,Object> profile = map(response.get("profile"));
         out.println(RULE);
@@ -322,6 +329,20 @@ public final class OperatorConsole {
             }
         } else {
             out.printf("  %-24s %s%n", "written description", "none recorded");
+        }
+        for (Object raw : list(response.get("descriptors"))) {
+            Map<String,Object> dsc = map(raw); Map<String,Object> epoch = map(dsc.get("epoch"));
+            out.printf("  %-24s %s · epoch %s (age %s) · digest %s%n", "descriptor", dsc.get("schema"), epoch.get("year"), epoch.get("age_at_epoch"), String.valueOf(dsc.get("descriptor_digest")).substring(0, 12));
+            for (Map.Entry<String,Object> group : map(dsc.get("features")).entrySet()) {
+                if (!(group.getValue() instanceof Map<?,?> fields)) continue;
+                StringBuilder line = new StringBuilder();
+                for (Map.Entry<?,?> field : fields.entrySet()) {
+                    if ("marks".equals(field.getKey()) || !(field.getValue() instanceof Map<?,?> f)) continue;
+                    if (line.length() > 0) line.append(", ");
+                    line.append(field.getKey()).append('=').append(f.get("value"));
+                }
+                out.printf("    %-14s %s%n", group.getKey(), line);
+            }
         }
         out.printf("  %-24s %s%n", "caveat", profile.get("caveat"));
         out.println(RULE);

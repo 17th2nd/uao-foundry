@@ -141,3 +141,20 @@ The founder asked that the USI carry the *entire written dataset* needed to repr
 - Receipts and the store index carry the description digest; console `visual <ref>` prints the description.
 - Bridge `--no-references`: text-only packages (`work/exp002/spriteforge-input/`) with `visual-description.json` as the reproduction dataset and references reduced to provenance pointers (Commons URL + sha256 + licence). Photo-bearing packages remain producible.
 - Honest limits: Wiener and Beer are monochrome only; Simon's only photograph is a 1981 halftone plus paintings; Pearl's 2013 frames are low resolution; the only moles/age spots resolvable are Engelbart's (2008 colour) and Ostrom's (2009 colour), with one uncertain mark each on Simon and Beer. No scar is resolvable on anyone. The dataset says so rather than filling gaps.
+
+
+## Addendum 2 (2026-09-05) — structured visual descriptor layer (SpriteForge contract)
+
+SpriteForge reported that the written dataset rendered two of six recognisably from text alone: the prose was read through an anime caption vocabulary ("hooded lids" → a hood, "crown balding" → a crown, "large ears with long lobes" → animal ears). Founder decision: the durable record stays text; add STRUCTURE so a renderer's translator is a table, not a guess.
+
+Contract: `spriteforge.visual-descriptor/v0.1` (`~/SpriteForge-App/schemas/v2/visual-descriptor.schema.json`, SpriteForge commit ed0ed41a). Seven descriptors coded FROM `description.json` and the kept references (Engelbart split 1968 / 2008), by `scripts/exp002/code_descriptors.py`; 47 enumerated fields each plus marks, clothing, accessories and props; every non-unknown value cites image ids; "unknown" wherever the prose and the enumeration do not meet, with the prose in `note`; ages from the registry's birth assertions. `scripts/exp002/validate_descriptors.py` checks JSON Schema 2020-12, enumRef membership, evidence ids against `references.json`, and evidence on every non-unknown value: 7/7 pass. Stored beside `description.json` (`descriptor.json` = latest epoch, `descriptor-<year>.json` earlier), digested into `receipt.json` and the store index; console `visual <ref>` prints them; bridge 0.2.0 `--no-references` packages carry them text-only with digests in `manifest.json`. `description.json` unchanged.
+
+| uid | epoch | store path | descriptor digest |
+|---|---|---|---|
+| uao-11eb71766754 | 1958 | `work/usi-people/visual-evidence/uao-11eb71766754/descriptor.json` | `858f5edde30a74be0e39e2dff1bf848884032134fcfade7c0db8ed2d58754b48` |
+| uao-b160552cb26e | 1981 | `work/usi-people/visual-evidence/uao-b160552cb26e/descriptor.json` | `b99b232878410672fc72ae965683cf0ac088fecd671dd8963e4b21f21403203d` |
+| uao-bda651d022bf | 2013 | `work/usi-people/visual-evidence/uao-bda651d022bf/descriptor.json` | `d9179138dd441e6dc6c638399ffc91b4ad971cc6e71ee9514605df535e9292fc` |
+| uao-830ce8cca652 | 1968 | `work/usi-people/visual-evidence/uao-830ce8cca652/descriptor-1968.json` | `bbcef137470f00b7ebfc7c1d7a9ed7cecbcdd81b91909066a6543d1b26a9bca5` |
+| uao-830ce8cca652 | 2008 | `work/usi-people/visual-evidence/uao-830ce8cca652/descriptor.json` | `0faa5729fac7daa4664cd78de5a800aa0563705413e49fee6345d2284bb4679d` |
+| uao-09f5f6b2f9fd | 1990 | `work/usi-people/visual-evidence/uao-09f5f6b2f9fd/descriptor.json` | `b318047a762d2f4e5aa8186e831d7a673946a6d89ec4a0cb0823cba57135e2da` |
+| uao-1fced4a70aa1 | 2009 | `work/usi-people/visual-evidence/uao-1fced4a70aa1/descriptor.json` | `1865ba693b42c2b7c8be4737987563b6f7d37229ddf2643eac7f188842778090` |

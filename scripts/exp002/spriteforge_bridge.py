@@ -56,6 +56,7 @@ def main():
         pkg = out / slug; (pkg / "references").mkdir(parents=True, exist_ok=True)
         used = [r for r in refs["references"] if r["usedInProfile"]]
         description = json.load(open(d / "description.json")) if (d / "description.json").exists() else None
+        descriptors = sorted(d.glob("descriptor*.json"))
         if a.no_references:
             shutil.rmtree(pkg / "references", ignore_errors=True)
         else:
@@ -67,6 +68,8 @@ def main():
                       "references": [{k: r[k] for k in ("imageId", "file", "sha256", "licence", "licenceUrl", "attributionRequired", "artist", "credit", "commonsUrl", "originalUrl", "dateTimeOriginal", "reuseStatus")} for r in used],
                       "observedBy": profile["provenance"]["observedBy"], "observedAt": profile["provenance"]["observedAt"]}
         files = {"identity.json": identity, "visual-profile.json": profile, "provenance.json": provenance, "spriteforge-brief.json": brief}
+        for dp in descriptors:
+            files[dp.name] = json.load(open(dp))
         if description is not None:
             files["visual-description.json"] = description
             brief["written_description"] = {"file": "visual-description.json", "observations": len(description["observations"]), "notEvidenced": description["notEvidenced"],
@@ -74,15 +77,16 @@ def main():
         digests = {}
         for name, obj in files.items():
             b = json.dumps(obj, indent=2, ensure_ascii=False).encode() + b"\n"; (pkg / name).write_bytes(b); digests[name] = sha(canon(obj))
-        manifest = {"manifestVersion": "0.1.0", "producer": "uao-foundry experiment 002 bridge", "producedAt": now, "uid": uid, "label": ident["canonicalLabels"][0],
+        manifest = {"manifestVersion": "0.2.0", "producer": "uao-foundry experiment 002 bridge", "producedAt": now, "uid": uid, "label": ident["canonicalLabels"][0],
                     "identityStateVersions": ident["stateVersions"], "identityDigest": sha(canon(identity)), "visualProfileVersion": profile["recordVersion"], "visualProfileDigest": digests["visual-profile.json"],
-                    "briefDigest": digests["spriteforge-brief.json"], "descriptionDigest": digests.get("visual-description.json"), "referenceCount": len(used), "referencesPackaged": not a.no_references,
+                    "briefDigest": digests["spriteforge-brief.json"], "descriptionDigest": digests.get("visual-description.json"),
+                    "descriptors": [{"file": dp.name, "schema": json.load(open(dp))["schema"], "epochYear": json.load(open(dp))["epoch"]["year"], "digest": json.load(open(dp))["descriptor_digest"]} for dp in descriptors], "referenceCount": len(used), "referencesPackaged": not a.no_references,
                     "references": [{**({"file": f"references/{pathlib.Path(r['file']).name}"} if not a.no_references else {}), "imageId": r["imageId"], "sha256": r["sha256"], "licence": r["licence"], "commonsUrl": r["commonsUrl"]} for r in used],
                     "generationConstraints": {"style": "SpriteForge decides", "identityAuthority": "UAO Foundry registry (this manifest's uid + state versions)", "mustCite": "attribution for every CC BY / CC BY-SA reference used", "mustNotInvent": brief["must_not_invent"]},
                     "certifying": False, "status": "SPRITEFORGE_INPUT_EXPERIMENTAL"}
         (pkg / "manifest.json").write_bytes(json.dumps(manifest, indent=2, ensure_ascii=False).encode() + b"\n")
         summary.append({"slug": slug, "uid": uid, "label": manifest["label"], "references": len(used), "briefDigest": digests["spriteforge-brief.json"][:16]})
         print(slug, uid, "refs", len(used), "brief", digests["spriteforge-brief.json"][:12])
-    (out / "index.json").write_text(json.dumps({"bridgeVersion": "0.1.0", "producedAt": now, "packages": summary}, indent=2) + "\n")
+    (out / "index.json").write_text(json.dumps({"bridgeVersion": "0.2.0", "producedAt": now, "packages": summary}, indent=2) + "\n")
 
 if __name__ == "__main__": main()
