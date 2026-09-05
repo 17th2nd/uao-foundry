@@ -313,10 +313,10 @@ public final class OperatorConsole {
         for (String key : List.of("temporal_context", "approximate_age_in_reference", "apparent_hair", "apparent_facial_hair", "apparent_glasses", "face_shape", "apparent_build", "recurrent_clothing")) {
             out.printf("  %-24s %s%n", key, profile.get(key));
         }
-        if (response.get("description") instanceof Map<?,?> description) {
+        if (response.get("description") instanceof Map<?,?> written) {
             out.printf("  %-24s %d observations · not evidenced: %s%n", "written description",
-                    list(description.get("observations")).size(), String.join("; ", strings(description.get("notEvidenced"))));
-            for (Object raw : list(description.get("observations"))) {
+                    list(written.get("observations")).size(), String.join("; ", strings(written.get("notEvidenced"))));
+            for (Object raw : list(written.get("observations"))) {
                 Map<String,Object> o = map(raw);
                 out.printf("    · %s [%s, %s]: %s%n", o.get("feature"), o.get("era"), o.get("confidence"), o.get("observation"));
             }
