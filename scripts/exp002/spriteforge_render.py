@@ -73,7 +73,8 @@ def graph(profile, pose_name, ref_name, prompt, seed, prefix):
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--bridge", required=True); ap.add_argument("--out", required=True)
-    ap.add_argument("--dry-run", action="store_true"); ap.add_argument("--seed", type=int, default=PROFILE["seed"]); a = ap.parse_args()
+    ap.add_argument("--dry-run", action="store_true"); ap.add_argument("--seed", type=int, default=PROFILE["seed"])
+    ap.add_argument("--subjects", default="", help="comma-separated slugs to render (default all)"); ap.add_argument("--skip-existing", action="store_true"); a = ap.parse_args()
     bridge = pathlib.Path(a.bridge); out = pathlib.Path(a.out); out.mkdir(parents=True, exist_ok=True)
     sf_head = subprocess.run(["git", "-C", str(SF), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
     helper_sha = sha((SF / "scripts/base4dir_round.py").read_bytes())[:16]
@@ -82,8 +83,20 @@ def main():
         comfy = json.loads(urllib.request.urlopen(b4.ENGINE + "/system_stats", timeout=10).read())["system"]["comfyui_version"]
     pose_im = b4.render_pose(b4.FRONT)
     pose_name = None if a.dry_run else b4.upload(pose_im, "exp002-pose-south.png")[0]
+    receipt_path = out / f"receipt-s{a.seed}.json"
+    prior = json.loads(receipt_path.read_text())["renders"] if receipt_path.exists() else []
+    prior = [r for r in prior if r.get("outputFile")]
     receipts, tiles = [], []
+    wanted = {x for x in a.subjects.split(",") if x}
     for entry in json.load(open(bridge / "index.json"))["packages"]:
+        if wanted and entry["slug"] not in wanted:
+            kept = next((r for r in prior if r["subject"] == json.load(open(bridge / entry["slug"] / "manifest.json"))["label"]), None)
+            if kept: receipts.append(kept)
+            continue
+        existing = out / f"{entry['slug']}-s{a.seed}.png"
+        if a.skip_existing and existing.exists():
+            kept = next((r for r in prior if r.get("outputFile") == existing.name), None)
+            if kept: receipts.append(kept); print(f"{entry['slug']}: existing render kept"); continue
         pkg = bridge / entry["slug"]; manifest = json.load(open(pkg / "manifest.json")); brief = json.load(open(pkg / "spriteforge-brief.json"))
         primary = next(r for r in brief["reference_images"] if r["primary"]); ref_file = next(r["file"] for r in manifest["references"] if r["sha256"] == primary["sha256"])
         ref_im = b4.square_pad(pkg / ref_file)
@@ -104,6 +117,12 @@ def main():
             im = Image.open(f).convert("RGB"); im.thumbnail((512, 512)); tiles.append((manifest["label"], im))
             print(f"{manifest['label']}: {secs:.0f}s → {f.name}")
         receipts.append(rec)
+    # group sheet from every receipted render on disk (this call's plus prior ones), in bridge order
+    tiles = []
+    for entry in json.load(open(bridge / "index.json"))["packages"]:
+        f = out / f"{entry['slug']}-s{a.seed}.png"
+        if f.exists():
+            im = Image.open(f).convert("RGB"); im.thumbnail((512, 512)); tiles.append((json.load(open(bridge / entry["slug"] / "manifest.json"))["label"], im))
     if tiles:
         sheet = Image.new("RGB", (512 * len(tiles), 560), "white"); d = ImageDraw.Draw(sheet)
         for i, (label, im) in enumerate(tiles):
