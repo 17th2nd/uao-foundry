@@ -156,5 +156,7 @@ Contract: `spriteforge.visual-descriptor/v0.1` (`~/SpriteForge-App/schemas/v2/vi
 | uao-bda651d022bf | 2013 | `work/usi-people/visual-evidence/uao-bda651d022bf/descriptor.json` | `d9179138dd441e6dc6c638399ffc91b4ad971cc6e71ee9514605df535e9292fc` |
 | uao-830ce8cca652 | 1968 | `work/usi-people/visual-evidence/uao-830ce8cca652/descriptor-1968.json` | `bbcef137470f00b7ebfc7c1d7a9ed7cecbcdd81b91909066a6543d1b26a9bca5` |
 | uao-830ce8cca652 | 2008 | `work/usi-people/visual-evidence/uao-830ce8cca652/descriptor.json` | `0faa5729fac7daa4664cd78de5a800aa0563705413e49fee6345d2284bb4679d` |
-| uao-09f5f6b2f9fd | 1990 | `work/usi-people/visual-evidence/uao-09f5f6b2f9fd/descriptor.json` | `b318047a762d2f4e5aa8186e831d7a673946a6d89ec4a0cb0823cba57135e2da` |
+| uao-09f5f6b2f9fd | 1990 | `work/usi-people/visual-evidence/uao-09f5f6b2f9fd/descriptor.json` | `f634358fe6b32f4e5aa8186e831d7a673946a6d89ec4a0cb0823cba57135e2da` |
 | uao-1fced4a70aa1 | 2009 | `work/usi-people/visual-evidence/uao-1fced4a70aa1/descriptor.json` | `1865ba693b42c2b7c8be4737987563b6f7d37229ddf2643eac7f188842778090` |
+
+**Amendment (2026-09-05, founder):** Stafford Beer wore a **monocle in his right eye on a cord**, not spectacles. Corrected in `description.json` (eyewear observation and clothing note), `profile.json` (`apparent_glasses`), the descriptor (no monocle enumeration exists, so `eyewear.present` and `worn` are `unknown` with the monocle in `note`; `lens_shape=round`, `frame=metal` retained as supportable), the accessory entry, receipts and bridge manifest. New Beer descriptor digest: see `receipt.json` (`descriptorDigests.1990`); the table above is superseded for that row. Translator note for SpriteForge: the enumeration needs a `monocle` value under `eyewear.present`.
