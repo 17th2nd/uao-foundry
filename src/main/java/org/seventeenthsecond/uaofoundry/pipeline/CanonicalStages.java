@@ -135,7 +135,7 @@ class CanonicalStages extends AcquisitionStages {
 
     protected Map<String, Object> completeness(Map<String, Object> plan, FoundryProvider provider) {
         Map<String, Object> answers = new TreeMap<>(provider.coverageAnswers());
-        int required = 0, covered = 0, partial = 0, unresolved = 0;
+        int required = 0, covered = 0, partial = 0, unresolved = 0, unresolvedRequired = 0;
         Set<String> knownQuestions = new LinkedHashSet<>();
         for (Object raw : list(plan.get("completionQuestions"), "completionQuestions")) {
             Map<String, Object> question = map(raw);
@@ -146,7 +146,7 @@ class CanonicalStages extends AcquisitionStages {
             String answer = answers.containsKey(id) ? string(answers.get(id), "coverage answer") : "unresolved";
             if ("covered".equals(answer)) covered++;
             else if ("partial".equals(answer)) partial++;
-            else unresolved++;
+            else { unresolved++; if (req) unresolvedRequired++; }
             if (!answers.containsKey(id)) answers.put(id, "unresolved");
         }
         for (String key : answers.keySet()) if (!knownQuestions.contains(key)) throw new IllegalArgumentException("Coverage answer references unknown completion question: " + key);
@@ -156,7 +156,12 @@ class CanonicalStages extends AcquisitionStages {
         out.put("partial", new BigDecimal(partial));
         out.put("unresolved", new BigDecimal(unresolved));
         out.put("answers", answers);
-        out.put("complete", unresolved == 0);
+        out.put("unresolvedRequired", new BigDecimal(unresolvedRequired));
+        // A plan's `required` flag is the plan's own statement of what completion means. An optional
+        // question left unresolved is recorded (it stays in `unresolved` and in `answers`) but does
+        // not by itself make the package evidence-incomplete; before Experiment 002 the flag was
+        // counted and then ignored, so every optional open question blocked publication.
+        out.put("complete", unresolvedRequired == 0);
         validate(out, "coverage-report.schema.json", "Coverage report");
         return out;
     }

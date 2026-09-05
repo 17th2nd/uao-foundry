@@ -2,14 +2,50 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "UAO Foundry Coverage Report",
   "type": "object",
-  "required": ["requiredQuestions", "covered", "partial", "unresolved", "answers", "complete"],
+  "required": [
+    "requiredQuestions",
+    "covered",
+    "partial",
+    "unresolved",
+    "answers",
+    "complete"
+  ],
   "properties": {
-    "requiredQuestions": {"type": "integer", "minimum": 0},
-    "covered": {"type": "integer", "minimum": 0},
-    "partial": {"type": "integer", "minimum": 0},
-    "unresolved": {"type": "integer", "minimum": 0},
-    "answers": {"type": "object", "additionalProperties": {"type": "string", "enum": ["covered", "partial", "unresolved"]}},
-    "complete": {"type": "boolean"}
+    "requiredQuestions": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "covered": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "partial": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "unresolved": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "answers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "enum": [
+          "covered",
+          "partial",
+          "unresolved"
+        ]
+      }
+    },
+    "complete": {
+      "type": "boolean"
+    },
+    "unresolvedRequired": {
+      "type": "integer",
+      "minimum": 0,
+      "$comment": "Unresolved answers among required questions; `complete` is true exactly when this is 0. Absent in packages manufactured before this field existed."
+    }
   },
   "additionalProperties": false
 }
