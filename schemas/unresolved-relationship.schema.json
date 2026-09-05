@@ -5,15 +5,37 @@
   "title": "UAO Foundry Unresolved Relationship Candidate",
   "type": "object",
   "additionalProperties": false,
-  "required": ["candidateId", "code", "description", "typeVersion", "participants", "identityBindingStatus", "sourceRefs"],
+  "required": [
+    "candidateId",
+    "code",
+    "description",
+    "typeVersion",
+    "participants",
+    "identityBindingStatus",
+    "sourceRefs"
+  ],
   "properties": {
-    "candidateId": {"type": "string", "pattern": "^rel-[a-z0-9._-]+$"},
-    "code": {"type": "string", "const": "URO_TYPE_AUTHORITY_UNAVAILABLE"},
-    "description": {"type": "string", "minLength": 1},
+    "candidateId": {
+      "type": "string",
+      "pattern": "^rel-[a-z0-9._-]+$"
+    },
+    "code": {
+      "type": "string",
+      "enum": [
+        "URO_TYPE_AUTHORITY_UNAVAILABLE",
+        "RTR-TYPE-UNKNOWN",
+        "PARTICIPANT_UNBOUND",
+        "URO-INSTANCE-INVALID"
+      ]
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
     "typeVersion": {
       "$comment": "Extension seam for ASA#29. When a governed Relationship Type registry exists, this is the key against which role names, cardinality, permitted participant kinds, identity-bearing flags, symmetry and ordering would be validated. The Foundry records it and validates nothing about it.",
       "type": "string",
-      "pattern": "^asa\\.core/[a-z_]+@[0-9]+$"
+      "pattern": "^(?:asa\\.core/[a-z_]+@[0-9]+|asa:type:[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*@[1-9][0-9]*)$"
     },
     "participants": {
       "type": "array",
@@ -21,15 +43,28 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["role", "candidateIdentityRef", "binding"],
+        "required": [
+          "role",
+          "candidateIdentityRef",
+          "binding"
+        ],
         "properties": {
           "role": {
             "$comment": "Recorded verbatim. Whether this is a legal role of the declared type is exactly what ASA#29 blocks the Foundry from knowing.",
             "type": "string",
             "minLength": 1
           },
-          "candidateIdentityRef": {"type": "string", "pattern": "^cid-[a-z0-9._-]+$"},
-          "binding": {"type": "string", "enum": ["RESOLVED", "UNRESOLVED"]},
+          "candidateIdentityRef": {
+            "type": "string",
+            "pattern": "^cid-[a-z0-9._-]+$"
+          },
+          "binding": {
+            "type": "string",
+            "enum": [
+              "RESOLVED",
+              "UNRESOLVED"
+            ]
+          },
           "uaoId": {
             "$comment": "Present only when binding is RESOLVED. An unresolvable participant must never be given a uid to make the relation look complete.",
             "type": "string",
@@ -41,21 +76,54 @@
     "identityBindingStatus": {
       "$comment": "ALL_PARTICIPANTS_BOUND does not mean the relationship is publishable. It means the identity half of the problem is solved and only the ASA#29 type-role half remains.",
       "type": "string",
-      "enum": ["ALL_PARTICIPANTS_BOUND", "PARTIALLY_BOUND", "UNBOUND"]
+      "enum": [
+        "ALL_PARTICIPANTS_BOUND",
+        "PARTIALLY_BOUND",
+        "UNBOUND"
+      ]
     },
-    "identityLiterals": {"type": "object", "additionalProperties": {"type": "string"}},
+    "identityLiterals": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "contextualBindings": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["scopeKey", "scopeValue"],
+        "required": [
+          "scopeKey",
+          "scopeValue"
+        ],
         "properties": {
-          "scopeKey": {"type": "string", "minLength": 1},
-          "scopeValue": {"type": "string", "minLength": 1}
+          "scopeKey": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scopeValue": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },
-    "sourceRefs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^src-[a-z0-9._-]+$"}}
+    "sourceRefs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^src-[a-z0-9._-]+$"
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "$comment": "ASA-SPEC-0006 \u00a710.2 diagnostic records; present only under an edition-aware manufacture."
+    }
   }
 }

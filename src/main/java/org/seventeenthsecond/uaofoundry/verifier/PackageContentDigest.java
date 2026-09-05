@@ -22,6 +22,8 @@ public final class PackageContentDigest {
             "verification-report.json", "unresolved-items.json", "publication-decision.json",
             "manufactured-package.json"
     );
+    /** Present only in edition-aware manufactures; meaning-bearing when present. */
+    public static final List<String> OPTIONAL_FILES = List.of("experimental-relationships.json", "relationship-type-edition.json");
     private PackageContentDigest() {}
 
     public static String compute(Path packageDir) {
@@ -32,6 +34,10 @@ public final class PackageContentDigest {
                 throw new IllegalArgumentException("Meaning-bearing package file missing for content digest: " + relative);
             }
             content.put(relative, FileOps.readJson(path));
+        }
+        for (String relative : OPTIONAL_FILES) {
+            Path path = packageDir.resolve(relative).normalize();
+            if (path.startsWith(packageDir.toAbsolutePath().normalize()) && Files.isRegularFile(path)) content.put(relative, FileOps.readJson(path));
         }
         // Source bytes are transitively bound by source-registry sha256 values; verifySourceSnapshots enforces them.
         return Hashes.canonicalJson(content);

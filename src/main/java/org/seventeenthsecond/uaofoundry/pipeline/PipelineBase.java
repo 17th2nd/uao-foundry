@@ -49,6 +49,8 @@ class PipelineBase {
     protected List<String> invalidatedStages;
     protected final Path registryRoot;
     protected final Map<String,Object> registryIndex;
+    /** Optional RTR-format relationship type edition. Null keeps stage 11 on the ASA#29 fail-closed path. */
+    protected org.seventeenthsecond.uaofoundry.relationship.RelationshipTypeEdition relationshipEdition;
     protected PipelineBase(Path schemaDir, Path workDir, Path distDir, String repositoryCommit) {
         this(schemaDir, workDir, distDir, repositoryCommit, null, null);
     }

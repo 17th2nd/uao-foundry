@@ -32,6 +32,17 @@ public final class FoundryPipeline extends PackageStages {
     public FoundryPipeline(Path schemaDir, Path workDir, Path distDir, String repositoryCommit) { super(schemaDir, workDir, distDir, repositoryCommit); }
     public FoundryPipeline(Path schemaDir, Path workDir, Path distDir, String repositoryCommit, Path registryRoot, Map<String,Object> registryIndex) { super(schemaDir, workDir, distDir, repositoryCommit, registryRoot, registryIndex); }
 
+    /**
+     * Declares the relationship type edition this manufacture validates relationship candidates
+     * against. Never inferred: without it, stage 11 retains every candidate unresolved exactly as
+     * before (ASA#29 fail-closed), so a package cannot acquire typed relationships by accident.
+     */
+    public FoundryPipeline relationshipEdition(Path editionPath) {
+        this.relationshipEdition = editionPath == null ? null
+                : org.seventeenthsecond.uaofoundry.relationship.RelationshipTypeEdition.load(editionPath);
+        return this;
+    }
+
     public PipelineResult manufacture(ManufacturingRequest request, FoundryProvider provider, boolean resume) {
         if (!request.executionMode().equals(provider.executionMode())) {
             throw new IllegalArgumentException("Request executionMode=" + request.executionMode()

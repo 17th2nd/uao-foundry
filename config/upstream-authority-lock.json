@@ -7,6 +7,19 @@
   "canonicalSchemaVersion": "2026.1",
   "compilerSpecification": "00_Governance/Specifications/ASA-SPEC-0004_Compiler_Specification_v0.1.md",
   "relationshipArchitecture": "00_Governance/ADR/ADR-002_Relationship_Ontology_and_Ownership.md",
-  "relationshipTypeRoleAuthority": "NOT_FOUND_IN_CURRENT_CSS_AUTHORITY_SURFACE",
-  "rule": "ASA source authority governs; this pointer is evidence/provenance only and must be refreshed when upstream authority changes."
+  "relationshipTypeRoleAuthority": "RTR_FORMAT_AVAILABLE_UPSTREAM (ASA-SPEC-0006, D-040); DOMAIN_TYPES_REQUIRED_HERE_NOT_ADMITTED; canonical URO publication remains fail-closed",
+  "rule": "ASA source authority governs; this pointer is evidence/provenance only and must be refreshed when upstream authority changes.",
+  "relationshipTypeRegistry": {
+    "reviewedAt": "2026-09-05",
+    "asaLocalRepository": "~/ASA-canonical @ 8952b0c (local main; origin/asa/baseline-001) — not on origin/main at review time",
+    "facetPath": "specification/registry/relationship_types.json",
+    "specAuthority": "ASA-SPEC-0006 Relationship Type Registry v0.1 (allocated/installed by D-040 2026-08-31; NOT ratified — C-3, C-5 open)",
+    "registryVersion": "2026.2",
+    "admittedDigest": "sha256:a0c6a69c4bfaf1ffde97f6187797e455c23bea5343706f78a678e66307a7059c",
+    "admittedTypes": "5 asa.core meta-types (D-012) + 6 asa.cc0 domain claim types (D-040)",
+    "coverageForFoundryDomainPredicates": "NONE — no author-of / co-created / created / developed / architect-of / presented type is admitted",
+    "githubIssue29": "open as of 2026-09-05 (last updated 2026-08-09); ASA README records a D-040 closure citation that has not been applied to the issue",
+    "foundryPosture": "consume RTR-format editions and fail closed on RTR-EDITION-MISMATCH / RTR-DIGEST-MISMATCH; Experiment 002 binds domain predicates only through the Foundry-local proposed edition config/relationship-types/foundry-exp002.json (registry_version 2026.902, provenance_anchor PROPOSED) with every record carrying ARCHITECTURAL-UNCERTAINTY AU-1 and RTR-TYPE-NOT-ADMITTED as undetermined diagnostics",
+    "validationProjection": "schemas/asa/relationship_type_registry.schema.json (copy of the ASA facet schema; not authority)"
+  }
 }

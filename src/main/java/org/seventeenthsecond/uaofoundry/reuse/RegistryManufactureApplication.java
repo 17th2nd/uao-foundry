@@ -53,6 +53,7 @@ public final class RegistryManufactureApplication {
             if (!registryContextHash.equals(provider.registryContextHash())) throw new IllegalArgumentException("Registry context hash changed before provider acquisition.");
 
             FoundryPipeline pipeline = new FoundryPipeline(schemaDir, parsed.workDir(), parsed.distDir(), parsed.repositoryCommit(), parsed.registry(), preIndex);
+            if (parsed.relationshipEdition() != null) pipeline.relationshipEdition(parsed.relationshipEdition());
             PipelineResult result = pipeline.manufacture(request, provider, false);
             ReuseAnalyzer analyzer = new ReuseAnalyzer(schemaDir);
             Map<String,Object> report = analyzer.analyze(preIndex, parsed.registry(), result.packagePath(), registryContextHash);
@@ -133,7 +134,7 @@ public final class RegistryManufactureApplication {
             throw new IllegalArgumentException("Usage: RegistryManufactureApplication <identity> --provider-command <executable> [--registry .uao-registry] [--register]");
         }
         String identity = args[0];
-        Path provider = null, registry = Path.of(".uao-registry"), schemaDir = Path.of("schemas"), workDir = Path.of("work"), distDir = Path.of("dist");
+        Path provider = null, registry = Path.of(".uao-registry"), schemaDir = Path.of("schemas"), workDir = Path.of("work"), distDir = Path.of("dist"), relationshipEdition = null;
         String language = "en", profile = "experimental", repositoryCommit = environmentCommit();
         long timeout = 300;
         int catalogLimit = 5000;
@@ -154,11 +155,12 @@ public final class RegistryManufactureApplication {
                 case "--repository-commit" -> repositoryCommit = value;
                 case "--provider-timeout-seconds" -> timeout = boundedLong(value, 1, 3600, token);
                 case "--catalog-limit" -> catalogLimit = Math.toIntExact(boundedLong(value, 1, 100000, token));
+                case "--relationship-edition" -> relationshipEdition = Path.of(value);
                 default -> throw new IllegalArgumentException("Unknown option: " + token);
             }
         }
         if (provider == null) throw new IllegalArgumentException("--provider-command is required for registry-aware live manufacture.");
-        return new Parsed(identity, provider, registry, schemaDir, workDir, distDir, language, profile, repositoryCommit, timeout, catalogLimit, register);
+        return new Parsed(identity, provider, registry, schemaDir, workDir, distDir, language, profile, repositoryCommit, timeout, catalogLimit, register, relationshipEdition);
     }
 
     private static long boundedLong(String value, long min, long max, String option) {
@@ -176,5 +178,5 @@ public final class RegistryManufactureApplication {
     private static boolean isEligibleStatus(String status) { return "EXPERIMENTAL".equals(status) || "STRUCTURALLY_COMPLETE".equals(status) || "VALIDATED_RELEASE".equals(status); }
 
     private record Parsed(String identity, Path providerCommand, Path registry, Path schemaDir, Path workDir, Path distDir,
-                          String language, String profile, String repositoryCommit, long timeoutSeconds, int catalogLimit, boolean register) {}
+                          String language, String profile, String repositoryCommit, long timeoutSeconds, int catalogLimit, boolean register, Path relationshipEdition) {}
 }

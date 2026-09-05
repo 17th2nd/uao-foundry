@@ -8,6 +8,7 @@ import org.seventeenthsecond.uaofoundry.identity.IdentityResolver;
 import org.seventeenthsecond.uaofoundry.json.Json;
 import org.seventeenthsecond.uaofoundry.significance.SignificanceInputs;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
+import org.seventeenthsecond.uaofoundry.util.Hashes;
 import org.seventeenthsecond.uaofoundry.verifier.PackageVerifier;
 
 import java.nio.file.Files;
@@ -348,6 +349,7 @@ public final class FoundryRegistry {
     private Map<String,Object> buildIndex() {
         Map<String,PackageRecord> packages = new TreeMap<>();
         Map<String,IdentityAggregate> identities = new TreeMap<>();
+        Map<String,RelationshipAggregate> relationships = new TreeMap<>();
         if (Files.isDirectory(packageRoot)) {
             try (var stream = Files.list(packageRoot)) {
                 for (Path dir : stream.filter(Files::isDirectory).sorted().toList()) {
@@ -396,6 +398,19 @@ public final class FoundryRegistry {
                             }
                         }
                     }
+                    Path experimentalFile = dir.resolve("experimental-relationships.json");
+                    if (Files.isRegularFile(experimentalFile)) {
+                        // Experimental typed relationships (Experiment 002) are indexed like identities:
+                        // fully derived from immutable packages, addressed by a deterministic id, and
+                        // never mistaken for canonical UROs (the record's own labels say so).
+                        for (Object rawRecord : array(FileOps.readJson(experimentalFile), "experimental relationships")) {
+                            Map<String,Object> record = object(rawRecord, "experimental relationship");
+                            String relationshipId = string(record.get("relationshipId"), "relationshipId");
+                            RelationshipAggregate aggregate = relationships.computeIfAbsent(relationshipId,
+                                    ignored -> new RelationshipAggregate(relationshipId, record));
+                            aggregate.addOccurrence(packageId, "packages/" + packageId + "/experimental-relationships.json", record);
+                        }
+                    }
                     for (Object raw : array(FileOps.readJson(dir.resolve("canonical-identities.json")), "canonical identities")) {
                         Map<String,Object> uao = object(raw, "canonical UAO");
                         String uid = string(uao.get("uid"), "uid");
@@ -434,6 +449,90 @@ public final class FoundryRegistry {
         out.put("packages", packages.values().stream().map(PackageRecord::toMap).toList());
         out.put("identities", identities.values().stream().map(IdentityAggregate::toMap).toList());
         out.put("identityOperations", operations.stream().map(IdentityOperation::toMap).toList());
+        // Present only when at least one package carries typed relationships, so registries built
+        // before Experiment 002 keep verifying byte-for-byte without an explicit rebuild.
+        if (!relationships.isEmpty()) {
+            for (RelationshipAggregate aggregate : relationships.values()) {
+                for (String uid : aggregate.participantUids()) {
+                    if (!identities.containsKey(uid)) throw new IllegalArgumentException("Relationship " + aggregate.relationshipId + " binds an identity absent from the registry: " + uid);
+                }
+            }
+            out.put("relationships", relationships.values().stream().map(RelationshipAggregate::toMap).toList());
+        }
+        return out;
+    }
+
+    /**
+     * Typed-relationship neighbourhood of one exactly resolved identity, from the verified index.
+     * Edges are experimental records (see {@code ExperimentalRelationships}); the caveat travels
+     * with the answer so no consumer can read it as a governed graph.
+     */
+    public Map<String,Object> relationshipNeighbourhood(String uid) {
+        Map<String,Object> index = index();
+        List<Object> edges = new ArrayList<>();
+        Set<String> neighbours = new LinkedHashSet<>();
+        Set<String> packages = new LinkedHashSet<>();
+        for (Object raw : array(index.getOrDefault("relationships", List.of()), "index relationships")) {
+            Map<String,Object> relationship = object(raw, "index relationship");
+            List<Object> participants = array(relationship.get("participants"), "participants");
+            boolean mentions = participants.stream().map(p -> object(p, "participant").get("uaoId")).anyMatch(uid::equals);
+            if (!mentions) continue;
+            for (Object p : participants) {
+                Object other = object(p, "participant").get("uaoId");
+                if (other instanceof String s && !s.equals(uid)) neighbours.add(s);
+            }
+            for (Object occurrence : array(relationship.get("occurrences"), "occurrences")) packages.add(String.valueOf(object(occurrence, "occurrence").get("packageId")));
+            edges.add(relationship);
+        }
+        Map<String,Object> out = new LinkedHashMap<>();
+        out.put("uid", uid);
+        out.put("status", "EXPERIMENTAL_TYPED_RELATIONSHIPS");
+        out.put("certifying", Boolean.FALSE);
+        out.put("edges", edges);
+        out.put("neighbourUids", new ArrayList<>(neighbours));
+        out.put("packagesContributing", new ArrayList<>(packages));
+        out.put("caveat", "Experimental typed relationships validated against a Foundry relationship type edition that is not ASA-admitted. "
+                + "No canonical URO exists and none is implied (ASA-SPEC-0006 §10.3 AU-1, outcome undetermined).");
+        return out;
+    }
+
+    /** Whole-registry graph export: identities as nodes, experimental typed relationships as edges. */
+    public Map<String,Object> graph() {
+        Map<String,Object> index = index();
+        List<Object> nodes = new ArrayList<>();
+        for (Object raw : array(index.get("identities"), "index identities")) {
+            Map<String,Object> identity = object(raw, "index identity");
+            Map<String,Object> node = new LinkedHashMap<>();
+            node.put("uid", identity.get("uid"));
+            node.put("resolutionKey", identity.get("resolutionKey"));
+            node.put("labels", identity.get("canonicalLabels"));
+            node.put("aliases", identity.get("aliases"));
+            node.put("externalIdentifiers", identity.get("externalIdentifiers"));
+            node.put("lifecycleState", identity.get("lifecycleState"));
+            nodes.add(node);
+        }
+        List<Object> edges = new ArrayList<>();
+        for (Object raw : array(index.getOrDefault("relationships", List.of()), "index relationships")) {
+            Map<String,Object> relationship = object(raw, "index relationship");
+            Map<String,Object> edge = new LinkedHashMap<>();
+            edge.put("relationshipId", relationship.get("relationshipId"));
+            edge.put("typeId", relationship.get("typeId"));
+            edge.put("typeName", relationship.get("typeName"));
+            edge.put("symmetric", relationship.get("symmetric"));
+            edge.put("participants", relationship.get("participants"));
+            edge.put("statement", relationship.get("statement"));
+            edge.put("basis", relationship.get("basis"));
+            edge.put("outcome", relationship.get("outcome"));
+            edge.put("occurrenceCount", new java.math.BigDecimal(array(relationship.get("occurrences"), "occurrences").size()));
+            edges.add(edge);
+        }
+        Map<String,Object> out = new LinkedHashMap<>();
+        out.put("graphVersion", "0.1.0");
+        out.put("status", "EXPERIMENTAL_TYPED_RELATIONSHIPS");
+        out.put("certifying", Boolean.FALSE);
+        out.put("nodes", nodes);
+        out.put("edges", edges);
+        out.put("registryIndexHash", Hashes.canonicalJson(index));
         return out;
     }
 
@@ -687,6 +786,67 @@ public final class FoundryRegistry {
             out.put("decisionHistory", new ArrayList<>(decisionHistory));
             out.put("relationshipBindings", new ArrayList<>(relationshipBindings));
             out.put("occurrences", occurrences.stream().map(Occurrence::toMap).toList()); return out;
+        }
+    }
+
+    /** One deterministic relationship id across every immutable package that states it. */
+    private static final class RelationshipAggregate {
+        private final String relationshipId;
+        private final Map<String,Object> first;
+        private final List<Map<String,Object>> occurrences = new ArrayList<>();
+        private final Set<String> stateVersions = new java.util.TreeSet<>();
+        private final Set<String> bases = new java.util.TreeSet<>();
+        private RelationshipAggregate(String relationshipId, Map<String,Object> first) {
+            this.relationshipId = relationshipId; this.first = Json.object(Json.parse(Json.canonical(first)), "relationship record");
+        }
+        private void addOccurrence(String packageId, String path, Map<String,Object> record) {
+            // The identity-bearing content of a relationship is fixed by its id; occurrences may
+            // differ only in evidence, basis and diagnostics. Anything else is a derivation defect.
+            if (!Json.canonical(first.get("typeId")).equals(Json.canonical(record.get("typeId")))
+                    || !Json.canonical(participantsOf(first)).equals(Json.canonical(participantsOf(record)))) {
+                throw new IllegalArgumentException("Relationship id " + relationshipId + " is bound to different participants or types across packages.");
+            }
+            Map<String,Object> occurrence = new LinkedHashMap<>();
+            occurrence.put("packageId", packageId);
+            occurrence.put("canonicalPath", path);
+            occurrence.put("stateVersion", record.get("stateVersion"));
+            occurrence.put("sourceRefs", record.get("sourceRefs"));
+            occurrence.put("basis", record.get("basis"));
+            occurrences.add(occurrence);
+            occurrences.sort(Comparator.comparing(v -> String.valueOf(v.get("packageId"))));
+            if (record.get("stateVersion") instanceof String s) stateVersions.add(s);
+            if (record.get("basis") instanceof String b) bases.add(b);
+        }
+        private static Map<String,Object> participantsOf(Map<String,Object> record) {
+            Map<String,Object> out = new TreeMap<>();
+            for (Object raw : Json.array(record.get("participants"), "participants")) {
+                Map<String,Object> p = Json.object(raw, "participant");
+                out.merge(String.valueOf(p.get("role")), new ArrayList<>(List.of(String.valueOf(p.get("uaoId")))), (a, b) -> { List<Object> m = new ArrayList<>((List<?>) a); m.addAll((List<?>) b); m.sort(Comparator.comparing(String::valueOf)); return m; });
+            }
+            return out;
+        }
+        private Set<String> participantUids() {
+            Set<String> out = new LinkedHashSet<>();
+            for (Object raw : Json.array(first.get("participants"), "participants")) out.add(String.valueOf(Json.object(raw, "participant").get("uaoId")));
+            return out;
+        }
+        private Map<String,Object> toMap() {
+            Map<String,Object> out = new LinkedHashMap<>();
+            out.put("relationshipId", relationshipId);
+            out.put("status", first.get("status"));
+            out.put("certifying", Boolean.FALSE);
+            out.put("typeId", first.get("typeId"));
+            out.put("typeName", first.get("typeName"));
+            out.put("typeEdition", first.get("typeEdition"));
+            out.put("symmetric", first.get("symmetric"));
+            out.put("participants", first.get("participants"));
+            out.put("identityLiterals", first.get("identityLiterals"));
+            out.put("statement", first.get("statement"));
+            out.put("basis", bases.size() == 1 ? bases.iterator().next() : "MIXED");
+            out.put("outcome", first.get("outcome"));
+            out.put("stateVersions", new ArrayList<>(stateVersions));
+            out.put("occurrences", new ArrayList<>(occurrences));
+            return out;
         }
     }
 

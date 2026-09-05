@@ -72,6 +72,8 @@ public final class OperatorConsole {
                 case "search" -> search(options);
                 case "identity" -> identity(options);
                 case "status" -> status(options);
+                case "relationships" -> relationships(options);
+                case "graph" -> graph(options);
                 default -> throw new IllegalArgumentException("Unknown command: " + args[0]);
             };
         } catch (IllegalArgumentException ex) {
@@ -113,6 +115,7 @@ public final class OperatorConsole {
                 ? new FoundryPipeline(schemaDir, options.workDir(), options.distDir(), options.repositoryCommit())
                 : new FoundryPipeline(schemaDir, options.workDir(), options.distDir(), options.repositoryCommit(),
                         options.registry(), preIndex);
+        if (options.relationshipEdition() != null) pipeline.relationshipEdition(options.relationshipEdition());
         PipelineResult result = pipeline.manufacture(request, provider, false);
 
         Map<String,Object> reuse = null;
@@ -235,6 +238,46 @@ public final class OperatorConsole {
         return resolved ? 0 : 4;
     }
 
+    private int relationships(Options options) {
+        String value = options.single("relationships requires exactly one identity reference.");
+        FoundryRegistry registry = requireRegistry(options);
+        Map<String,Object> record = registry.identityRecord(reference(value));
+        Map<String,Object> resolution = map(record.get("resolution"));
+        if (!"SAME".equals(resolution.get("decision"))) {
+            if (options.json()) out.println(Json.canonical(record));
+            else out.printf("  reference did not resolve exactly: %s%n", resolution.get("decision"));
+            return 4;
+        }
+        Map<String,Object> neighbourhood = registry.relationshipNeighbourhood(String.valueOf(resolution.get("uid")));
+        if (options.json()) { out.println(Json.canonical(neighbourhood)); return 0; }
+        out.println(RULE);
+        out.printf("  UAO FOUNDRY — RELATIONSHIPS  %s  (%s)%n", value, resolution.get("uid"));
+        out.println(RULE);
+        out.println("  " + neighbourhood.get("caveat"));
+        out.println();
+        for (Object raw : list(neighbourhood.get("edges"))) {
+            Map<String,Object> edge = map(raw);
+            out.printf("  %-18s %s%n", edge.get("relationshipId"), edge.get("statement"));
+            out.printf("  %-18s %s · basis %s · outcome %s · occurrences %d%n", "", edge.get("typeId"), edge.get("basis"), edge.get("outcome"), list(edge.get("occurrences")).size());
+        }
+        out.printf("%n  neighbours: %s%n", String.join(", ", strings(neighbourhood.get("neighbourUids"))));
+        out.println(RULE);
+        return 0;
+    }
+
+    private int graph(Options options) {
+        FoundryRegistry registry = requireRegistry(options);
+        Map<String,Object> graph = registry.graph();
+        if (options.json()) { out.println(Json.canonical(graph)); return 0; }
+        out.println(RULE);
+        out.printf("  UAO FOUNDRY — GRAPH  %d nodes · %d edges (experimental typed relationships, certifying=false)%n",
+                list(graph.get("nodes")).size(), list(graph.get("edges")).size());
+        out.println(RULE);
+        for (Object raw : list(graph.get("edges"))) out.printf("  %s%n", map(raw).get("statement"));
+        out.println(RULE);
+        return 0;
+    }
+
     private int status(Options options) {
         FoundryRegistry registry = requireRegistry(options);
         FoundryRegistry.VerificationResult verification = registry.verify();
@@ -275,12 +318,15 @@ public final class OperatorConsole {
     private record Report(String seed, String context, String registryPath, String packageId, String packagePath,
                           String publicationStatus, boolean verificationPassed, String admission, String runId,
                           int reusedIdentities, int newIdentities, int newSources, int reusedRegistrySources,
-                          int unresolvedRelationships, int unreconciledVariants, boolean registryConsulted) {
+                          int unresolvedRelationships, int unreconciledVariants, boolean registryConsulted,
+                          int typedRelationships) {
 
         static Report of(PipelineResult result, Map<String,Object> reuse, FoundryRegistry registry,
                          String admission, String seed, Options options, String runId) {
             Map<String,Object> manifest = map(FileOps.readJson(result.packagePath().resolve("manifest.json")));
             int unresolved = list(FileOps.readJson(result.packagePath().resolve("unresolved-items.json"))).size();
+            Path experimental = result.packagePath().resolve("experimental-relationships.json");
+            int typed = java.nio.file.Files.isRegularFile(experimental) ? list(FileOps.readJson(experimental)).size() : 0;
 
             int reused = 0, created = 0, newSources = 0, registrySources = 0;
             if (reuse != null) {
@@ -314,7 +360,7 @@ public final class OperatorConsole {
             return new Report(seed, options.context(), options.registry() == null ? null : options.registry().toString(),
                     String.valueOf(manifest.get("packageId")), result.packagePath().toString(),
                     result.publicationStatus(), result.verificationPassed(), admission, runId,
-                    reused, created, newSources, registrySources, unresolved, unreconciled, registry != null);
+                    reused, created, newSources, registrySources, unresolved, unreconciled, registry != null, typed);
         }
 
         void print(PrintStream out) {
@@ -329,6 +375,7 @@ public final class OperatorConsole {
             out.printf("  %-30s %d%n", "New identities manufactured", newIdentities);
             out.printf("  %-30s %d%n", "New sources", newSources);
             out.printf("  %-30s %d%n", "Registry sources reused", reusedRegistrySources);
+            out.printf("  %-30s %d%n", "Typed relationships", typedRelationships);
             out.printf("  %-30s %d%n", "Unresolved relationships", unresolvedRelationships);
             out.printf("  %-30s %d%n", "Semantic variants", unreconciledVariants);
             out.println();
@@ -357,6 +404,7 @@ public final class OperatorConsole {
             counts.put("newIdentitiesManufactured", java.math.BigDecimal.valueOf(newIdentities));
             counts.put("newSources", java.math.BigDecimal.valueOf(newSources));
             counts.put("registrySourcesReused", java.math.BigDecimal.valueOf(reusedRegistrySources));
+            counts.put("typedRelationships", java.math.BigDecimal.valueOf(typedRelationships));
             counts.put("unresolvedRelationships", java.math.BigDecimal.valueOf(unresolvedRelationships));
             counts.put("semanticVariants", java.math.BigDecimal.valueOf(unreconciledVariants));
             Map<String,Object> out = new LinkedHashMap<>();
@@ -411,6 +459,11 @@ public final class OperatorConsole {
         out.println("  search      <query>              --registry <path> [--json]");
         out.println("  identity    <uid|key|scheme:id|alias>  --registry <path> [--json]");
         out.println("  status                           --registry <path> [--json]");
+        out.println("  relationships <uid|key|scheme:id|alias>  --registry <path> [--json]");
+        out.println("  graph                            --registry <path> [--json]");
+        out.println();
+        out.println("  --relationship-edition <facet.json>  validate relationship candidates against an ASA-SPEC-0006-format");
+        out.println("                                       edition (never inferred; without it every candidate stays unresolved)");
         out.println();
         out.println("Exit codes: 0 success · 2 usage/error · 4 not resolved or not publishable · 5 registry verification failed");
     }

@@ -1,0 +1,865 @@
+{
+  "$meta": {
+    "title": "ASA Relationship Type Registry",
+    "registry_version": "2026.2",
+    "schema": "specification/registry/relationship_types.schema.json",
+    "subordination_clause_ack": true,
+    "provenance_anchor": "D-040",
+    "css_schema_version": "2026.2",
+    "spec_authority": "ASA-SPEC-0006"
+  },
+  "participant_kinds": [
+    "perspective",
+    "uao",
+    "uro"
+  ],
+  "types": [
+    {
+      "id": "asa:type:asa.cc0/contextual-observation-claim@1",
+      "namespace": "asa.cc0",
+      "owner": "asa:uao:asa.core/governor-v1",
+      "admission": {
+        "state": "admitted",
+        "decision_ref": "D-040",
+        "admitted_registry_version": "2026.2",
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:asa.cc0/contextual-observation-claim@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "season",
+            "kind": "contextual",
+            "binds": [
+              "uao"
+            ],
+            "min": 0,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "subject",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [
+          {
+            "name": "observation",
+            "datatype": "string",
+            "identity": true
+          }
+        ],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:f7a14b81d0d4c645d581d102b196775fc0dd19526152a38486b819111aa590db",
+      "semantics": {
+        "participant_roles": [
+          "subject"
+        ],
+        "contextual_roles": [
+          "season"
+        ],
+        "provenance_roles": [],
+        "identity_roles": [
+          "season",
+          "subject"
+        ],
+        "identity_literals": [
+          "observation"
+        ],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "ADR-002 §3.4",
+        "ADR-002 §3.6",
+        "ASA-SPEC-0001 §7",
+        "CC-0 Bootstrap Plan §1"
+      ]
+    },
+    {
+      "id": "asa:type:asa.cc0/fruit-color-claim@1",
+      "namespace": "asa.cc0",
+      "owner": "asa:uao:asa.core/governor-v1",
+      "admission": {
+        "state": "admitted",
+        "decision_ref": "D-040",
+        "admitted_registry_version": "2026.2",
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:asa.cc0/fruit-color-claim@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "subject",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [
+          {
+            "name": "color",
+            "datatype": "string",
+            "identity": true
+          }
+        ],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:5e37a5c2c3665aa19773c05bba9d48d5a00f49c362c83c953b77114f7a5a9ccc",
+      "semantics": {
+        "participant_roles": [
+          "subject"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "subject"
+        ],
+        "identity_literals": [
+          "color"
+        ],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "ADR-002 §3.4",
+        "ADR-002 §3.6",
+        "ASA-SPEC-0001 §7",
+        "CC-0 Bootstrap Plan §1"
+      ]
+    },
+    {
+      "id": "asa:type:asa.cc0/handling-note-claim@1",
+      "namespace": "asa.cc0",
+      "owner": "asa:uao:asa.core/governor-v1",
+      "admission": {
+        "state": "admitted",
+        "decision_ref": "D-040",
+        "admitted_registry_version": "2026.2",
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:asa.cc0/handling-note-claim@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "subject",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [
+          {
+            "name": "category",
+            "datatype": "string",
+            "identity": true
+          },
+          {
+            "name": "note",
+            "datatype": "string",
+            "identity": false
+          }
+        ],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:4b0f084d40ed8832fb2d6caf5a772a6b89995deef341f705d1868b533e9a3510",
+      "semantics": {
+        "participant_roles": [
+          "subject"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "subject"
+        ],
+        "identity_literals": [
+          "category"
+        ],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "ADR-002 §3.4",
+        "ADR-002 §3.6",
+        "ASA-SPEC-0001 §7",
+        "CC-0 Bootstrap Plan §1"
+      ]
+    },
+    {
+      "id": "asa:type:asa.cc0/literal-identity-claim@1",
+      "namespace": "asa.cc0",
+      "owner": "asa:uao:asa.core/governor-v1",
+      "admission": {
+        "state": "admitted",
+        "decision_ref": "D-040",
+        "admitted_registry_version": "2026.2",
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:asa.cc0/literal-identity-claim@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "subject",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [
+          {
+            "name": "temperature",
+            "datatype": "decimal",
+            "identity": true
+          }
+        ],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:b087b6fbd721a4422cc989c896faf2c3f36be1dbff44a064661032847f30e155",
+      "semantics": {
+        "participant_roles": [
+          "subject"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "subject"
+        ],
+        "identity_literals": [
+          "temperature"
+        ],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "ADR-002 §3.4",
+        "ADR-002 §3.6",
+        "ASA-SPEC-0001 §7",
+        "CC-0 Bootstrap Plan §1"
+      ]
+    },
+    {
+      "id": "asa:type:asa.cc0/plot-location-claim@1",
+      "namespace": "asa.cc0",
+      "owner": "asa:uao:asa.core/governor-v1",
+      "admission": {
+        "state": "admitted",
+        "decision_ref": "D-040",
+        "admitted_registry_version": "2026.2",
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:asa.cc0/plot-location-claim@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "definitional",
+        "roles": [
+          {
+            "name": "plot",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "subject",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:9b30973054f66dcfc7b295fa0261e1d883360b2879ad233b7fa0840aaf13cd54",
+      "semantics": {
+        "participant_roles": [
+          "plot",
+          "subject"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "plot",
+          "subject"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "definitional",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "ADR-002 §3.4",
+        "ADR-002 §3.6",
+        "ASA-SPEC-0001 §7",
+        "CC-0 Bootstrap Plan §1"
+      ]
+    },
+    {
+      "id": "asa:type:asa.cc0/sensor-reading-claim@1",
+      "namespace": "asa.cc0",
+      "owner": "asa:uao:asa.core/governor-v1",
+      "admission": {
+        "state": "admitted",
+        "decision_ref": "D-040",
+        "admitted_registry_version": "2026.2",
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:asa.cc0/sensor-reading-claim@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "sensor",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "subject",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [
+          {
+            "name": "reading",
+            "datatype": "decimal",
+            "identity": true
+          },
+          {
+            "name": "unit",
+            "datatype": "string",
+            "identity": true
+          }
+        ],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:ad8921368e048ad16ddf529402eaccd117497f74a340ea0a86e827a0cbd1a4b1",
+      "semantics": {
+        "participant_roles": [
+          "sensor",
+          "subject"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "sensor",
+          "subject"
+        ],
+        "identity_literals": [
+          "reading",
+          "unit"
+        ],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "ADR-002 §3.4",
+        "ADR-002 §3.6",
+        "ASA-SPEC-0001 §7",
+        "CC-0 Bootstrap Plan §1"
+      ]
+    },
+    {
+      "id": "asa:type:asa.core/challenges@1",
+      "namespace": "asa.core",
+      "owner": "asa:uao:asa.core/governor-v1",
+      "admission": {
+        "state": "admitted",
+        "decision_ref": "D-012",
+        "admitted_registry_version": "2026.2",
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:asa.core/challenges@1",
+        "meta": true,
+        "symmetric": false,
+        "evidence": "definitional",
+        "roles": [
+          {
+            "name": "target",
+            "kind": "participant",
+            "binds": [
+              "uro"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [
+          {
+            "name": "grounds",
+            "datatype": "string",
+            "identity": false
+          }
+        ],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:f320db59b4fa952a25da6dab96fd1abfdc218542e30cb13fa7318cef0d669a52",
+      "semantics": {
+        "participant_roles": [
+          "target"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "target"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": true,
+        "evidence": "definitional",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "ADR-002 §3.7",
+        "ADR-002 §5",
+        "ADR-002 §7.6",
+        "ASA-SPEC-0001 Meta_Types v0.1"
+      ]
+    },
+    {
+      "id": "asa:type:asa.core/contradicts@1",
+      "namespace": "asa.core",
+      "owner": "asa:uao:asa.core/governor-v1",
+      "admission": {
+        "state": "admitted",
+        "decision_ref": "D-012",
+        "admitted_registry_version": "2026.2",
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:asa.core/contradicts@1",
+        "meta": true,
+        "symmetric": true,
+        "evidence": "definitional",
+        "roles": [
+          {
+            "name": "claims",
+            "kind": "participant",
+            "binds": [
+              "uro"
+            ],
+            "min": 2,
+            "max": 2,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:989fe687aee8338bc18e2c778b910a7d00db9bd54789abe5cc194176c5f92cbb",
+      "semantics": {
+        "participant_roles": [
+          "claims"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "claims"
+        ],
+        "identity_literals": [],
+        "symmetric": true,
+        "ordering": "unordered-symmetric",
+        "meta": true,
+        "evidence": "definitional",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "ADR-002 §3.7",
+        "ADR-002 §5",
+        "ADR-002 §7.6",
+        "ASA-SPEC-0001 Meta_Types v0.1"
+      ]
+    },
+    {
+      "id": "asa:type:asa.core/stance@1",
+      "namespace": "asa.core",
+      "owner": "asa:uao:asa.core/governor-v1",
+      "admission": {
+        "state": "admitted",
+        "decision_ref": "D-012",
+        "admitted_registry_version": "2026.2",
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:asa.core/stance@1",
+        "meta": true,
+        "symmetric": false,
+        "evidence": "definitional",
+        "roles": [
+          {
+            "name": "holder",
+            "kind": "participant",
+            "binds": [
+              "perspective"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "target",
+            "kind": "participant",
+            "binds": [
+              "uro"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [
+          {
+            "name": "value",
+            "datatype": "string",
+            "identity": false
+          }
+        ],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:2b6f18ba2948e837319f6c546a2d07682a832e91e62bf769e458bf0e90fbb159",
+      "semantics": {
+        "participant_roles": [
+          "holder",
+          "target"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "holder",
+          "target"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": true,
+        "evidence": "definitional",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "ADR-002 §3.7",
+        "ADR-002 §5",
+        "ADR-002 §7.6",
+        "ASA-SPEC-0001 Meta_Types v0.1"
+      ]
+    },
+    {
+      "id": "asa:type:asa.core/supersedes@1",
+      "namespace": "asa.core",
+      "owner": "asa:uao:asa.core/governor-v1",
+      "admission": {
+        "state": "admitted",
+        "decision_ref": "D-012",
+        "admitted_registry_version": "2026.2",
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:asa.core/supersedes@1",
+        "meta": true,
+        "symmetric": false,
+        "evidence": "definitional",
+        "roles": [
+          {
+            "name": "predecessor",
+            "kind": "participant",
+            "binds": [
+              "uro"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "successor",
+            "kind": "participant",
+            "binds": [
+              "uro"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:a5cce548045c79478d9aa653f9429628bf613d718e7e59e78e14600a614b5c20",
+      "semantics": {
+        "participant_roles": [
+          "predecessor",
+          "successor"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "predecessor",
+          "successor"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": true,
+        "evidence": "definitional",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "ADR-002 §3.7",
+        "ADR-002 §5",
+        "ADR-002 §7.6",
+        "ASA-SPEC-0001 Meta_Types v0.1"
+      ]
+    },
+    {
+      "id": "asa:type:asa.core/supports@1",
+      "namespace": "asa.core",
+      "owner": "asa:uao:asa.core/governor-v1",
+      "admission": {
+        "state": "admitted",
+        "decision_ref": "D-012",
+        "admitted_registry_version": "2026.2",
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:asa.core/supports@1",
+        "meta": true,
+        "symmetric": false,
+        "evidence": "definitional",
+        "roles": [
+          {
+            "name": "source",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "target",
+            "kind": "participant",
+            "binds": [
+              "uro"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [
+          {
+            "name": "strength",
+            "datatype": "decimal",
+            "identity": false
+          }
+        ],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:a636f816697ec3c5e43ae2dd2a48d7169e018f903955f7acdf4574adfe8d7b19",
+      "semantics": {
+        "participant_roles": [
+          "source",
+          "target"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "source",
+          "target"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": true,
+        "evidence": "definitional",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "ADR-002 §3.7",
+        "ADR-002 §5",
+        "ADR-002 §7.6",
+        "ASA-SPEC-0001 Meta_Types v0.1"
+      ]
+    }
+  ],
+  "digest": "sha256:a0c6a69c4bfaf1ffde97f6187797e455c23bea5343706f78a678e66307a7059c"
+}

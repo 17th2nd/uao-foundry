@@ -1,0 +1,1627 @@
+{
+  "$meta": {
+    "title": "UAO Foundry Experimental Relationship Type Edition — Experiment 002 (NOT ASA-ADMITTED)",
+    "registry_version": "2026.902",
+    "schema": "schemas/asa/relationship_type_registry.schema.json",
+    "subordination_clause_ack": true,
+    "provenance_anchor": "PROPOSED",
+    "css_schema_version": "2026.2",
+    "spec_authority": "ASA-SPEC-0006"
+  },
+  "participant_kinds": [
+    "perspective",
+    "uao",
+    "uro"
+  ],
+  "types": [
+    {
+      "id": "asa:type:asa.core/challenges@1",
+      "namespace": "asa.core",
+      "owner": "asa:uao:asa.core/governor-v1",
+      "admission": {
+        "state": "admitted",
+        "decision_ref": "D-012",
+        "admitted_registry_version": "2026.2",
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:asa.core/challenges@1",
+        "meta": true,
+        "symmetric": false,
+        "evidence": "definitional",
+        "roles": [
+          {
+            "name": "target",
+            "kind": "participant",
+            "binds": [
+              "uro"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [
+          {
+            "name": "grounds",
+            "datatype": "string",
+            "identity": false
+          }
+        ],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:f320db59b4fa952a25da6dab96fd1abfdc218542e30cb13fa7318cef0d669a52",
+      "semantics": {
+        "participant_roles": [
+          "target"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "target"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": true,
+        "evidence": "definitional",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "ADR-002 §3.7",
+        "ADR-002 §5",
+        "ADR-002 §7.6",
+        "ASA-SPEC-0001 Meta_Types v0.1"
+      ]
+    },
+    {
+      "id": "asa:type:asa.core/contradicts@1",
+      "namespace": "asa.core",
+      "owner": "asa:uao:asa.core/governor-v1",
+      "admission": {
+        "state": "admitted",
+        "decision_ref": "D-012",
+        "admitted_registry_version": "2026.2",
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:asa.core/contradicts@1",
+        "meta": true,
+        "symmetric": true,
+        "evidence": "definitional",
+        "roles": [
+          {
+            "name": "claims",
+            "kind": "participant",
+            "binds": [
+              "uro"
+            ],
+            "min": 2,
+            "max": 2,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:989fe687aee8338bc18e2c778b910a7d00db9bd54789abe5cc194176c5f92cbb",
+      "semantics": {
+        "participant_roles": [
+          "claims"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "claims"
+        ],
+        "identity_literals": [],
+        "symmetric": true,
+        "ordering": "unordered-symmetric",
+        "meta": true,
+        "evidence": "definitional",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "ADR-002 §3.7",
+        "ADR-002 §5",
+        "ADR-002 §7.6",
+        "ASA-SPEC-0001 Meta_Types v0.1"
+      ]
+    },
+    {
+      "id": "asa:type:asa.core/stance@1",
+      "namespace": "asa.core",
+      "owner": "asa:uao:asa.core/governor-v1",
+      "admission": {
+        "state": "admitted",
+        "decision_ref": "D-012",
+        "admitted_registry_version": "2026.2",
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:asa.core/stance@1",
+        "meta": true,
+        "symmetric": false,
+        "evidence": "definitional",
+        "roles": [
+          {
+            "name": "holder",
+            "kind": "participant",
+            "binds": [
+              "perspective"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "target",
+            "kind": "participant",
+            "binds": [
+              "uro"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [
+          {
+            "name": "value",
+            "datatype": "string",
+            "identity": false
+          }
+        ],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:2b6f18ba2948e837319f6c546a2d07682a832e91e62bf769e458bf0e90fbb159",
+      "semantics": {
+        "participant_roles": [
+          "holder",
+          "target"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "holder",
+          "target"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": true,
+        "evidence": "definitional",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "ADR-002 §3.7",
+        "ADR-002 §5",
+        "ADR-002 §7.6",
+        "ASA-SPEC-0001 Meta_Types v0.1"
+      ]
+    },
+    {
+      "id": "asa:type:asa.core/supersedes@1",
+      "namespace": "asa.core",
+      "owner": "asa:uao:asa.core/governor-v1",
+      "admission": {
+        "state": "admitted",
+        "decision_ref": "D-012",
+        "admitted_registry_version": "2026.2",
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:asa.core/supersedes@1",
+        "meta": true,
+        "symmetric": false,
+        "evidence": "definitional",
+        "roles": [
+          {
+            "name": "predecessor",
+            "kind": "participant",
+            "binds": [
+              "uro"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "successor",
+            "kind": "participant",
+            "binds": [
+              "uro"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:a5cce548045c79478d9aa653f9429628bf613d718e7e59e78e14600a614b5c20",
+      "semantics": {
+        "participant_roles": [
+          "predecessor",
+          "successor"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "predecessor",
+          "successor"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": true,
+        "evidence": "definitional",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "ADR-002 §3.7",
+        "ADR-002 §5",
+        "ADR-002 §7.6",
+        "ASA-SPEC-0001 Meta_Types v0.1"
+      ]
+    },
+    {
+      "id": "asa:type:asa.core/supports@1",
+      "namespace": "asa.core",
+      "owner": "asa:uao:asa.core/governor-v1",
+      "admission": {
+        "state": "admitted",
+        "decision_ref": "D-012",
+        "admitted_registry_version": "2026.2",
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:asa.core/supports@1",
+        "meta": true,
+        "symmetric": false,
+        "evidence": "definitional",
+        "roles": [
+          {
+            "name": "source",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "target",
+            "kind": "participant",
+            "binds": [
+              "uro"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [
+          {
+            "name": "strength",
+            "datatype": "decimal",
+            "identity": false
+          }
+        ],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:a636f816697ec3c5e43ae2dd2a48d7169e018f903955f7acdf4574adfe8d7b19",
+      "semantics": {
+        "participant_roles": [
+          "source",
+          "target"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "source",
+          "target"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": true,
+        "evidence": "definitional",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "ADR-002 §3.7",
+        "ADR-002 §5",
+        "ADR-002 §7.6",
+        "ASA-SPEC-0001 Meta_Types v0.1"
+      ]
+    },
+    {
+      "id": "asa:type:foundry.exp002/about@1",
+      "namespace": "foundry.exp002",
+      "owner": "asa:uao:foundry.exp002/operator-v1",
+      "admission": {
+        "state": "proposed",
+        "decision_ref": null,
+        "admitted_registry_version": null,
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:foundry.exp002/about@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "subject",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "work",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:80560931545b9ef23f1aad06db953a9b988597237bde0f75a955f569f20fd1d5",
+      "semantics": {
+        "participant_roles": [
+          "subject",
+          "work"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "subject",
+          "work"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "UAO Foundry Experiment 002 §2 (founder programme, 2026-09-05)",
+        "ASA-SPEC-0006 §5, §8"
+      ]
+    },
+    {
+      "id": "asa:type:foundry.exp002/architect-of@1",
+      "namespace": "foundry.exp002",
+      "owner": "asa:uao:foundry.exp002/operator-v1",
+      "admission": {
+        "state": "proposed",
+        "decision_ref": null,
+        "admitted_registry_version": null,
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:foundry.exp002/architect-of@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "architect",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "project",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:2679d1c33d6d55579e1cd29401d5c36935074a566667f9c6bf4ab309319c6381",
+      "semantics": {
+        "participant_roles": [
+          "architect",
+          "project"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "architect",
+          "project"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "UAO Foundry Experiment 002 §2 (founder programme, 2026-09-05)",
+        "ASA-SPEC-0006 §5, §8"
+      ]
+    },
+    {
+      "id": "asa:type:foundry.exp002/associated-with@1",
+      "namespace": "foundry.exp002",
+      "owner": "asa:uao:foundry.exp002/operator-v1",
+      "admission": {
+        "state": "proposed",
+        "decision_ref": null,
+        "admitted_registry_version": null,
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:foundry.exp002/associated-with@1",
+        "meta": false,
+        "symmetric": true,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "party",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 2,
+            "max": 2,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:1f3b715a5dbb9f6aed507829a26c5409854a29b8e85b2ee86cc85d37f92a09dd",
+      "semantics": {
+        "participant_roles": [
+          "party"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "party"
+        ],
+        "identity_literals": [],
+        "symmetric": true,
+        "ordering": "unordered-symmetric",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "UAO Foundry Experiment 002 §2 (founder programme, 2026-09-05)",
+        "ASA-SPEC-0006 §5, §8"
+      ]
+    },
+    {
+      "id": "asa:type:foundry.exp002/author-of@1",
+      "namespace": "foundry.exp002",
+      "owner": "asa:uao:foundry.exp002/operator-v1",
+      "admission": {
+        "state": "proposed",
+        "decision_ref": null,
+        "admitted_registry_version": null,
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:foundry.exp002/author-of@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "author",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 8,
+            "identity": true
+          },
+          {
+            "name": "work",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:0448e08da63a1f4651cf2b2b5b50aec83c9aacfdee2ee28a803568e3857e58c4",
+      "semantics": {
+        "participant_roles": [
+          "author",
+          "work"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "author",
+          "work"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "UAO Foundry Experiment 002 §2 (founder programme, 2026-09-05)",
+        "ASA-SPEC-0006 §5, §8"
+      ]
+    },
+    {
+      "id": "asa:type:foundry.exp002/co-created@1",
+      "namespace": "foundry.exp002",
+      "owner": "asa:uao:foundry.exp002/operator-v1",
+      "admission": {
+        "state": "proposed",
+        "decision_ref": null,
+        "admitted_registry_version": null,
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:foundry.exp002/co-created@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "creation",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "creator",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 8,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:e5fa30d80bddce29e6f80806a132c506fdd2d49babb0275098347000ed811316",
+      "semantics": {
+        "participant_roles": [
+          "creation",
+          "creator"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "creation",
+          "creator"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "UAO Foundry Experiment 002 §2 (founder programme, 2026-09-05)",
+        "ASA-SPEC-0006 §5, §8"
+      ]
+    },
+    {
+      "id": "asa:type:foundry.exp002/contributed-to@1",
+      "namespace": "foundry.exp002",
+      "owner": "asa:uao:foundry.exp002/operator-v1",
+      "admission": {
+        "state": "proposed",
+        "decision_ref": null,
+        "admitted_registry_version": null,
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:foundry.exp002/contributed-to@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "contribution",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "contributor",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 8,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:fd2397175db793c4970cf1dd4330641a402bbd61b334700d1ec6ddf0be8fb9fa",
+      "semantics": {
+        "participant_roles": [
+          "contribution",
+          "contributor"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "contribution",
+          "contributor"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "UAO Foundry Experiment 002 §2 (founder programme, 2026-09-05)",
+        "ASA-SPEC-0006 §5, §8"
+      ]
+    },
+    {
+      "id": "asa:type:foundry.exp002/created@1",
+      "namespace": "foundry.exp002",
+      "owner": "asa:uao:foundry.exp002/operator-v1",
+      "admission": {
+        "state": "proposed",
+        "decision_ref": null,
+        "admitted_registry_version": null,
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:foundry.exp002/created@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "creation",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "creator",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:fb2e6c78a421bfe4d14c0a8fabe3def4ee75bdc80a8cce9e05a924534b7543bc",
+      "semantics": {
+        "participant_roles": [
+          "creation",
+          "creator"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "creation",
+          "creator"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "UAO Foundry Experiment 002 §2 (founder programme, 2026-09-05)",
+        "ASA-SPEC-0006 §5, §8"
+      ]
+    },
+    {
+      "id": "asa:type:foundry.exp002/developed@1",
+      "namespace": "foundry.exp002",
+      "owner": "asa:uao:foundry.exp002/operator-v1",
+      "admission": {
+        "state": "proposed",
+        "decision_ref": null,
+        "admitted_registry_version": null,
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:foundry.exp002/developed@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "artefact",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "developer",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 8,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:160f829808ace479e46a21d7d630587a5ad85a8f2cb9d7c334afc2b77a405991",
+      "semantics": {
+        "participant_roles": [
+          "artefact",
+          "developer"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "artefact",
+          "developer"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "UAO Foundry Experiment 002 §2 (founder programme, 2026-09-05)",
+        "ASA-SPEC-0006 §5, §8"
+      ]
+    },
+    {
+      "id": "asa:type:foundry.exp002/influenced-by@1",
+      "namespace": "foundry.exp002",
+      "owner": "asa:uao:foundry.exp002/operator-v1",
+      "admission": {
+        "state": "proposed",
+        "decision_ref": null,
+        "admitted_registry_version": null,
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:foundry.exp002/influenced-by@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "influenced-party",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "influencer",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:dd345d9924237affc9b7c9e9bacee761067e3495295cc358db94067e3357526b",
+      "semantics": {
+        "participant_roles": [
+          "influenced-party",
+          "influencer"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "influenced-party",
+          "influencer"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "UAO Foundry Experiment 002 §2 (founder programme, 2026-09-05)",
+        "ASA-SPEC-0006 §5, §8"
+      ]
+    },
+    {
+      "id": "asa:type:foundry.exp002/influenced@1",
+      "namespace": "foundry.exp002",
+      "owner": "asa:uao:foundry.exp002/operator-v1",
+      "admission": {
+        "state": "proposed",
+        "decision_ref": null,
+        "admitted_registry_version": null,
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:foundry.exp002/influenced@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "influenced-party",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "influencer",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:8a4ee02ed9cc5f3c3d18acd6e9bdb82c244507836452afee898eda8b1ec305ba",
+      "semantics": {
+        "participant_roles": [
+          "influenced-party",
+          "influencer"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "influenced-party",
+          "influencer"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "UAO Foundry Experiment 002 §2 (founder programme, 2026-09-05)",
+        "ASA-SPEC-0006 §5, §8"
+      ]
+    },
+    {
+      "id": "asa:type:foundry.exp002/instance-of@1",
+      "namespace": "foundry.exp002",
+      "owner": "asa:uao:foundry.exp002/operator-v1",
+      "admission": {
+        "state": "proposed",
+        "decision_ref": null,
+        "admitted_registry_version": null,
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:foundry.exp002/instance-of@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "class",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "instance",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:68689bba974fac2fcd3690b058489a9282214c59354fd2812bcb8d893db49bc7",
+      "semantics": {
+        "participant_roles": [
+          "class",
+          "instance"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "class",
+          "instance"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "UAO Foundry Experiment 002 §2 (founder programme, 2026-09-05)",
+        "ASA-SPEC-0006 §5, §8"
+      ]
+    },
+    {
+      "id": "asa:type:foundry.exp002/member-of@1",
+      "namespace": "foundry.exp002",
+      "owner": "asa:uao:foundry.exp002/operator-v1",
+      "admission": {
+        "state": "proposed",
+        "decision_ref": null,
+        "admitted_registry_version": null,
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:foundry.exp002/member-of@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "group",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "member",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:c59b37f8b87593099346a381bbea2a02de9a98cb614973140366e64b1b63b1cf",
+      "semantics": {
+        "participant_roles": [
+          "group",
+          "member"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "group",
+          "member"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "UAO Foundry Experiment 002 §2 (founder programme, 2026-09-05)",
+        "ASA-SPEC-0006 §5, §8"
+      ]
+    },
+    {
+      "id": "asa:type:foundry.exp002/part-of@1",
+      "namespace": "foundry.exp002",
+      "owner": "asa:uao:foundry.exp002/operator-v1",
+      "admission": {
+        "state": "proposed",
+        "decision_ref": null,
+        "admitted_registry_version": null,
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:foundry.exp002/part-of@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "part",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "whole",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:d91a883295cb81d95f44ccb8b49006a702d0c690ff604043f321daa0b2d70889",
+      "semantics": {
+        "participant_roles": [
+          "part",
+          "whole"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "part",
+          "whole"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "UAO Foundry Experiment 002 §2 (founder programme, 2026-09-05)",
+        "ASA-SPEC-0006 §5, §8"
+      ]
+    },
+    {
+      "id": "asa:type:foundry.exp002/precursor-to@1",
+      "namespace": "foundry.exp002",
+      "owner": "asa:uao:foundry.exp002/operator-v1",
+      "admission": {
+        "state": "proposed",
+        "decision_ref": null,
+        "admitted_registry_version": null,
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:foundry.exp002/precursor-to@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "precursor",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "successor",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:50c9f8cc8a0c79ae90b9476dba5ed37e24e207f611835289aa16fbcb605844b0",
+      "semantics": {
+        "participant_roles": [
+          "precursor",
+          "successor"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "precursor",
+          "successor"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "UAO Foundry Experiment 002 §2 (founder programme, 2026-09-05)",
+        "ASA-SPEC-0006 §5, §8"
+      ]
+    },
+    {
+      "id": "asa:type:foundry.exp002/presented@1",
+      "namespace": "foundry.exp002",
+      "owner": "asa:uao:foundry.exp002/operator-v1",
+      "admission": {
+        "state": "proposed",
+        "decision_ref": null,
+        "admitted_registry_version": null,
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:foundry.exp002/presented@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "presentation",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "presenter",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:886f7b8099131ba29e7ec482efdc3caadee2a55189e21a13599373dd18f16f92",
+      "semantics": {
+        "participant_roles": [
+          "presentation",
+          "presenter"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "presentation",
+          "presenter"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "UAO Foundry Experiment 002 §2 (founder programme, 2026-09-05)",
+        "ASA-SPEC-0006 §5, §8"
+      ]
+    },
+    {
+      "id": "asa:type:foundry.exp002/related-to@1",
+      "namespace": "foundry.exp002",
+      "owner": "asa:uao:foundry.exp002/operator-v1",
+      "admission": {
+        "state": "proposed",
+        "decision_ref": null,
+        "admitted_registry_version": null,
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:foundry.exp002/related-to@1",
+        "meta": false,
+        "symmetric": true,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "party",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 2,
+            "max": 2,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:6266582b34c7da8bb171a910c8e4594a5c258be78a939fa3d8119c3472020b12",
+      "semantics": {
+        "participant_roles": [
+          "party"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "party"
+        ],
+        "identity_literals": [],
+        "symmetric": true,
+        "ordering": "unordered-symmetric",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "UAO Foundry Experiment 002 §2 (founder programme, 2026-09-05)",
+        "ASA-SPEC-0006 §5, §8"
+      ]
+    },
+    {
+      "id": "asa:type:foundry.exp002/subclass-of@1",
+      "namespace": "foundry.exp002",
+      "owner": "asa:uao:foundry.exp002/operator-v1",
+      "admission": {
+        "state": "proposed",
+        "decision_ref": null,
+        "admitted_registry_version": null,
+        "deprecated_registry_version": null,
+        "withdrawn_registry_version": null
+      },
+      "definition": {
+        "id": "asa:type:foundry.exp002/subclass-of@1",
+        "meta": false,
+        "symmetric": false,
+        "evidence": "supported",
+        "roles": [
+          {
+            "name": "subclass",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          },
+          {
+            "name": "superclass",
+            "kind": "participant",
+            "binds": [
+              "uao"
+            ],
+            "min": 1,
+            "max": 1,
+            "identity": true
+          }
+        ],
+        "literals": [],
+        "provenance_roles": []
+      },
+      "definition_hash": "sha256:dc7d615449a7e1dafa5c11537b4e9c78c64e744290c41e43c4ac96b2940a856e",
+      "semantics": {
+        "participant_roles": [
+          "subclass",
+          "superclass"
+        ],
+        "contextual_roles": [],
+        "provenance_roles": [],
+        "identity_roles": [
+          "subclass",
+          "superclass"
+        ],
+        "identity_literals": [],
+        "symmetric": false,
+        "ordering": "role-named",
+        "meta": false,
+        "evidence": "supported",
+        "css_type_version_alias": null
+      },
+      "evolution": {
+        "supersedes": null,
+        "superseded_by": null,
+        "compatibility": {
+          "class": "unclassified",
+          "authority_track": "SPEC-0017"
+        },
+        "migration_contract_ref": null
+      },
+      "traceability": [
+        "UAO Foundry Experiment 002 §2 (founder programme, 2026-09-05)",
+        "ASA-SPEC-0006 §5, §8"
+      ]
+    }
+  ],
+  "digest": "sha256:fcc6b0f8c3bebe001e65d9033b5aa78ef93518475f01e6c3ec35313afb05cfd4"
+}

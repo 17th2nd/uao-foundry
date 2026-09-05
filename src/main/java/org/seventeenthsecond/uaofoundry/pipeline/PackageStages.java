@@ -77,6 +77,13 @@ class PackageStages extends CanonicalStages {
         FileOps.writeJson(packageDir.resolve("verification-report.json"), verification);
         FileOps.writeJson(packageDir.resolve("unresolved-items.json"), canonical.get("unresolvedItems"));
         FileOps.writeJson(packageDir.resolve("publication-decision.json"), publication);
+        if (relationshipEdition != null) {
+            // The edition travels inside the package so the verifier can re-derive every typed
+            // relationship from package bytes alone, and so a later reader sees exactly which
+            // (digest-pinned, non-admitted) vocabulary the records were validated against.
+            FileOps.writeJson(packageDir.resolve("experimental-relationships.json"), canonical.get("experimentalRelationships"));
+            FileOps.writeJson(packageDir.resolve("relationship-type-edition.json"), relationshipEdition.document());
+        }
 
         Map<String, Object> manufactured = new LinkedHashMap<>();
         manufactured.put("packageVersion", "0.1.0");

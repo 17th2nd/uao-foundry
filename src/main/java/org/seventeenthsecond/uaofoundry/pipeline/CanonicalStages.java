@@ -116,6 +116,10 @@ class CanonicalStages extends AcquisitionStages {
         out.put("uros", relationships.get("canonicalUros"));
         out.put("provenanceLedger", ledger);
         out.put("unresolvedItems", relationships.get("unresolvedRelationships"));
+        if (relationships.containsKey("experimentalRelationships")) {
+            out.put("experimentalRelationships", relationships.get("experimentalRelationships"));
+            out.put("relationshipEdition", relationships.get("edition"));
+        }
         return out;
     }
 
@@ -182,6 +186,25 @@ class CanonicalStages extends AcquisitionStages {
             collectForbiddenFields(uao, "$uao[" + id + "]", errors);
         }
         if (!uaoIds.contains(string(resolution.get("rootUaoId"), "rootUaoId"))) errors.add("Root UAO is absent from canonical identity set.");
+        if (canonical.containsKey("experimentalRelationships")) {
+            checks.add("EXPERIMENTAL_RELATIONSHIP_EDITION_BINDING");
+            Set<String> relationshipIds = new LinkedHashSet<>();
+            for (Object raw : list(canonical.get("experimentalRelationships"), "experimentalRelationships")) {
+                Map<String, Object> record = map(raw);
+                ValidationResult result = validator.validate(record, schemaDir.resolve("experimental-relationship.schema.json"));
+                errors.addAll(prefix(result.errors(), "Relationship " + record.get("relationshipId") + ": "));
+                String id = string(record.get("relationshipId"), "relationshipId");
+                if (!relationshipIds.add(id)) errors.add("Duplicate experimental relationship id: " + id);
+                for (Object rawParticipant : list(record.get("participants"), "participants")) {
+                    Object uid = map(rawParticipant).get("uaoId");
+                    if (!uaoIds.contains(String.valueOf(uid))) errors.add("Relationship " + id + " binds a participant outside this package's canonical identities: " + uid);
+                }
+                Map<String, Object> edition = map(record.get("typeEdition"));
+                if (relationshipEdition == null || !relationshipEdition.digest().equals(edition.get("digest"))) {
+                    errors.add("Relationship " + id + " cites an edition digest other than the one this manufacture declared.");
+                }
+            }
+        }
 
         Set<String> sourceIds = new LinkedHashSet<>();
         for (Object raw : list(sourceRegistry.get("sources"), "source registry")) {
@@ -242,6 +265,13 @@ class CanonicalStages extends AcquisitionStages {
             status = "EVIDENCE_INCOMPLETE"; eligible = false; reasons.add("Generated completion questions remain unresolved.");
         } else {
             status = "EXPERIMENTAL"; eligible = true; reasons.add("All v0.1 structural gates pass in deterministic fixture mode; release remains experimental.");
+            List<Object> experimental = listOrEmpty(relationships.get("experimentalRelationships"));
+            if (!experimental.isEmpty()) {
+                Map<String, Object> edition = map(relationships.get("edition"));
+                reasons.add(experimental.size() + " typed relationship(s) validated against Foundry relationship type edition "
+                        + edition.get("registryVersion") + " (" + edition.get("digest") + "); ASA admission: none; "
+                        + "outcome undetermined under ASA-SPEC-0006 §10.3 (AU-1) and no canonical URO is published.");
+            }
         }
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("status", status);

@@ -15,11 +15,11 @@ import java.util.List;
 record Options(List<String> positionals, Path registry, Path schemaDir, Path workDir, Path distDir,
                Path fixture, Path providerCommand, Path runStore, String context, String language, String profile,
                String repositoryCommit, String explicitClock, int catalogLimit, int timeoutSeconds,
-               boolean register, boolean json) {
+               boolean register, boolean json, Path relationshipEdition) {
 
     static Options parse(String[] args) {
         List<String> positionals = new ArrayList<>();
-        Path registry = null, fixture = null, providerCommand = null, runStore = null;
+        Path registry = null, fixture = null, providerCommand = null, runStore = null, relationshipEdition = null;
         Path schemaDir = Path.of("schemas");
         Path workDir = Path.of("work");
         Path distDir = Path.of("dist");
@@ -47,6 +47,7 @@ record Options(List<String> positionals, Path registry, Path schemaDir, Path wor
                 case "--fixture" -> fixture = Path.of(value);
                 case "--provider" -> providerCommand = Path.of(value);
                 case "--run-store" -> runStore = Path.of(value);
+                case "--relationship-edition" -> relationshipEdition = Path.of(value);
                 case "--clock" -> clock = value;
                 case "--context" -> context = value;
                 case "--language" -> language = value;
@@ -62,7 +63,7 @@ record Options(List<String> positionals, Path registry, Path schemaDir, Path wor
         }
         return new Options(List.copyOf(positionals), registry, schemaDir, workDir, distDir, fixture, providerCommand,
                 runStore, context, language, profile, repositoryCommit, clock, catalogLimit, timeoutSeconds,
-                register, json);
+                register, json, relationshipEdition);
     }
 
     /**

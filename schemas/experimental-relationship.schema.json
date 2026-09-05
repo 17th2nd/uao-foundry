@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://17th2nd.github.io/uao-foundry/schemas/experimental-relationship.schema.json",
+  "$comment": "EXPERIMENTAL typed relationship record (UAO Foundry Experiment 002). A relationship whose type resolved in a declared, digest-pinned ASA-SPEC-0006-format edition and whose instance passed RTR \u00a710.1 validation with every participant bound to a persistent uid. It is NOT a CSS URO and NOT ASA-admitted: the edition's domain types are proposed and CSS 2026.2 uri_versioned rejects the type id (AU-1). Both travel on the record as undetermined diagnostics. certifying is constant false.",
+  "title": "UAO Foundry Experimental Typed Relationship",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recordVersion",
+    "relationshipId",
+    "status",
+    "certifying",
+    "typeId",
+    "typeName",
+    "typeEdition",
+    "symmetric",
+    "participants",
+    "identityLiterals",
+    "contextualBindings",
+    "sourceRefs",
+    "candidateId",
+    "basis",
+    "statement",
+    "diagnostics",
+    "outcome",
+    "stateVersion"
+  ],
+  "properties": {
+    "recordVersion": {
+      "const": "0.1.0"
+    },
+    "relationshipId": {
+      "type": "string",
+      "pattern": "^urx-[a-f0-9]{12}$",
+      "$comment": "Pure function of the type id, the identity-bearing role bindings and identity literals (ASA-SPEC-0001 \u00a710 spirit): the same relationship re-stated in another package yields the same id."
+    },
+    "status": {
+      "const": "EXPERIMENTAL_TYPED_RELATIONSHIP"
+    },
+    "certifying": {
+      "const": false
+    },
+    "typeId": {
+      "type": "string",
+      "pattern": "^asa:type:[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+    },
+    "typeName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "typeEdition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registryVersion",
+        "digest",
+        "namespace",
+        "admissionState",
+        "admissionOverride"
+      ],
+      "properties": {
+        "registryVersion": {
+          "type": "string"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "admissionState": {
+          "type": "string",
+          "enum": [
+            "proposed",
+            "admitted",
+            "deprecated",
+            "superseded",
+            "withdrawn"
+          ]
+        },
+        "admissionOverride": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "symmetric": {
+      "type": "boolean"
+    },
+    "participants": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "candidateIdentityRef",
+          "binding",
+          "uaoId"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "minLength": 1
+          },
+          "candidateIdentityRef": {
+            "type": "string",
+            "pattern": "^cid-[a-z0-9._-]+$"
+          },
+          "binding": {
+            "const": "RESOLVED"
+          },
+          "uaoId": {
+            "type": "string",
+            "pattern": "^uao-[a-f0-9]{12}$"
+          }
+        }
+      }
+    },
+    "identityLiterals": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "contextualBindings": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "sourceRefs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^src-[a-z0-9._-]+$"
+      }
+    },
+    "candidateId": {
+      "type": "string",
+      "pattern": "^rel-[a-z0-9._-]+$"
+    },
+    "basis": {
+      "type": "string",
+      "enum": [
+        "EXPLICIT",
+        "INFERRED",
+        "UNSTATED"
+      ]
+    },
+    "statement": {
+      "type": "string",
+      "minLength": 1
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "code",
+          "severity",
+          "outcome"
+        ]
+      }
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "undetermined"
+      ]
+    },
+    "stateVersion": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

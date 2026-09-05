@@ -359,6 +359,37 @@ class AcquisitionStages extends PipelineBase {
         List<Object> candidateRelationships = list(valid.get("relationships"), "relationships");
         Map<String, Object> candidateToUao = map(resolution.get("candidateToUao"));
         List<Object> unresolved = new ArrayList<>();
+        if (relationshipEdition != null) {
+            // Edition-aware path (Experiment 002). Type resolution, RTR §10.1 instance validation
+            // and identity binding all happen in the shared builder so the verifier can re-derive
+            // every record from the package's own candidates and embedded edition copy.
+            Map<String,String> labelsByUid = new java.util.TreeMap<>();
+            for (Object raw : list(resolution.get("resolvedIdentities"), "resolvedIdentities")) {
+                Map<String,Object> identity = map(raw);
+                labelsByUid.put(string(identity.get("uaoId"), "uaoId"), string(identity.get("label"), "label"));
+            }
+            List<Object> experimental = new ArrayList<>();
+            for (Object raw : candidateRelationships) {
+                var outcome = org.seventeenthsecond.uaofoundry.relationship.ExperimentalRelationships.build(
+                        map(raw), candidateToUao, labelsByUid, relationshipEdition);
+                if (outcome.record() != null) {
+                    validate(outcome.record(), "experimental-relationship.schema.json", "Experimental relationship " + outcome.record().get("relationshipId"));
+                    experimental.add(outcome.record());
+                } else {
+                    validate(outcome.unresolved(), "unresolved-relationship.schema.json", "Unresolved relationship " + outcome.unresolved().get("candidateId"));
+                    unresolved.add(outcome.unresolved());
+                }
+            }
+            experimental.sort(Comparator.comparing(v -> string(map(v).get("relationshipId"), "relationshipId")));
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("authorityStatus", "FOUNDRY_EXPERIMENTAL_EDITION_" + relationshipEdition.registryVersion() + "_NOT_ASA_ADMITTED");
+            out.put("canonicalUros", List.of());
+            out.put("experimentalRelationships", experimental);
+            out.put("unresolvedRelationships", unresolved);
+            out.put("candidateCount", new BigDecimal(candidateRelationships.size()));
+            out.put("edition", relationshipEdition.summary());
+            return out;
+        }
         for (Object raw : candidateRelationships) {
             Map<String, Object> rel = map(raw);
             Map<String, Object> finding = new LinkedHashMap<>();

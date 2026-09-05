@@ -1,0 +1,516 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "asa:schema:asa.core/relationship_type_registry@1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$meta",
+    "participant_kinds",
+    "types",
+    "digest"
+  ],
+  "properties": {
+    "$meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "registry_version",
+        "schema",
+        "subordination_clause_ack",
+        "provenance_anchor",
+        "css_schema_version",
+        "spec_authority"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "registry_version": {
+          "type": "string",
+          "pattern": "^[0-9]{4}\\.[1-9][0-9]*$"
+        },
+        "schema": {
+          "type": "string"
+        },
+        "subordination_clause_ack": {
+          "const": true
+        },
+        "provenance_anchor": {
+          "type": "string",
+          "pattern": "^(D-[0-9]{3}|CR-[0-9]{3}|PROPOSED)$"
+        },
+        "css_schema_version": {
+          "type": "string"
+        },
+        "spec_authority": {
+          "type": "string"
+        }
+      }
+    },
+    "participant_kinds": {
+      "type": "array",
+      "uniqueItems": true,
+      "minItems": 1,
+      "items": {
+        "enum": [
+          "uao",
+          "uro",
+          "perspective"
+        ]
+      }
+    },
+    "types": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/record"
+      }
+    },
+    "digest": {
+      "$ref": "#/$defs/sha256"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$",
+      "maxLength": 128
+    },
+    "type_id": {
+      "type": "string",
+      "pattern": "^asa:type:[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*@[1-9][0-9]*$"
+    },
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind",
+        "binds",
+        "min",
+        "max",
+        "identity"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "kind": {
+          "enum": [
+            "participant",
+            "contextual"
+          ]
+        },
+        "binds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "uao",
+              "uro",
+              "perspective"
+            ]
+          }
+        },
+        "min": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "identity": {
+          "type": "boolean"
+        }
+      }
+    },
+    "literal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "datatype",
+        "identity"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "datatype": {
+          "enum": [
+            "string",
+            "boolean",
+            "integer",
+            "decimal"
+          ]
+        },
+        "identity": {
+          "type": "boolean"
+        }
+      }
+    },
+    "definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "meta",
+        "symmetric",
+        "evidence",
+        "roles",
+        "literals",
+        "provenance_roles"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/type_id"
+        },
+        "meta": {
+          "type": "boolean"
+        },
+        "symmetric": {
+          "type": "boolean"
+        },
+        "evidence": {
+          "enum": [
+            "definitional",
+            "supported"
+          ]
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/role"
+          }
+        },
+        "literals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/literal"
+          }
+        },
+        "provenance_roles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "meta": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "const": "definitional"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "symmetric": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "roles": {
+                "minItems": 1,
+                "maxItems": 1,
+                "items": {
+                  "properties": {
+                    "kind": {
+                      "const": "participant"
+                    },
+                    "min": {
+                      "const": 2
+                    },
+                    "max": {
+                      "const": 2
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "admission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "decision_ref",
+        "admitted_registry_version",
+        "deprecated_registry_version",
+        "withdrawn_registry_version"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "proposed",
+            "admitted",
+            "deprecated",
+            "superseded",
+            "withdrawn"
+          ]
+        },
+        "decision_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "admitted_registry_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deprecated_registry_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "withdrawn_registry_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "proposed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "decision_ref": {
+                "const": null
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "enum": [
+                  "admitted",
+                  "deprecated",
+                  "superseded",
+                  "withdrawn"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "decision_ref": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "semantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "participant_roles",
+        "contextual_roles",
+        "provenance_roles",
+        "identity_roles",
+        "identity_literals",
+        "symmetric",
+        "ordering",
+        "meta",
+        "evidence",
+        "css_type_version_alias"
+      ],
+      "properties": {
+        "participant_roles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          }
+        },
+        "contextual_roles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          }
+        },
+        "provenance_roles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          }
+        },
+        "identity_roles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          }
+        },
+        "identity_literals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          }
+        },
+        "symmetric": {
+          "type": "boolean"
+        },
+        "ordering": {
+          "enum": [
+            "role-named",
+            "unordered-symmetric"
+          ]
+        },
+        "meta": {
+          "type": "boolean"
+        },
+        "evidence": {
+          "enum": [
+            "definitional",
+            "supported"
+          ]
+        },
+        "css_type_version_alias": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "evolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supersedes",
+        "superseded_by",
+        "compatibility",
+        "migration_contract_ref"
+      ],
+      "properties": {
+        "supersedes": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/type_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "superseded_by": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/type_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "compatibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "class",
+            "authority_track"
+          ],
+          "properties": {
+            "class": {
+              "const": "unclassified"
+            },
+            "authority_track": {
+              "const": "SPEC-0017"
+            }
+          }
+        },
+        "migration_contract_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "namespace",
+        "owner",
+        "admission",
+        "definition",
+        "definition_hash",
+        "semantics",
+        "evolution",
+        "traceability"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/type_id"
+        },
+        "namespace": {
+          "$ref": "#/$defs/name"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "admission": {
+          "$ref": "#/$defs/admission"
+        },
+        "definition": {
+          "$ref": "#/$defs/definition"
+        },
+        "definition_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "semantics": {
+          "$ref": "#/$defs/semantics"
+        },
+        "evolution": {
+          "$ref": "#/$defs/evolution"
+        },
+        "traceability": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

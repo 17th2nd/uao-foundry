@@ -67,6 +67,10 @@ public final class PackageVerifier {
         Object provenanceLedger = readValue(packageDir.resolve("provenance-ledger.json"), "provenance-ledger", errors);
         Object unresolvedItems = readValue(packageDir.resolve("unresolved-items.json"), "unresolved-items", errors);
         Object providerSnapshot = readValue(packageDir.resolve("provider-snapshot.json"), "provider-snapshot", errors);
+        Object experimentalRelationships = Files.isRegularFile(packageDir.resolve("experimental-relationships.json"))
+                ? readValue(packageDir.resolve("experimental-relationships.json"), "experimental-relationships", errors) : null;
+        Object editionDocument = Files.isRegularFile(packageDir.resolve("relationship-type-edition.json"))
+                ? readValue(packageDir.resolve("relationship-type-edition.json"), "relationship-type-edition", errors) : null;
 
         if (manifest != null) {
             errors.addAll(prefix(validator.validate(manifest, schemaDir.resolve("release-manifest.schema.json")).errors(), "manifest: "));
@@ -102,7 +106,7 @@ public final class PackageVerifier {
 
         verifySemanticProjections(canonicalIdentities, canonicalRelationships, candidateIdentities, candidateClaims,
                 candidateRelationships, candidateEvidence, quarantine, provenanceLedger, unresolvedItems,
-                resolution, scope, coverage, verification, publication, errors);
+                resolution, scope, coverage, verification, publication, experimentalRelationships, editionDocument, errors);
         checks.add("SEMANTIC_PROJECTION_RECONSTRUCTION");
         verifyContentAddress(packageDir, manifest, errors);
         checks.add("CONTENT_ADDRESSED_PACKAGE_ID");
@@ -285,7 +289,7 @@ public final class PackageVerifier {
             Object candidateRelationships, Object candidateEvidence, Object quarantine, Object provenanceLedger,
             Object unresolvedItems, Map<String,Object> resolution,
             Map<String,Object> scope, Map<String,Object> coverage, Map<String,Object> verification,
-            Map<String,Object> publication, List<String> errors) {
+            Map<String,Object> publication, Object experimentalRelationships, Object editionDocument, List<String> errors) {
         if (!(canonicalIdentities instanceof List<?> uaos) || !(candidateIdentities instanceof List<?> identities)
                 || !(candidateClaims instanceof List<?> claims) || !(candidateEvidence instanceof List<?> evidence)
                 || !(provenanceLedger instanceof List<?> ledger) || resolution == null) return;
@@ -396,7 +400,58 @@ public final class PackageVerifier {
             errors.add("Provenance ledger does not reconstruct exactly from candidate claims and evidence.");
         }
 
-        if (candidateRelationships instanceof List<?> relationships && unresolvedItems instanceof List<?> unresolved) {
+        if (candidateRelationships instanceof List<?> relationships && unresolvedItems instanceof List<?> unresolved && editionDocument != null) {
+            // Edition-aware reconstruction (Experiment 002): every typed record and every unresolved
+            // finding must re-derive from the package's candidates and its embedded edition copy.
+            org.seventeenthsecond.uaofoundry.relationship.RelationshipTypeEdition edition = null;
+            try {
+                Map<String,Object> doc = object(editionDocument, "relationship-type-edition", errors);
+                if (doc != null) edition = org.seventeenthsecond.uaofoundry.relationship.RelationshipTypeEdition.fromDocument(doc, "package");
+            } catch (IllegalArgumentException ex) {
+                errors.add("Embedded relationship type edition fails closed: " + ex.getMessage());
+            }
+            if (edition != null) {
+                Map<String,String> labelsByUid = new TreeMap<>();
+                if (expectedResolution.get("resolvedIdentities") instanceof List<?> resolvedList) {
+                    for (Object raw : resolvedList) {
+                        Map<String,Object> identity = object(raw, "resolved identity", errors);
+                        if (identity != null) labelsByUid.put(String.valueOf(identity.get("uaoId")), String.valueOf(identity.get("label")));
+                    }
+                }
+                List<Object> expectedUnresolved = new ArrayList<>();
+                List<Object> expectedExperimental = new ArrayList<>();
+                for (Object raw : relationships) {
+                    Map<String,Object> rel = object(raw, "candidate relationship", errors);
+                    if (rel == null) continue;
+                    try {
+                        var outcome = org.seventeenthsecond.uaofoundry.relationship.ExperimentalRelationships.build(rel, candidateToUao, labelsByUid, edition);
+                        if (outcome.record() != null) expectedExperimental.add(outcome.record()); else expectedUnresolved.add(outcome.unresolved());
+                    } catch (IllegalArgumentException ex) {
+                        errors.add("Relationship candidate " + rel.get("candidateId") + " cannot be reconstructed: " + ex.getMessage());
+                    }
+                }
+                expectedExperimental.sort(Comparator.comparing(v -> String.valueOf(((Map<?,?>) v).get("relationshipId"))));
+                if (!canonicalEquals(expectedUnresolved, unresolved)) errors.add("Unresolved relationship projection does not reconstruct exactly from candidate relationships under the embedded relationship type edition.");
+                if (!(experimentalRelationships instanceof List<?>) || !canonicalEquals(expectedExperimental, experimentalRelationships)) {
+                    errors.add("Experimental relationship records do not reconstruct exactly from candidate relationships under the embedded relationship type edition.");
+                }
+                if (experimentalRelationships instanceof List<?> records) {
+                    for (Object raw : records) {
+                        Map<String,Object> record = object(raw, "experimental relationship", errors);
+                        if (record == null) continue;
+                        errors.addAll(prefix(validator.validate(record, schemaDir.resolve("experimental-relationship.schema.json")).errors(), "Relationship " + record.get("relationshipId") + ": "));
+                        if (record.get("stateVersion") instanceof String stateVersion
+                                && !stateVersion.equals(Hashes.canonicalJson(org.seventeenthsecond.uaofoundry.relationship.ExperimentalRelationships.stateProjection(record)))) {
+                            errors.add("Relationship " + record.get("relationshipId") + " stateVersion does not re-derive from its own record.");
+                        }
+                    }
+                }
+            }
+            if (canonicalRelationships instanceof List<?> uros && !uros.isEmpty()) errors.add("Canonical UROs are present while Relationship Type role authority remains unavailable.");
+        } else if (candidateRelationships instanceof List<?> relationships && unresolvedItems instanceof List<?> unresolved) {
+            if (experimentalRelationships instanceof List<?> records && !records.isEmpty()) {
+                errors.add("Experimental relationship records are present without an embedded relationship type edition.");
+            }
             List<Object> expectedUnresolved = new ArrayList<>();
             for (Object raw : relationships) {
                 Map<String,Object> rel = object(raw, "candidate relationship", errors);
