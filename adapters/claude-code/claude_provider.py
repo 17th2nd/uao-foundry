@@ -318,6 +318,10 @@ def _build_prompt(envelope: dict[str, Any], evidence: list[dict[str, Any]], trun
             "- Never use a UUID, timestamp, model/session/turn identifier, source ordering, confidence value, or conversational wording as semantic identity.",
             "- Candidate IDs/source IDs are local bundle handles, not semantic identity; keep them deterministic and readable.",
             "- Mark required completion questions unresolved when evidence is insufficient. Do not fabricate coverage.",
+            "- completionQuestions are the plan's own definition of done for the selected scope (e.g. 'is the principal identity evidenced by a durable external identifier', 'are birth/death dates evidenced', 'is the principal contribution evidenced'); pose only questions you then research within this run, and answer each from the acquired sources: covered, partial (evidenced but not exhaustive), or unresolved. Do not pose open-ended survey questions (e.g. 'are there other people with this name') as completion questions; record such open matters in scopeResolution.unresolvedQuestions instead. Any unresolved completion question makes the package non-publishable, which is correct when evidence is genuinely missing.",
+            "- Cross-field rules the Foundry enforces: scopeResolution.selectedInterpretation must be one of interpretations[].candidateId; manufacturingPlan.selectedIdentity must equal scopeResolution.canonicalWorkingLabel exactly; every coverageAnswers key must be a manufacturingPlan.completionQuestions[].questionId; every claim subjectIdentityRef must be a candidate identity candidateId; every evidence supportsCandidateRef must be a candidate claim or identity candidateId; exactly one identity candidate has root=true; use scopeStatus MACHINE_SELECTED_EXPERIMENTAL when you selected the interpretation yourself, REQUIRES_SELECTION when genuinely ambiguous.",
+            "- retrievedAt and fixedClock/knowledgeHorizon are RFC3339 UTC timestamps ending in Z.",
+            "- externalIdentifiers keys are lower-case scheme slugs (wikidata, viaf, isni, orcid, mathgenealogy, loc, gnd, doi, isbn) and values contain no whitespace.",
             "",
             "Registry evidence below is immutable Foundry evidence. If you cite a registry:// locator, reproduce its locator exactly. The adapter will restore the exact bytes after your response.",
             f"Registry evidence truncated: {str(truncated).lower()}",
@@ -333,12 +337,67 @@ def _build_prompt(envelope: dict[str, Any], evidence: list[dict[str, Any]], trun
     )
 
 
+def _bare_mode() -> bool:
+    """`--bare` is the default containment mode. Claude Code >= 2.1.2xx skips keychain and
+    credential-file reads under --bare, so an operator authenticated only through the local
+    credential file must opt out explicitly with UAO_FOUNDRY_CLAUDE_BARE=0. The choice is
+    recorded in sourceStrategy.authorityNotes; it is never inferred."""
+    raw = os.environ.get("UAO_FOUNDRY_CLAUDE_BARE", "").strip().lower()
+    if raw in ("", "1", "true", "yes"):
+        return True
+    if raw in ("0", "false", "no"):
+        return False
+    _die("UAO_FOUNDRY_CLAUDE_BARE must be 0/1")
+
+
+def _stage_schema(name: str) -> dict[str, Any]:
+    stage = _read_json_object(REPO_ROOT / "schemas" / name)
+    stage.pop("$schema", None)
+    stage.pop("title", None)
+    return stage
+
+
+def _cli_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Build the schema handed to Claude Code's --json-schema.
+
+    Two adjustments to the checked-in fixture-bundle contract, neither of which changes what the
+    Java Foundry later validates:
+    - the `$schema` keyword is removed, because the CLI validator has no draft-2020-12
+      meta-schema registered and rejects the whole schema when it is present;
+    - the loosely typed provider sections (interpretations, scopeResolution, manufacturingPlan,
+      sourceStrategy, candidate identities/claims/evidence) are tightened to the exact stage
+      schemas the Java pipeline enforces at stages 3-9, so a live model is constrained up front
+      instead of failing at the first strict stage. Relationships are capped at zero to match the
+      adapter's fail-closed relationship rule (ASA#29).
+    """
+    cli = json.loads(json.dumps(schema))
+    cli.pop("$schema", None)
+    props = cli["properties"]
+    props["interpretations"]["items"] = _stage_schema("interpretation-candidates.schema.json")["properties"]["interpretations"]["items"]
+    props["scopeResolution"] = _stage_schema("scope-resolution.schema.json")
+    props["manufacturingPlan"] = _stage_schema("manufacturing-plan.schema.json")
+    props["sourceStrategy"] = _stage_schema("source-strategy.schema.json")
+    candidates = props["candidates"]["properties"]
+    identity = _stage_schema("candidate-identity.schema.json")
+    # ExternalIdentifiers.requireCanonical: lower-case scheme, whitespace-free identifier.
+    identity["properties"]["externalIdentifiers"]["propertyNames"] = {"pattern": "^[a-z][a-z0-9._-]*$"}
+    identity["properties"]["externalIdentifiers"]["additionalProperties"] = {"type": "string", "pattern": "^\\S+$"}
+    candidates["identities"]["items"] = identity
+    candidates["claims"]["items"] = _stage_schema("candidate-claim.schema.json")
+    candidates["evidence"]["items"] = _stage_schema("candidate-evidence.schema.json")
+    candidates["relationships"]["maxItems"] = 0
+    return cli
+
+
 def _claude_command(binary: str, schema: dict[str, Any], model: str, max_turns: int, budget: str | None) -> list[str]:
     command = [
         binary,
         "-p",
         "Produce the UAO Foundry intermediate provider bundle from the supplied protocol payload.",
-        "--bare",
+    ]
+    if _bare_mode():
+        command.append("--bare")
+    command += [
         "--no-session-persistence",
         "--no-chrome",
         "--strict-mcp-config",
@@ -366,7 +425,7 @@ def _claude_command(binary: str, schema: dict[str, Any], model: str, max_turns: 
         "--output-format",
         "json",
         "--json-schema",
-        json.dumps(schema, sort_keys=True, separators=(",", ":")),
+        json.dumps(_cli_schema(schema), sort_keys=True, separators=(",", ":")),
     ]
     if budget is not None:
         command.extend(["--max-budget-usd", budget])
@@ -525,7 +584,7 @@ def _normalize_bundle(
         _die("sourceStrategy.authorityNotes must be an array of strings when present")
     notes.extend(
         [
-            f"Claude Code provider adapter={ADAPTER_VERSION}; model={model}; cli={cli_version}; output_path={output_path}",
+            f"Claude Code provider adapter={ADAPTER_VERSION}; model={model}; cli={cli_version}; output_path={output_path}; bare={str(_bare_mode()).lower()}",
             "Claude research output is non-authoritative intermediate evidence; UAO Foundry owns validation, canonicalisation, verification and publication.",
             "Relationship candidate emission disabled pending governed ASA Relationship Type role authority (ASA#29 / uao-foundry#3).",
         ]

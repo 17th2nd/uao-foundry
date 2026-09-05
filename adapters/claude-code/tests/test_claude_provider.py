@@ -131,11 +131,13 @@ class ClaudeProviderAdapterTest(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(); self.root=Path(self.temp.name); self.fake=self.root/"fake-claude"
         self.fake.write_text(FAKE_CLAUDE,encoding="utf-8"); self.fake.chmod(self.fake.stat().st_mode|stat.S_IXUSR|stat.S_IXGRP|stat.S_IXOTH)
+        # The CLI receives the composed, $schema-free contract; the fake asserts byte-equality against it.
+        self.cli_schema=self.root/"cli-schema.json"; self.cli_schema.write_text(json.dumps(load_adapter_module()._cli_schema(SCHEMA),sort_keys=True),encoding="utf-8")
 
     def tearDown(self): self.temp.cleanup()
 
     def env(self, mode="ok", extra=None):
-        env=os.environ.copy(); env.update({"UAO_FOUNDRY_CLAUDE_BIN":str(self.fake),"UAO_FOUNDRY_FIXED_CLOCK":"2026-08-10T00:00:00Z","UAO_FOUNDRY_FAKE_CLAUDE_MODE":mode,"UAO_FOUNDRY_TEST_SCHEMA_PATH":str(REPO_ROOT/"schemas"/"fixture-bundle.schema.json")})
+        env=os.environ.copy(); env.update({"UAO_FOUNDRY_CLAUDE_BIN":str(self.fake),"UAO_FOUNDRY_FIXED_CLOCK":"2026-08-10T00:00:00Z","UAO_FOUNDRY_FAKE_CLAUDE_MODE":mode,"UAO_FOUNDRY_TEST_SCHEMA_PATH":str(self.cli_schema)})
         if extra: env.update(extra)
         return env
 

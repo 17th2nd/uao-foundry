@@ -39,7 +39,7 @@ The current Claude Code CLI supports non-interactive `-p/--print`, structured `-
 
 For manufacturing calls the adapter starts Claude Code with:
 
-- `--bare`;
+- `--bare` (default; see `UAO_FOUNDRY_CLAUDE_BARE`);
 - `--no-session-persistence`;
 - `--no-chrome`;
 - `--strict-mcp-config` and explicit `mcp__*` denial;
@@ -62,6 +62,7 @@ Optional environment variables:
 |---|---|---|
 | `UAO_FOUNDRY_CLAUDE_BIN` | discovered `claude` | exact Claude Code executable |
 | `UAO_FOUNDRY_CLAUDE_MODEL` | `sonnet` | Claude Code model/alias |
+| `UAO_FOUNDRY_CLAUDE_BARE` | `1` | `0` disables `--bare`. Claude Code ≥ 2.1.26x skips keychain/credential-file reads under `--bare`, so a workstation authenticated only through the local credential file must opt out explicitly; the choice is recorded as `bare=<true|false>` in `sourceStrategy.authorityNotes` |
 | `UAO_FOUNDRY_CLAUDE_MAX_TURNS` | `8` | bounded non-interactive turns |
 | `UAO_FOUNDRY_CLAUDE_TIMEOUT_SECONDS` | `240` | adapter-side Claude process timeout |
 | `UAO_FOUNDRY_CLAUDE_MAX_BUDGET_USD` | unset | optional Claude Code print-mode budget ceiling |
@@ -70,6 +71,10 @@ Optional environment variables:
 | `UAO_FOUNDRY_REGISTRY_EVIDENCE_FILES` | `8` | maximum registry evidence files placed in the Claude prompt |
 
 Credentials remain owned by Claude Code. The adapter passes at most one direct Anthropic credential environment variable (OAuth preferred over API key), while retaining `HOME` for normal Claude credential files. Unrelated CI/cloud secrets are not inherited. If `ANTHROPIC_BASE_URL` is intentionally used, the base URL (never its token) is recorded in `sourceStrategy.authorityNotes`.
+
+## Schema handed to Claude Code
+
+`--json-schema` receives a composed copy of `schemas/fixture-bundle.schema.json`: the `$schema` keyword is removed (the CLI validator has no draft-2020-12 meta-schema and rejects the whole document when it is present), and the loosely typed provider sections — interpretations, scope resolution, manufacturing plan, source strategy, candidate identities/claims/evidence — are tightened to the exact stage schemas the Java pipeline enforces at stages 3–9. Relationships are capped at zero. Nothing the Java Foundry validates is relaxed; the model is simply constrained up front instead of failing at the first strict stage. The adapter tests assert byte-equality against this composed schema.
 
 ## Stable semantic identity policy
 
