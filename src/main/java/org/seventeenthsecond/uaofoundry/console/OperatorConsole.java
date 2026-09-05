@@ -302,6 +302,8 @@ public final class OperatorConsole {
         response.put("receipt", FileOps.readJson(store.resolve("receipt.json")));
         response.put("references", FileOps.readJson(store.resolve("references.json")));
         response.put("profile", FileOps.readJson(store.resolve("profile.json")));
+        Path description = store.resolve("description.json");
+        response.put("description", java.nio.file.Files.isRegularFile(description) ? FileOps.readJson(description) : null);
         if (options.json()) { out.println(Json.canonical(response)); return 0; }
         Map<String,Object> profile = map(response.get("profile"));
         out.println(RULE);
@@ -310,6 +312,16 @@ public final class OperatorConsole {
         out.printf("  %-24s %s%n", "references", list(map(response.get("references")).get("references")).size());
         for (String key : List.of("temporal_context", "approximate_age_in_reference", "apparent_hair", "apparent_facial_hair", "apparent_glasses", "face_shape", "apparent_build", "recurrent_clothing")) {
             out.printf("  %-24s %s%n", key, profile.get(key));
+        }
+        if (response.get("description") instanceof Map<?,?> description) {
+            out.printf("  %-24s %d observations · not evidenced: %s%n", "written description",
+                    list(description.get("observations")).size(), String.join("; ", strings(description.get("notEvidenced"))));
+            for (Object raw : list(description.get("observations"))) {
+                Map<String,Object> o = map(raw);
+                out.printf("    · %s [%s, %s]: %s%n", o.get("feature"), o.get("era"), o.get("confidence"), o.get("observation"));
+            }
+        } else {
+            out.printf("  %-24s %s%n", "written description", "none recorded");
         }
         out.printf("  %-24s %s%n", "caveat", profile.get("caveat"));
         out.println(RULE);

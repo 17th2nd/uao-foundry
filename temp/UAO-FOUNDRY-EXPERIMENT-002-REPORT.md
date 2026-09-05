@@ -132,3 +132,12 @@ Where the Foundry did not need to ask again: all of Phase 3, both reconciliation
 ## Next experiment (reserved, not executed)
 
 Experiment 003 — Cross-Domain Knowledge Reuse: Pass A "Certificate III in Electrotechnology", Pass B "Electric Vehicle Maintenance" on the same registry. What this experiment says it will need: (a) a provider that restates registered identities verbatim by construction (or an adapter-side restoration from registry bytes), otherwise every Pass B touch of a Pass A identity diverges; (b) the edition extended with the qualification/unit/competency predicates Pass A will need (contains, requires, part-of already exist in part); (c) a decision on whether `related-to` may be used for curriculum adjacency; (d) discovery keywords for Pass B pointing at Pass A's roots.
+
+## Addendum (2026-09-05, after founder question) — written visual dataset
+
+The founder asked that the USI carry the *entire written dataset* needed to reproduce a person's appearance — freckles, moles, scars, how the hair recedes — without necessarily packaging photographs. Done as follows:
+
+- `visual-evidence/<uid>/description.json`: 11–16 observations per person (head/face shape, hairline and recession pattern, hair colour/texture by era, brows, eyes and lids, eyewear detail, nose, mouth, chin/jaw, ears, skin and pigmentation with locations, facial hair pattern, neck/build/posture, hands, accessories, clothing habit), each tied to the image ids that show it, its era, and a confidence; an explicit `notEvidenced` list per person (eye colour where sources are monochrome, scars nowhere resolvable, etc.). Observed from full frames and magnified face crops; nothing inferred beyond a cited image; medical/ethnic inference excluded by policy.
+- Receipts and the store index carry the description digest; console `visual <ref>` prints the description.
+- Bridge `--no-references`: text-only packages (`work/exp002/spriteforge-input/`) with `visual-description.json` as the reproduction dataset and references reduced to provenance pointers (Commons URL + sha256 + licence). Photo-bearing packages remain producible.
+- Honest limits: Wiener and Beer are monochrome only; Simon's only photograph is a 1981 halftone plus paintings; Pearl's 2013 frames are low resolution; the only moles/age spots resolvable are Engelbart's (2008 colour) and Ostrom's (2009 colour), with one uncertain mark each on Simon and Beer. No scar is resolvable on anyone. The dataset says so rather than filling gaps.

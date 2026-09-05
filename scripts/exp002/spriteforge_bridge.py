@@ -44,7 +44,8 @@ def brief_from(profile: dict, ident: dict) -> dict:
     }
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--registry", required=True); ap.add_argument("--out", required=True); a = ap.parse_args()
+    ap = argparse.ArgumentParser(); ap.add_argument("--registry", required=True); ap.add_argument("--out", required=True)
+    ap.add_argument("--no-references", action="store_true", help="text-only package: written visual description + provenance pointers, no image bytes"); a = ap.parse_args()
     registry = pathlib.Path(a.registry); store = registry.parent / "visual-evidence"; out = pathlib.Path(a.out); out.mkdir(parents=True, exist_ok=True)
     index = json.load(open(registry / "index.json")); identities = {i["uid"]: i for i in index["identities"]}
     now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()); summary = []
@@ -54,7 +55,11 @@ def main():
         slug = "".join(c if c.isalnum() else "-" for c in ident["canonicalLabels"][0].lower()).strip("-")
         pkg = out / slug; (pkg / "references").mkdir(parents=True, exist_ok=True)
         used = [r for r in refs["references"] if r["usedInProfile"]]
-        for r in used: shutil.copy(d / r["file"], pkg / "references" / pathlib.Path(r["file"]).name)
+        description = json.load(open(d / "description.json")) if (d / "description.json").exists() else None
+        if a.no_references:
+            shutil.rmtree(pkg / "references", ignore_errors=True)
+        else:
+            for r in used: shutil.copy(d / r["file"], pkg / "references" / pathlib.Path(r["file"]).name)
         identity = {"uid": uid, "resolutionKey": ident["resolutionKey"], "canonicalLabels": ident["canonicalLabels"], "aliases": ident["aliases"], "externalIdentifiers": ident["externalIdentifiers"],
                     "lifecycleState": ident["lifecycleState"], "stateVersions": ident["stateVersions"], "occurrences": ident["occurrences"], "semanticVariantStatus": ident["semanticVariantStatus"]}
         brief = brief_from(profile, ident)
@@ -62,12 +67,17 @@ def main():
                       "references": [{k: r[k] for k in ("imageId", "file", "sha256", "licence", "licenceUrl", "attributionRequired", "artist", "credit", "commonsUrl", "originalUrl", "dateTimeOriginal", "reuseStatus")} for r in used],
                       "observedBy": profile["provenance"]["observedBy"], "observedAt": profile["provenance"]["observedAt"]}
         files = {"identity.json": identity, "visual-profile.json": profile, "provenance.json": provenance, "spriteforge-brief.json": brief}
+        if description is not None:
+            files["visual-description.json"] = description
+            brief["written_description"] = {"file": "visual-description.json", "observations": len(description["observations"]), "notEvidenced": description["notEvidenced"],
+                                            "rule": "the written description is the reproduction dataset; reference images are provenance pointers and may be absent from the package"}
         digests = {}
         for name, obj in files.items():
             b = json.dumps(obj, indent=2, ensure_ascii=False).encode() + b"\n"; (pkg / name).write_bytes(b); digests[name] = sha(canon(obj))
         manifest = {"manifestVersion": "0.1.0", "producer": "uao-foundry experiment 002 bridge", "producedAt": now, "uid": uid, "label": ident["canonicalLabels"][0],
                     "identityStateVersions": ident["stateVersions"], "identityDigest": sha(canon(identity)), "visualProfileVersion": profile["recordVersion"], "visualProfileDigest": digests["visual-profile.json"],
-                    "briefDigest": digests["spriteforge-brief.json"], "referenceCount": len(used), "references": [{"file": f"references/{pathlib.Path(r['file']).name}", "sha256": r["sha256"], "licence": r["licence"]} for r in used],
+                    "briefDigest": digests["spriteforge-brief.json"], "descriptionDigest": digests.get("visual-description.json"), "referenceCount": len(used), "referencesPackaged": not a.no_references,
+                    "references": [{**({"file": f"references/{pathlib.Path(r['file']).name}"} if not a.no_references else {}), "imageId": r["imageId"], "sha256": r["sha256"], "licence": r["licence"], "commonsUrl": r["commonsUrl"]} for r in used],
                     "generationConstraints": {"style": "SpriteForge decides", "identityAuthority": "UAO Foundry registry (this manifest's uid + state versions)", "mustCite": "attribution for every CC BY / CC BY-SA reference used", "mustNotInvent": brief["must_not_invent"]},
                     "certifying": False, "status": "SPRITEFORGE_INPUT_EXPERIMENTAL"}
         (pkg / "manifest.json").write_bytes(json.dumps(manifest, indent=2, ensure_ascii=False).encode() + b"\n")
