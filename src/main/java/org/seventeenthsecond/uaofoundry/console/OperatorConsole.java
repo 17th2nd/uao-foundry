@@ -74,6 +74,7 @@ public final class OperatorConsole {
                 case "status" -> status(options);
                 case "relationships" -> relationships(options);
                 case "graph" -> graph(options);
+                case "visual" -> visual(options);
                 default -> throw new IllegalArgumentException("Unknown command: " + args[0]);
             };
         } catch (IllegalArgumentException ex) {
@@ -105,7 +106,13 @@ public final class OperatorConsole {
                 throw new IllegalArgumentException("manufacture requires --fixture <bundle> or --provider <command>.");
             }
             if (registry == null) throw new IllegalArgumentException("Live manufacture requires --registry.");
-            registryContext = registry.discoveryContext(request.identitySeed(), options.catalogLimit());
+            // Discovery is driven by the identity expression plus any operator-supplied context
+            // keywords, so a concept seed ("computation") can be pointed at the registered
+            // identities it should be considered against. The keywords are already recorded on the
+            // run record; they never enter the identity itself.
+            String discoveryQuery = options.context() == null || options.context().isBlank()
+                    ? request.identitySeed() : request.identitySeed() + " " + options.context();
+            registryContext = registry.discoveryContext(discoveryQuery, options.catalogLimit());
             registryContextHash = Hashes.canonicalJson(registryContext);
             provider = new RegistryAwareCommandProvider(options.providerCommand(), request, schemaDir,
                     Duration.ofSeconds(options.timeoutSeconds()), registryContext, options.registry());
@@ -261,6 +268,50 @@ public final class OperatorConsole {
             out.printf("  %-18s %s · basis %s · outcome %s · occurrences %d%n", "", edge.get("typeId"), edge.get("basis"), edge.get("outcome"), list(edge.get("occurrences")).size());
         }
         out.printf("%n  neighbours: %s%n", String.join(", ", strings(neighbourhood.get("neighbourUids"))));
+        out.println(RULE);
+        return 0;
+    }
+
+    /**
+     * Visual evidence attached to one exactly resolved identity, read from the sibling store
+     * {@code <registry-parent>/visual-evidence/<uid>/}. Read-only: the Foundry never derives,
+     * scores or certifies visual observations; it surfaces what was recorded, with its provenance.
+     */
+    private int visual(Options options) {
+        String value = options.single("visual requires exactly one identity reference.");
+        FoundryRegistry registry = requireRegistry(options);
+        Map<String,Object> record = registry.identityRecord(reference(value));
+        Map<String,Object> resolution = map(record.get("resolution"));
+        if (!"SAME".equals(resolution.get("decision"))) {
+            if (options.json()) out.println(Json.canonical(record)); else out.printf("  reference did not resolve exactly: %s%n", resolution.get("decision"));
+            return 4;
+        }
+        String uid = String.valueOf(resolution.get("uid"));
+        Path store = options.registry().toAbsolutePath().normalize().getParent().resolve("visual-evidence").resolve(uid);
+        Map<String,Object> response = new LinkedHashMap<>();
+        response.put("uid", uid);
+        response.put("status", "VISUAL_EVIDENCE_NON_CANONICAL");
+        response.put("certifying", Boolean.FALSE);
+        if (!java.nio.file.Files.isDirectory(store)) {
+            response.put("present", Boolean.FALSE);
+            response.put("reason", "No visual evidence has been recorded for this identity.");
+            if (options.json()) out.println(Json.canonical(response)); else out.printf("  no visual evidence recorded for %s%n", uid);
+            return 4;
+        }
+        response.put("present", Boolean.TRUE);
+        response.put("receipt", FileOps.readJson(store.resolve("receipt.json")));
+        response.put("references", FileOps.readJson(store.resolve("references.json")));
+        response.put("profile", FileOps.readJson(store.resolve("profile.json")));
+        if (options.json()) { out.println(Json.canonical(response)); return 0; }
+        Map<String,Object> profile = map(response.get("profile"));
+        out.println(RULE);
+        out.printf("  UAO FOUNDRY — VISUAL EVIDENCE  %s  (%s)%n", value, uid);
+        out.println(RULE);
+        out.printf("  %-24s %s%n", "references", list(map(response.get("references")).get("references")).size());
+        for (String key : List.of("temporal_context", "approximate_age_in_reference", "apparent_hair", "apparent_facial_hair", "apparent_glasses", "face_shape", "apparent_build", "recurrent_clothing")) {
+            out.printf("  %-24s %s%n", key, profile.get(key));
+        }
+        out.printf("  %-24s %s%n", "caveat", profile.get("caveat"));
         out.println(RULE);
         return 0;
     }
@@ -461,6 +512,7 @@ public final class OperatorConsole {
         out.println("  status                           --registry <path> [--json]");
         out.println("  relationships <uid|key|scheme:id|alias>  --registry <path> [--json]");
         out.println("  graph                            --registry <path> [--json]");
+        out.println("  visual      <uid|key|scheme:id|alias>  --registry <path> [--json]");
         out.println();
         out.println("  --relationship-edition <facet.json>  validate relationship candidates against an ASA-SPEC-0006-format");
         out.println("                                       edition (never inferred; without it every candidate stays unresolved)");
