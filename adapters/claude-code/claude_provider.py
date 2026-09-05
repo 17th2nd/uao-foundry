@@ -294,6 +294,18 @@ def _registry_evidence(envelope: dict[str, Any]) -> tuple[list[dict[str, Any]], 
     return records, truncated
 
 
+def _relationship_rules() -> list[str]:
+    edition = _relationship_edition()
+    if edition is None:
+        return ["- Relationship candidates MUST be [] while the protocol lacks an authoritative Relationship Type role registry. Do not smuggle relationship semantics into a fake UAO relationship field."]
+    return [
+        f"- Relationship candidates are permitted and typed ONLY from the relationship type edition {edition['registryVersion']} ({edition['digest']}); typeVersion must be exactly one of the ids below, participants use the listed role names and reference candidate identities in this bundle (cid-...), every relationship cites the sourceIds evidencing it, and `basis` is EXPLICIT when a source states it or INFERRED when you inferred it. Prefer the most precise defensible type; if the evidence does not establish a specific relationship, omit it rather than reaching for related-to/associated-with. Do not assert authorship, creation, influence or membership that no cited source supports.",
+        "  Available relationship types (id  roles: name(kinds min..max)):",
+        *_edition_vocabulary(edition),
+        "- A relationship may bind an identity that already exists in the registry: include that identity as a candidate identity with its EXACT registered resolutionKey, restate its registered assertions VERBATIM as claims (copy the statement text exactly; cite the registry:// source that carries them; add no new claim to a reused identity), and let the relationship supply the new knowledge. Enrichment of a registered identity happens through relationships, not through re-worded assertions, because a re-worded assertion set is a divergent semantic variant that the registry will refuse to reuse automatically.",
+    ]
+
+
 def _build_prompt(envelope: dict[str, Any], evidence: list[dict[str, Any]], truncated: bool) -> str:
     return "\n".join(
         [
@@ -311,7 +323,7 @@ def _build_prompt(envelope: dict[str, Any], evidence: list[dict[str, Any]], trun
             "- Keep source content concise and sufficient for provenance; do not copy long copyrighted passages.",
             "- Every candidate identity and claim must cite one or more supplied sourceIds.",
             "- When evidence supports separable reusable component identities materially inside the requested scope, include them as non-root candidate identities rather than flattening everything into the root; do not enumerate speculative concepts merely to increase reuse.",
-            "- Relationship candidates MUST be [] while the protocol lacks an authoritative Relationship Type role registry. Do not smuggle relationship semantics into a fake UAO relationship field.",
+            *_relationship_rules(),
             "- If the registry contains the same semantic identity and reuse is justified, reuse its exact resolutionKey.",
             "- For a new identity with a durable external identifier use resolutionKey `ext:<scheme>:<identifier>`.",
             "- Otherwise use a stable `foundry:v0.1:<semantic-type-slug>:<canonical-label-slug>` resolutionKey.",
@@ -350,6 +362,49 @@ def _bare_mode() -> bool:
     _die("UAO_FOUNDRY_CLAUDE_BARE must be 0/1")
 
 
+def _relationship_edition() -> dict[str, Any] | None:
+    """Optional ASA-SPEC-0006-format relationship type edition (Experiment 002).
+
+    When UAO_FOUNDRY_RELATIONSHIP_EDITION names a facet, the adapter lets Claude propose relationship
+    candidates typed ONLY from that edition's ids (enforced by the CLI schema enum and re-checked
+    here), and records the edition digest in the authority notes. The Java Foundry still resolves
+    the type, validates the instance (RTR §10.1) and binds participants; the adapter only stops
+    an untyped or foreign predicate from leaving the provider. Without the variable, relationship
+    candidates are refused exactly as before (ASA#29 fail-closed)."""
+    raw = os.environ.get("UAO_FOUNDRY_RELATIONSHIP_EDITION", "").strip()
+    if not raw:
+        return None
+    path = Path(raw).expanduser().resolve()
+    if not path.is_file():
+        _die(f"UAO_FOUNDRY_RELATIONSHIP_EDITION is not a file: {path}")
+    doc = _read_json_object(path)
+    meta = doc.get("$meta")
+    types = doc.get("types")
+    digest = doc.get("digest")
+    if not isinstance(meta, dict) or not isinstance(types, list) or not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+        _die("relationship edition is not an RTR facet ($meta/types/digest)")
+    records: dict[str, dict[str, Any]] = {}
+    for record in types:
+        if not isinstance(record, dict) or not isinstance(record.get("id"), str):
+            _die("relationship edition record without an id")
+        definition = record.get("definition")
+        if not isinstance(definition, dict) or not isinstance(definition.get("roles"), list):
+            _die(f"relationship edition record {record['id']} lacks a definition")
+        records[record["id"]] = record
+    return {"path": str(path), "registryVersion": str(meta.get("registry_version")), "digest": digest, "records": records}
+
+
+def _edition_vocabulary(edition: dict[str, Any]) -> list[str]:
+    lines = []
+    for type_id, record in sorted(edition["records"].items()):
+        definition = record["definition"]
+        if record.get("namespace") == "asa.core":
+            continue  # meta-types bind UROs, which this protocol cannot express
+        roles = ", ".join(f"{r['name']}({','.join(r['binds'])} {r['min']}..{r['max']})" for r in definition["roles"])
+        lines.append(f"  {type_id}  roles: {roles}{'  [symmetric]' if definition.get('symmetric') else ''}")
+    return lines
+
+
 def _stage_schema(name: str) -> dict[str, Any]:
     stage = _read_json_object(REPO_ROOT / "schemas" / name)
     stage.pop("$schema", None)
@@ -385,7 +440,16 @@ def _cli_schema(schema: dict[str, Any]) -> dict[str, Any]:
     candidates["identities"]["items"] = identity
     candidates["claims"]["items"] = _stage_schema("candidate-claim.schema.json")
     candidates["evidence"]["items"] = _stage_schema("candidate-evidence.schema.json")
-    candidates["relationships"]["maxItems"] = 0
+    edition = _relationship_edition()
+    if edition is None:
+        candidates["relationships"]["maxItems"] = 0
+    else:
+        relationship = _stage_schema("candidate-relationship.schema.json")
+        domain_ids = sorted(i for i, r in edition["records"].items() if r.get("namespace") != "asa.core")
+        relationship["properties"]["typeVersion"] = {"type": "string", "enum": domain_ids}
+        relationship["properties"]["basis"] = {"type": "string", "enum": ["EXPLICIT", "INFERRED"]}
+        relationship["required"] = sorted(set(relationship["required"]) | {"basis"})
+        candidates["relationships"]["items"] = relationship
     return cli
 
 
@@ -566,10 +630,27 @@ def _normalize_bundle(
             _die(f"Claude structured output is missing required bundle field {field}")
 
     relationships = normalized.get("candidates", {}).get("relationships") if isinstance(normalized.get("candidates"), dict) else None
-    if relationships not in ([], None):
-        _die("Claude adapter refuses non-empty relationship candidates until ASA Relationship Type authority is available")
-    if isinstance(normalized.get("candidates"), dict):
-        normalized["candidates"]["relationships"] = []
+    edition = _relationship_edition()
+    if edition is None:
+        if relationships not in ([], None):
+            _die("Claude adapter refuses non-empty relationship candidates until ASA Relationship Type authority is available")
+        if isinstance(normalized.get("candidates"), dict):
+            normalized["candidates"]["relationships"] = []
+    else:
+        if relationships is None:
+            relationships = []
+        if not isinstance(relationships, list):
+            _die("bundle.candidates.relationships must be an array")
+        for relationship in relationships:
+            if not isinstance(relationship, dict):
+                _die("relationship candidate must be an object")
+            type_id = relationship.get("typeVersion")
+            record = edition["records"].get(type_id) if isinstance(type_id, str) else None
+            if record is None or record.get("namespace") == "asa.core":
+                _die(f"relationship candidate {relationship.get('candidateId')!r} uses a typeVersion outside the declared edition: {type_id!r}")
+            if relationship.get("basis") not in ("EXPLICIT", "INFERRED"):
+                _die(f"relationship candidate {relationship.get('candidateId')!r} must state basis EXPLICIT or INFERRED")
+        normalized["candidates"]["relationships"] = relationships
 
     _enforce_resolution_key_policy(normalized, envelope)
     _restore_registry_sources(normalized, evidence, clock)
@@ -585,8 +666,9 @@ def _normalize_bundle(
     notes.extend(
         [
             f"Claude Code provider adapter={ADAPTER_VERSION}; model={model}; cli={cli_version}; output_path={output_path}; bare={str(_bare_mode()).lower()}",
+            *([f"Relationship candidates typed from relationship type edition {edition['registryVersion']} digest={edition['digest']} (Experiment 002; NOT ASA-admitted)."] if edition is not None else []),
             "Claude research output is non-authoritative intermediate evidence; UAO Foundry owns validation, canonicalisation, verification and publication.",
-            "Relationship candidate emission disabled pending governed ASA Relationship Type role authority (ASA#29 / uao-foundry#3).",
+            *(["Relationship candidate emission disabled pending governed ASA Relationship Type role authority (ASA#29 / uao-foundry#3)."] if edition is None else []),
         ]
     )
     base_url = os.environ.get("ANTHROPIC_BASE_URL", "").strip()

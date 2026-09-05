@@ -101,6 +101,8 @@ else:
 if mode == "ephemeral-key": resolution="foundry:v0.1:test:claude-session-2026-08-10T01"
 relationships=[]
 if mode == "relationship": relationships=[{"candidateId":"rel-test","typeVersion":"asa.core/example@1","participants":[],"identityLiterals":{},"contextualBindings":[],"sourceRefs":["src-root"]}]
+if mode == "typed-relationship": relationships=[{"candidateId":"rel-test","typeVersion":"asa:type:foundry.exp002/part-of@1","participants":[{"role":"part","candidateIdentityRef":"cid-root"},{"role":"whole","candidateIdentityRef":"cid-root"}],"identityLiterals":{},"contextualBindings":[],"sourceRefs":["src-root"],"basis":"EXPLICIT"}]
+if mode == "foreign-relationship": relationships=[{"candidateId":"rel-test","typeVersion":"asa:type:foundry.exp002/nonsense@1","participants":[{"role":"part","candidateIdentityRef":"cid-root"}],"identityLiterals":{},"contextualBindings":[],"sourceRefs":["src-root"],"basis":"EXPLICIT"}]
 bundle={
  "fixtureVersion":"0.1.0","identitySeed":seed,"fixedClock":"2000-01-01T00:00:00Z","knowledgeHorizon":"2000-01-01T00:00:00Z",
  "interpretations":[{"candidateId":"int-root","label":seed,"definition":f"Selected test interpretation for {seed}.","semanticTypeProposal":"TestIdentity","confidence":0.9,"status":"SELECTED","references":[locator]}],
@@ -162,6 +164,18 @@ class ClaudeProviderAdapterTest(unittest.TestCase):
 
     def test_ephemeral_resolution_key_fails_closed(self):
         proc=self.run_adapter(protocol("alpha object"),"ephemeral-key"); self.assertNotEqual(0,proc.returncode); self.assertIn("ephemeral",proc.stderr.lower())
+
+    def test_typed_relationships_pass_only_under_a_declared_edition(self):
+        edition=str(REPO_ROOT/"config"/"relationship-types"/"foundry-exp002.json")
+        # The CLI schema the fake asserts against is the edition-aware composition.
+        module=load_adapter_module(); os.environ["UAO_FOUNDRY_RELATIONSHIP_EDITION"]=edition
+        try: self.cli_schema.write_text(json.dumps(module._cli_schema(SCHEMA),sort_keys=True),encoding="utf-8")
+        finally: os.environ.pop("UAO_FOUNDRY_RELATIONSHIP_EDITION",None)
+        env={"UAO_FOUNDRY_RELATIONSHIP_EDITION":edition}
+        proc=self.run_adapter(protocol("alpha object"),"typed-relationship",env); self.assertEqual(0,proc.returncode,proc.stderr)
+        bundle=json.loads(proc.stdout); self.assertEqual(1,len(bundle["candidates"]["relationships"]))
+        self.assertTrue(any("relationship type edition 2026.902" in n for n in bundle["sourceStrategy"]["authorityNotes"]))
+        proc=self.run_adapter(protocol("alpha object"),"foreign-relationship",env); self.assertNotEqual(0,proc.returncode); self.assertIn("outside the declared edition",proc.stderr)
 
     def test_relationship_candidate_fails_closed(self):
         proc=self.run_adapter(protocol("alpha object"),"relationship"); self.assertNotEqual(0,proc.returncode); self.assertIn("relationship",proc.stderr.lower())
