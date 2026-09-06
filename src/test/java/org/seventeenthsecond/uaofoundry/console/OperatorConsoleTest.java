@@ -188,6 +188,9 @@ class OperatorConsoleTest {
                 "--enrich", "uao-aaaaaaaaaaaa", "--enrich", "uao-bbbbbbbbbbbb");
         assertEquals(2, two.exit(), "a manufacture enriches exactly one identity (Codex pass-F F-F3)");
         assertTrue(two.err().contains("exactly one identity"), two.err());
+        Result twice = run("manufacture", "x", "--fixture", DEMO.resolve("electric-motor.json").toString(), "--registry", temp.resolve("r").toString(),
+                "--enrich", "uao-aaaaaaaaaaaa", "--enrich", "uao-aaaaaaaaaaaa");
+        assertEquals(2, twice.exit(), "named once, not de-duplicated (Codex pass-G F-G1)");
     }
 
     @Test

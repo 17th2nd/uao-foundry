@@ -22,9 +22,15 @@ Add a fifth identity operation, `ENRICH`, to the append-preserving journal.
   whose occurrence carries `toVariant`).
 - The registry, not the record, establishes the truth of the claim on every index build, from immutable package
   bytes: both variants must be occurrences of the subject, the named package must carry the newer one, and the
-  newer assertion set must be a **strict superset** of the older one — every prior assertion restated verbatim
-  (canonical JSON equality) plus at least one more. Anything else is refused at admission and fails
-  verification thereafter.
+  newer state must satisfy the **enrichment law**, which has two halves. **Identity continuity**: the canonical
+  label is unchanged, and the newer aliases and external identifiers are supersets of the older ones — an
+  enrichment never renames an identity, forgets a name for it, or loses a durable identifier of it. **Strict
+  assertion superset**: every prior assertion restated verbatim (canonical JSON equality) plus at least one more.
+  Anything else is refused at admission and fails verification thereafter.
+- A package enriches **exactly one** identity: the operation names one subject, the reuse analyzer refuses more
+  than one named target, and admission checks — before anything is written — that every *other* registered
+  identity the package carries is a verbatim re-observation of its current state, so a successful `ENRICH` can
+  never leave a second identity an unreconciled variant.
 - Variants superseded by an `ENRICH` are history, not unreconciled siblings. An identity is `SINGLE_VARIANT`
   when exactly one current variant remains; the index then exposes `currentVariant` and `variantHistory`.
   These fields appear only for enriched identities, so registries without `ENRICH` operations keep verifying
@@ -34,7 +40,7 @@ Add a fifth identity operation, `ENRICH`, to the append-preserving journal.
 - A fork (two enrichments leaving one variant) or a cycle fails the index build closed, as lifecycle
   contradictions already do.
 - `FoundryRegistry.enrich(package, uid, …)` admits the package and records the operation as one fail-closed
-  step: the superset law is checked against the candidate before anything is written, so a non-enriching
+  step: the whole enrichment law is checked against the candidate before anything is written, so a non-enriching
   package never enters the registry as a stray variant; a failure after admission rolls the admission back.
   CLI: `RegistryApplication enrich <package> --subject <uid> --reason … --justification … --recorded-at …`.
 
@@ -168,3 +174,18 @@ identity is derivable from bytes alone.
   claims. `--enrich` accepts exactly one uid per manufacture. The reused-identity rule is emitted by the adapter with
   or without a relationship edition, and the enrichment-target rule tells the provider to keep names and identifiers.
   Python 36/36 + adapter 14/14; Java 183/183, 0 skipped. ⚠ Jar still not rebuilt (live batch in flight).
+- **Codex pass G (2026-09-07, read-only, on f7a9369): REFUSED** — F-G1 HIGH the one-target invariant lived only in the
+  console parser (which also de-duplicated repeated flags): the analyzer still accepted a set of targets, and
+  `FoundryRegistry.enrich` preflighted only the named subject before admitting the whole package, so a valid enrichment
+  of A plus a divergent occurrence of registered B succeeded for A and left B `MULTIPLE_UNRECONCILED_VARIANTS`; F-G2
+  HIGH the operator tool's default jar (built 07:17 UTC, before the fifth to seventh commits) did not contain the
+  continuity law; F-G6 MEDIUM the Decision above, `REGISTRY.md` and the operation schema still stated the one-half law.
+  F-G3/F-G4/F-G5/F-G7 INFO: F-F1, F-F2, F-F4 closed in source; counts verified. Report:
+  `temp/codex-uaofoundry-adr0007-ratification-pass-g-001.md`.
+- **Remediation (eighth commit):** the invariant is now held at every boundary — `ReuseAnalyzer` refuses more than one
+  named target (`ENRICHMENT_ONE_TARGET`); `Options` refuses `--enrich` given more than once at all; and
+  `FoundryRegistry.enrich` checks, before anything is written, that every other registered identity the package
+  carries is a verbatim re-observation of its current state (a divergent one, or one with unreconciled variants, is
+  refused). The Decision, `REGISTRY.md` and the operation schema now state the two-half law and the one-identity rule.
+  Java 184/184, 0 skipped; Python and adapter counts unchanged. The jar is rebuilt from this commit as soon as the live
+  batch using it finishes; until then the operator tool's default runtime is the pre-remediation jar (F-G2).

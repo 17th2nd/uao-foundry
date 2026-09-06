@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 /** Computes and attaches the identity/source delta against a pre-manufacture verified registry snapshot. */
 public final class ReuseAnalyzer {
@@ -36,6 +37,11 @@ public final class ReuseAnalyzer {
      * admission re-derives the same law from bytes before anything is recorded.
      */
     public Map<String,Object> analyze(Map<String,Object> registryIndex, Path registryRoot, Path packageDir, String registryContextHash, Set<String> enrichmentOf) {
+        // Codex pass-G F-G1: the invariant lives here, not only in a console parser. A package enriches at most one
+        // identity because admission (FoundryRegistry.enrich) records one subject and admits the package whole.
+        if (enrichmentOf.size() > 1) {
+            throw new IllegalArgumentException("ENRICHMENT_ONE_TARGET: a package enriches at most one identity, but " + new TreeSet<>(enrichmentOf) + " were named.");
+        }
         Map<String,Map<String,Object>> existing = new TreeMap<>();
         for (Object raw : array(registryIndex.get("identities"), "registry identities")) {
             Map<String,Object> identity = object(raw, "registry identity");

@@ -180,8 +180,10 @@ The registry remains Foundry-owned infrastructure throughout; ASA CSS remains th
 ## Enrichment (ADR-0007)
 
 An identity's assertion set can grow without a new uid. `ENRICH` is a journal operation over two semantic
-variants of the same uid: the newer must restate every assertion of the older verbatim and add at least one,
-which the registry re-checks from package bytes on every build. The superseded variant becomes history
+variants of the same uid. The enrichment law has two halves, both re-checked from package bytes on every build:
+identity continuity (the canonical label is unchanged; aliases and external identifiers may only grow) and a
+strict assertion superset (every assertion of the older variant restated verbatim, at least one added). A package
+enriches exactly one identity and restates every other registered identity it carries verbatim. The superseded variant becomes history
 (`variantHistory`), the identity stays `SINGLE_VARIANT` with a `currentVariant`, and reuse compares against the
 current variant. Forks and cycles fail closed. `RegistryApplication enrich <package> --subject <uid> …` admits
 the enriching package and records the operation as one fail-closed step. See `ADR-0007-IDENTITY-ENRICHMENT.md`.

@@ -282,6 +282,39 @@ class PersistentIdentityRegistryTest {
     }
 
     @Test
+    void anEnrichmentPackageMayNotCarryADivergentVariantOfAnotherRegisteredIdentity() {
+        // Codex pass-G F-G1: the package is admitted whole, so a valid enrichment of the root plus a re-worded
+        // occurrence of the (registered) context identity must be refused before anything is written.
+        PipelineResult t0 = manufacture("enr7-t0", fixture -> {});
+        FoundryRegistry registry = registryWith(t0);
+        String uid = rootUid(t0);
+        String before = FileOps.treeHash(registryRoot);
+        PipelineResult mixed = manufacture("enr7-mixed", fixture -> {
+            addRootClaim(fixture, "Fixture assertion: one more sourced statement.");
+            for (Object raw : array(object(fixture.get("candidates")).get("claims"))) {
+                Map<String,Object> claim = object(raw);
+                if ("cid-bovine-context".equals(claim.get("subjectIdentityRef"))) claim.put("statement", claim.get("statement") + " (re-worded)");
+            }
+        });
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class, () -> registry.enrich(mixed.packagePath(), uid, List.of("LIFE_CHRONOLOGY"), "mixed", "operator", "2026-09-07T00:00:00Z"));
+        assertTrue(refused.getMessage().contains("divergent variant of"), refused.getMessage());
+        assertEquals(before, FileOps.treeHash(registryRoot), "refused before anything was written");
+        for (Object raw : array(registry.index().get("identities"))) assertEquals(SemanticVariants.SINGLE_VARIANT, object(raw).get("semanticVariantStatus"));
+
+        // The analyzer holds the same one-target invariant, whatever a caller passes.
+        org.seventeenthsecond.uaofoundry.reuse.ReuseAnalyzer analyzer = new org.seventeenthsecond.uaofoundry.reuse.ReuseAnalyzer(SCHEMAS);
+        IllegalArgumentException two = assertThrows(IllegalArgumentException.class, () -> analyzer.analyze(registry.index(), registryRoot, mixed.packagePath(),
+                org.seventeenthsecond.uaofoundry.util.Hashes.canonicalJson(Map.of("test", "context")), Set.of(uid, "uao-000000000000")));
+        assertTrue(two.getMessage().contains("ENRICHMENT_ONE_TARGET"), two.getMessage());
+
+        // With the context identity restated verbatim, the same enrichment is admitted.
+        PipelineResult clean = manufacture("enr7-clean", fixture -> addRootClaim(fixture, "Fixture assertion: one more sourced statement."));
+        assertEquals(1, registry.enrich(clean.packagePath(), uid, List.of("LIFE_CHRONOLOGY"), "clean", "operator", "2026-09-07T00:00:00Z").assertionsAdded());
+        assertTrue(registry.verify().passed());
+        for (Object raw : array(registry.index().get("identities"))) assertEquals(SemanticVariants.SINGLE_VARIANT, object(raw).get("semanticVariantStatus"));
+    }
+
+    @Test
     void aGenuineEnrichmentForkInTheJournalFailsTheIndexClosed() {
         PipelineResult t0 = manufacture("enr3-t0", fixture -> {});
         PipelineResult t1 = manufacture("enr3-t1", fixture -> addRootClaim(fixture, "Fixture assertion: branch one."));

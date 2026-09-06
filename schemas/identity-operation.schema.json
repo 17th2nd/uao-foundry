@@ -99,7 +99,7 @@
       "format": "date-time"
     },
     "enrichment": {
-      "$comment": "ENRICH only. Declares toVariant (carried by toPackageId's occurrence of the subject) the successor state of fromVariant within the same uid. The registry verifies from package bytes that toVariant restates every assertion of fromVariant verbatim and adds at least one; an operation that fails that check is refused at admission and fails verification thereafter.",
+      "$comment": "ENRICH only. Declares toVariant (carried by toPackageId's occurrence of the subject) the successor state of fromVariant within the same uid. The registry verifies from package bytes that toVariant keeps the canonical label and every alias and external identifier of fromVariant (names and identifiers may only grow) and restates every assertion of fromVariant verbatim while adding at least one; an operation that fails either half is refused at admission and fails verification thereafter.",
       "type": "object",
       "additionalProperties": false,
       "required": [

@@ -69,8 +69,8 @@ record Options(List<String> positionals, Path registry, Path schemaDir, Path wor
         if (!enrich.isEmpty() && registry == null) throw new IllegalArgumentException("--enrich requires --registry.");
         // Codex pass-F F-F3: `RegistryApplication enrich` admits exactly one subject per package, and admitting the first
         // of two would leave the second an unreconciled variant. One enrichment target per manufacture, fail-closed.
-        if (new java.util.HashSet<>(enrich).size() > 1) {
-            throw new IllegalArgumentException("--enrich names " + new java.util.TreeSet<>(enrich) + "; a manufacture enriches exactly one identity, because `RegistryApplication enrich` admits one subject per package.");
+        if (enrich.size() > 1) {
+            throw new IllegalArgumentException("--enrich given " + enrich.size() + " times (" + new java.util.TreeSet<>(enrich) + "); a manufacture enriches exactly one identity, named once, because `RegistryApplication enrich` admits one subject per package.");
         }
         return new Options(List.copyOf(positionals), registry, schemaDir, workDir, distDir, fixture, providerCommand,
                 runStore, context, language, profile, repositoryCommit, clock, catalogLimit, timeoutSeconds,

@@ -745,9 +745,29 @@ public final class FoundryRegistry {
         Set<String> older = assertionsOf(olderUao);
 
         Map<String,Object> candidateUao = null;
+        Map<String,Map<String,Object>> registered = new LinkedHashMap<>();
+        for (Object raw : array(before.get("identities"), "registry identities")) {
+            Map<String,Object> identity = object(raw, "registry identity");
+            registered.put(string(identity.get("uid"), "uid"), identity);
+        }
         for (Object raw : array(FileOps.readJson(packageDir.resolve("canonical-identities.json")), "canonical identities")) {
             Map<String,Object> uao = object(raw, "canonical UAO");
-            if (uid.equals(uao.get("uid"))) { candidateUao = uao; break; }
+            String other = string(uao.get("uid"), "uid");
+            if (uid.equals(other)) { candidateUao = uao; continue; }
+            // Codex pass-G F-G1: the package is admitted whole, so every OTHER registered identity it carries must
+            // be a pure re-observation of that identity's current state. Otherwise a successful ENRICH of the subject
+            // would leave a second identity an unreconciled variant -- checked here, before anything is written.
+            Map<String,Object> priorOther = registered.get(other);
+            if (priorOther == null) continue;
+            if (!SemanticVariants.SINGLE_VARIANT.equals(priorOther.get("semanticVariantStatus"))) {
+                throw new IllegalArgumentException("ENRICH refused: the candidate package also carries " + other + ", which has unreconciled variants; reconcile it first.");
+            }
+            String current = priorOther.get("currentVariant") instanceof String cv ? cv
+                    : string(object(array(priorOther.get("occurrences"), "occurrences").getFirst(), "occurrence").get("semanticVariantDigest"), "semanticVariantDigest");
+            if (!current.equals(SemanticVariants.digest(uao))) {
+                throw new IllegalArgumentException("ENRICH refused: the candidate package carries a divergent variant of " + other
+                        + " (" + priorOther.get("resolutionKey") + "); an enrichment package restates every other registered identity verbatim, and enriches exactly one.");
+            }
         }
         if (candidateUao == null) throw new IllegalArgumentException("ENRICH refused: the candidate package carries no occurrence of " + uid + ".");
         String to = SemanticVariants.digest(candidateUao);
