@@ -404,7 +404,7 @@ public final class OperatorConsole {
                           String publicationStatus, boolean verificationPassed, String admission, String runId,
                           int reusedIdentities, int newIdentities, int newSources, int reusedRegistrySources,
                           int unresolvedRelationships, int unreconciledVariants, boolean registryConsulted,
-                          int typedRelationships) {
+                          int typedRelationships, List<String> enrichedIdentities) {
 
         static Report of(PipelineResult result, Map<String,Object> reuse, FoundryRegistry registry,
                          String admission, String seed, Options options, String runId) {
@@ -414,12 +414,19 @@ public final class OperatorConsole {
             int typed = java.nio.file.Files.isRegularFile(experimental) ? list(FileOps.readJson(experimental)).size() : 0;
 
             int reused = 0, created = 0, newSources = 0, registrySources = 0;
+            List<String> enriched = new ArrayList<>();
             if (reuse != null) {
                 Map<String,Object> counts = map(reuse.get("counts"));
                 reused = number(counts.get("reusedUaoCount"));
                 created = number(counts.get("newUaoCount"));
                 newSources = number(counts.get("newSourceCount"));
                 registrySources = number(counts.get("registrySourceCount"));
+                // ADR-0007 (Codex pass-B F-B7): an enrichment is neither reuse nor new manufacture. Read
+                // back from the analyzer's enrichedUaos so an enrichment-only manufacture never reports
+                // "0 reused, 0 new" and nothing else.
+                if (reuse.get("enrichedUaos") != null) {
+                    for (Object raw : list(reuse.get("enrichedUaos"))) enriched.add(String.valueOf(map(raw).get("uid")));
+                }
             } else {
                 created = list(FileOps.readJson(result.packagePath().resolve("canonical-identities.json"))).size();
                 newSources = list(map(FileOps.readJson(result.packagePath().resolve("source-registry.json"))).get("sources")).size();
@@ -445,7 +452,8 @@ public final class OperatorConsole {
             return new Report(seed, options.context(), options.registry() == null ? null : options.registry().toString(),
                     String.valueOf(manifest.get("packageId")), result.packagePath().toString(),
                     result.publicationStatus(), result.verificationPassed(), admission, runId,
-                    reused, created, newSources, registrySources, unresolved, unreconciled, registry != null, typed);
+                    reused, created, newSources, registrySources, unresolved, unreconciled, registry != null, typed,
+                    List.copyOf(enriched));
         }
 
         void print(PrintStream out) {
@@ -457,6 +465,9 @@ public final class OperatorConsole {
             out.printf("  %-30s %s%n", "Registry", registryPath == null ? "(not consulted)" : registryPath);
             out.println();
             out.printf("  %-30s %d%n", "Existing identities reused", reusedIdentities);
+            if (!enrichedIdentities.isEmpty()) {
+                out.printf("  %-30s %d (%s)%n", "Existing identities enriched", enrichedIdentities.size(), String.join(", ", enrichedIdentities));
+            }
             out.printf("  %-30s %d%n", "New identities manufactured", newIdentities);
             out.printf("  %-30s %d%n", "New sources", newSources);
             out.printf("  %-30s %d%n", "Registry sources reused", reusedRegistrySources);
@@ -487,6 +498,9 @@ public final class OperatorConsole {
             Map<String,Object> counts = new LinkedHashMap<>();
             counts.put("existingIdentitiesReused", java.math.BigDecimal.valueOf(reusedIdentities));
             counts.put("newIdentitiesManufactured", java.math.BigDecimal.valueOf(newIdentities));
+            // Emitted only when non-empty, as the reuse report does, so every non-enrichment manufacture
+            // keeps its prior report bytes.
+            if (!enrichedIdentities.isEmpty()) counts.put("existingIdentitiesEnriched", java.math.BigDecimal.valueOf(enrichedIdentities.size()));
             counts.put("newSources", java.math.BigDecimal.valueOf(newSources));
             counts.put("registrySourcesReused", java.math.BigDecimal.valueOf(reusedRegistrySources));
             counts.put("typedRelationships", java.math.BigDecimal.valueOf(typedRelationships));
@@ -504,6 +518,7 @@ public final class OperatorConsole {
             out.put("packagePath", packagePath);
             out.put("registryAdmission", admission);
             out.put("runId", runId);
+            if (!enrichedIdentities.isEmpty()) out.put("enrichedIdentities", List.copyOf(enrichedIdentities));
             return out;
         }
     }

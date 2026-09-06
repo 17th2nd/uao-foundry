@@ -13,6 +13,8 @@ the package and records the operation as one fail-closed step. Run from the Foun
 """
 from __future__ import annotations
 import argparse, json, pathlib, re, subprocess, sys
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from bundle_lib import current_occurrence, split_paraphrases, SourcePool, registry_source, PARAPHRASE_THRESHOLD
 
 def load(p): return json.loads(pathlib.Path(p).read_text())
 def slug(s): return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
@@ -25,47 +27,57 @@ def main():
     ap.add_argument("--classpath", default="target/uao-foundry-0.1.0.jar"); ap.add_argument("--run", action="store_true")
     ap.add_argument("--repository-commit", default="local"); ap.add_argument("--reason", default="LIFE_CHRONOLOGY")
     ap.add_argument("--justification", default=None); ap.add_argument("--recorded-at", default=None); ap.add_argument("--authority", default="operator")
+    ap.add_argument("--paraphrase-threshold", type=float, default=PARAPHRASE_THRESHOLD, help="content-token overlap at or above which a provider claim is a paraphrase of a restated assertion, not new (F-B5)")
+    ap.add_argument("--accept-paraphrase", action="append", default=[], metavar="CANDIDATE_ID", help="operator override: keep this provider claim although it reads as a paraphrase (recorded in authorityNotes)")
     a = ap.parse_args()
     registry = pathlib.Path(a.registry).resolve(); pkg = pathlib.Path(a.package).resolve(); out = pathlib.Path(a.out); out.mkdir(parents=True, exist_ok=True)
     index = load(registry / "index.json"); by_key = {i["resolutionKey"]: i for i in index["identities"]}; by_uid = {i["uid"]: i for i in index["identities"]}
     target = by_uid.get(a.uid) or sys.exit(f"{a.uid} is not a registered identity")
     if target["semanticVariantStatus"] != "SINGLE_VARIANT": sys.exit(f"{a.uid} has unreconciled variants; reconcile before enriching")
-    current = target.get("currentVariant") or target["occurrences"][0]["semanticVariantDigest"]
-    occ = next(o for o in target["occurrences"] if o["semanticVariantDigest"] == current)
+    occ = current_occurrence(target); current = occ["semanticVariantDigest"]
 
     snap = load(pkg / "provider-snapshot.json"); live_id = load(pkg / "manifest.json")["packageId"]
-    bundle = json.loads(json.dumps(snap)); cands = bundle["candidates"]; sources = {s["sourceId"]: s for s in bundle["sources"]}
+    bundle = json.loads(json.dumps(snap)); cands = bundle["candidates"]
     claims, evidence, notes = [], [], []
     target_cid = None; registered_cids = {}
+    # F-B6: one pool for every source id. Registry sources are installed first, each under its own package as origin, so a
+    # live source that reuses a registered id is renamed (with its claim/evidence references) rather than substituting bytes
+    # behind historical claims; registry packages that share an id with different bytes are separated the same way.
+    pool = SourcePool()
     for c in cands["identities"]:
         ident = by_key.get(c["resolutionKey"])
         if not ident: continue
-        o = occ if ident["uid"] == a.uid else next(x for x in ident["occurrences"] if x["semanticVariantDigest"] == (ident.get("currentVariant") or x["semanticVariantDigest"]))
+        o = occ if ident["uid"] == a.uid else current_occurrence(ident)
         rp = registry / "packages" / o["packageId"]
         rc = next(x for x in load(rp / "candidate-identities.json") if x["resolutionKey"] == c["resolutionKey"])
         c.update({k: rc[k] for k in rc if k not in ("candidateId", "root")}); registered_cids[c["candidateId"]] = ident["uid"]
         if ident["uid"] == a.uid: target_cid = c["candidateId"]
-        rsnap = load(rp / "provider-snapshot.json")
+        rsnap = load(rp / "provider-snapshot.json"); pkg_claims, pkg_evidence = [], []
         for cl in load(rp / "candidate-claims.json"):
             if cl["subjectIdentityRef"] != rc["candidateId"]: continue
-            cl2 = dict(cl); cl2["subjectIdentityRef"] = c["candidateId"]; claims.append(cl2)
-            evidence += [dict(ev) for ev in load(rp / "candidate-evidence.json") if ev["supportsCandidateRef"] == cl["candidateId"]]
-        for s in load(rp / "source-registry.json")["sources"]:
-            sources.setdefault(s["sourceId"], {"sourceId": s["sourceId"], "locator": f"registry://{o['packageId']}/{s['snapshotPath']}", "sourceClass": "foundry-registry",
-                                               "retrievedAt": rsnap["fixedClock"], "license": "UAO-FOUNDRY-REGISTRY-SNAPSHOT", "content": "registry evidence; exact bytes restored by the Foundry"})
-        notes.append(f"{c['label']} ({c['resolutionKey']}) restated verbatim from {o['packageId']}")
+            cl2 = dict(cl); cl2["subjectIdentityRef"] = c["candidateId"]; pkg_claims.append(cl2)
+            pkg_evidence += [dict(ev) for ev in load(rp / "candidate-evidence.json") if ev["supportsCandidateRef"] == cl["candidateId"]]
+        for src in load(rp / "source-registry.json")["sources"]:
+            pool.install(registry_source(src, o["packageId"], rsnap["fixedClock"]), o["packageId"], pkg_claims, pkg_evidence, sha256=src.get("sha256"))
+        claims += pkg_claims; evidence += pkg_evidence
+        notes.append(f"{c['label']} ({c['resolutionKey']}) restated verbatim from {o['packageId']} (variant {o['semanticVariantDigest'][:12]}…)")
     if target_cid is None: sys.exit(f"the live package proposes no candidate with {a.uid}'s resolution key ({target['resolutionKey']})")
+    for src in bundle["sources"]:
+        pool.install(src, f"live-{live_id[-8:]}", cands["claims"], cands["evidence"])
     restated_texts = {cl["statement"] for cl in claims if cl["subjectIdentityRef"] == target_cid}
-    # provider claims: about the TARGET → keep as NEW assertions (unless they duplicate a restated statement);
+    # provider claims: about the TARGET → keep as NEW assertions unless they restate or paraphrase a registered one (F-B5);
     # about other registered identities → drop (reconcile law); about new identities → keep.
-    new_target, dropped = [], 0
-    for cl in cands["claims"]:
-        subj = cl["subjectIdentityRef"]
-        if subj == target_cid:
-            if cl["statement"] in restated_texts: dropped += 1; continue
-            new_target.append(cl)
-        elif subj in registered_cids: dropped += 1
-        else: new_target.append(cl)
+    about_target = [cl for cl in cands["claims"] if cl["subjectIdentityRef"] == target_cid]
+    genuine, paraphrases = split_paraphrases(about_target, restated_texts, a.paraphrase_threshold)
+    accepted = [(cl, near, score) for cl, near, score in paraphrases if cl["candidateId"] in a.accept_paraphrase]
+    refused = [(cl, near, score) for cl, near, score in paraphrases if cl["candidateId"] not in a.accept_paraphrase]
+    unknown_overrides = set(a.accept_paraphrase) - {cl["candidateId"] for cl, _, _ in paraphrases}
+    if unknown_overrides: sys.exit(f"--accept-paraphrase names claims that are not paraphrases of a restated assertion: {sorted(unknown_overrides)}")
+    for cl, near, score in refused: print(f"   refused as paraphrase ({score:.2f}) {cl['candidateId']}: {cl['statement'][:100]!r}\n      ≈ {near[:100]!r}")
+    for cl, near, score in accepted: print(f"   operator-accepted paraphrase ({score:.2f}) {cl['candidateId']}: {cl['statement'][:100]!r}")
+    new_target = genuine + [cl for cl, _, _ in accepted]
+    dropped = len(refused) + sum(1 for cl in cands["claims"] if cl["subjectIdentityRef"] in registered_cids and cl["subjectIdentityRef"] != target_cid)
+    new_target += [cl for cl in cands["claims"] if cl["subjectIdentityRef"] not in registered_cids]
     kept_ids = {cl["candidateId"] for cl in new_target} | {c["candidateId"] for c in cands["identities"]}
     cands["claims"] = new_target + claims
     cands["evidence"] = [ev for ev in cands["evidence"] if ev["supportsCandidateRef"] in kept_ids] + evidence
@@ -73,11 +85,11 @@ def main():
     for cl in cands["claims"]:
         assert cl["candidateId"] not in seen, ("duplicate claim id", cl["candidateId"]); seen.add(cl["candidateId"])
     added = sum(1 for cl in new_target if cl["subjectIdentityRef"] == target_cid)
-    if added == 0: sys.exit("the live package adds no new assertion about the target; nothing to enrich")
-    bundle["sources"] = list(sources.values())
-    bundle["sourceStrategy"]["authorityNotes"] += [f"ENRICHMENT bundle (ADR-0007) for {a.uid} from live package {live_id}: registered assertions restated verbatim over registry:// sources, {added} new sourced assertion(s) appended; other registered identities restated verbatim, provider claims about them dropped ({dropped}). No additional provider call."] + notes
+    if added == 0: sys.exit(f"the live package adds no new assertion about the target ({len(refused)} paraphrase(s) of registered assertions refused); nothing to enrich")
+    bundle["sources"] = list(pool.sources.values())
+    bundle["sourceStrategy"]["authorityNotes"] += [f"ENRICHMENT bundle (ADR-0007) for {a.uid} from live package {live_id}: registered assertions restated verbatim over registry:// sources, {added} new sourced assertion(s) appended ({len(refused)} paraphrase(s) of registered assertions refused at overlap ≥ {a.paraphrase_threshold}, {len(accepted)} accepted by operator override); other registered identities restated verbatim, provider claims about them dropped. No additional provider call."] + notes + pool.notes() + [f"operator accepted paraphrase {cl['candidateId']} (overlap {score:.2f} with a restated assertion)" for cl, _, score in accepted]
     path = out / f"{slug(bundle['identitySeed'])}-enrichment.json"; path.write_text(json.dumps(bundle, indent=2, ensure_ascii=False) + "\n")
-    print(f"{a.uid}: current variant {current[:12]}…, restated {len(restated_texts)} assertion(s), +{added} new, bundle → {path}")
+    print(f"{a.uid}: current variant {current[:12]}…, restated {len(restated_texts)} assertion(s), +{added} new, {len(refused)} paraphrase(s) refused, {len(pool.renames)} source id(s) renamed, bundle → {path}")
     if not a.run: return
     dist = out / "dist"; work = out / "work"
     cmd = ["java", "-cp", a.classpath, "org.seventeenthsecond.uaofoundry.console.OperatorConsole", "manufacture", bundle["identitySeed"], "--fixture", str(path),

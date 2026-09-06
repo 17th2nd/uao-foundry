@@ -82,3 +82,22 @@ identity is derivable from bytes alone.
   removed, accepted succession intact, unlinked sibling reported unreconciled) and a refusal test covering both
   before-admission (blank justification) and after-admission (seeded journal collision → package rolled back).
   Suite 180/180. Codex pass B requested on the combined change.
+- **Codex pass B (2026-09-06, read-only, on e24cb1f): REFUSED** — F-B5 HIGH the bundle builder's novelty test was exact
+  string inequality, so a paraphrase of a prior assertion passed as enrichment; F-B6 HIGH a live source sharing an id
+  with a registered source silently substituted live bytes behind historical claims; F-B2 MEDIUM
+  `scripts/exp002/reconcile_reuse.py` still took `occurrences[0]`, which is package-id order, not succession; F-B3
+  MEDIUM the "post-admission" rollback test never crossed admission (the seeded journal collision was rejected by the
+  verified `index()` read before `register()`); F-B7 MEDIUM the operator summary had no enrichment field. F-B1/F-B4
+  INFO: F-2 closed by implementation, operator gate aligned. Report:
+  `temp/codex-uaofoundry-adr0007-ratification-pass-b-001.md`.
+- **Remediation (third commit):** shared `scripts/enrich/bundle_lib.py` — `current_occurrence` selects by
+  `currentVariant` and fails closed on unreconciled variants (both bundle builders use it; `occurrences` order is
+  never succession); `split_paraphrases` classifies provider claims by content-token overlap with the restated
+  assertions (default threshold 0.5, `--paraphrase-threshold`), the bundle builder refuses paraphrases and only an
+  explicit `--accept-paraphrase <candidateId>` keeps one, recorded in `authorityNotes`; `SourcePool` merges source ids
+  by origin — registry sources first under their package, a colliding live source is renamed `<id>--live-<pkg>` with
+  its claim/evidence references rewritten, registry packages sharing an id are shared only when their sha256 agrees.
+  The rollback test now makes the journal directory unwritable so `register()` succeeds and only the ENRICH record
+  write fails (package removed, index byte-identical, no journal entry, and the same enrichment succeeds afterwards).
+  The console report carries `existingIdentitiesEnriched` and `enrichedIdentities`, emitted only when non-empty so
+  non-enrichment reports keep their bytes. 13 Python unit tests for the helper.

@@ -186,6 +186,50 @@ class OperatorConsoleTest {
                 "a manufacture has one evidence source, not two");
     }
 
+    @Test
+    void anEnrichmentIsReportedAsEnrichedNotAsReusedOrNew() throws Exception {
+        // Codex pass-B F-B7: an enrichment-only manufacture used to report "0 reused, 0 new" and nothing else.
+        Path registry = temp.resolve("registry");
+        Result first = run("manufacture", "electric motor", "--registry", registry.toString(),
+                "--fixture", DEMO.resolve("electric-motor.json").toString(), "--register", "--json");
+        assertEquals(0, first.exit(), first.err());
+        Map<String,Object> plain = object(Json.parse(first.out()));
+        assertFalse(counts(first).containsKey("existingIdentitiesEnriched"), "non-enrichment reports keep their prior keys");
+        assertFalse(plain.containsKey("enrichedIdentities"));
+        String motorUid = String.valueOf(identityByKey(new FoundryRegistry(registry, Path.of("schemas")).index(), "foundry:v0.1:machine:electric-motor").get("uid"));
+
+        // A strict superset of the motor: every registered claim verbatim plus one more sourced statement.
+        Map<String,Object> fixture = object(FileOps.readJson(DEMO.resolve("electric-motor.json")));
+        Map<String,Object> candidates = object(fixture.get("candidates"));
+        Map<String,Object> claim = new java.util.LinkedHashMap<>();
+        claim.put("candidateId", "clm-motor-enriched"); claim.put("subjectIdentityRef", "cid-motor");
+        claim.put("statement", "Fixture assertion: the electric motor entry gained a second sourced statement.");
+        claim.put("channels", List.of("foundry")); claim.put("sourceRefs", List.of("src-motor"));
+        array(candidates.get("claims")).add(claim);
+        Map<String,Object> evidence = new java.util.LinkedHashMap<>();
+        evidence.put("evidenceId", "ev-motor-enriched"); evidence.put("sourceRef", "src-motor"); evidence.put("supportsCandidateRef", "clm-motor-enriched");
+        evidence.put("extract", "Synthetic fixture evidence for the enriching assertion."); evidence.put("locatorWithinSource", "sentence-9");
+        array(candidates.get("evidence")).add(evidence);
+        Path superset = temp.resolve("electric-motor-enriched.json");
+        FileOps.writeJson(superset, fixture);
+
+        Result enriched = run("manufacture", "electric motor", "--registry", registry.toString(),
+                "--fixture", superset.toString(), "--enrich", motorUid, "--json");
+        assertEquals(0, enriched.exit(), enriched.err());
+        Map<String,Object> report = object(Json.parse(enriched.out()));
+        Map<String,Object> counts = counts(enriched);
+        assertEquals(1, intOf(counts, "existingIdentitiesEnriched"));
+        assertEquals(List.of(motorUid), report.get("enrichedIdentities"));
+        assertEquals(2, intOf(counts, "existingIdentitiesReused"), "rotor and stator are restated unchanged");
+        assertEquals(0, intOf(counts, "newIdentitiesManufactured"), "an enrichment manufactures nothing new");
+        assertEquals("NOT_REQUESTED", report.get("registryAdmission"), "--enrich never admits by itself; RegistryApplication enrich does");
+
+        Result human = run("manufacture", "electric motor", "--registry", registry.toString(),
+                "--fixture", superset.toString(), "--enrich", motorUid);
+        assertEquals(0, human.exit(), human.err());
+        assertTrue(human.out().lines().anyMatch(l -> l.matches("\\s*Existing identities enriched\\s+1 \\(" + motorUid + "\\)")), human.out());
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private Result run(String... args) {
