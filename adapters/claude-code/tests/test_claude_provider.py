@@ -165,6 +165,22 @@ class ClaudeProviderAdapterTest(unittest.TestCase):
     def test_ephemeral_resolution_key_fails_closed(self):
         proc=self.run_adapter(protocol("alpha object"),"ephemeral-key"); self.assertNotEqual(0,proc.returncode); self.assertIn("ephemeral",proc.stderr.lower())
 
+    def test_enrichment_targets_lift_the_no_new_claim_rule_for_named_identities_only(self):
+        # ADR-0007 (Codex pass-E F-E4): without targets the adapter forbids new claims on reused identities; with
+        # constraints.enrichmentTargets it demands verbatim restatement PLUS new sourced claims for exactly those uids.
+        module = load_adapter_module()
+        base = {"protocolVersion": "x", "request": {"identitySeed": "s"}, "registryContext": {"matches": []},
+                "constraints": {"canonicalWriteAllowed": False, "responseRole": "INTERMEDIATE_PROVIDER_BUNDLE_ONLY"}}
+        plain = module._build_prompt(base, [], False)
+        self.assertNotIn("ENRICHMENT TARGETS", plain)
+        named = json.loads(json.dumps(base)); named["constraints"]["enrichmentTargets"] = ["uao-0123456789ab"]
+        prompt = module._build_prompt(named, [], False)
+        self.assertIn("ENRICHMENT TARGETS (ADR-0007): the registered identities uao-0123456789ab", prompt)
+        self.assertIn("ADD new sourced claims", prompt); self.assertIn("overrides the no-new-claim rule for these identities only", prompt)
+        bad = json.loads(json.dumps(base)); bad["constraints"]["enrichmentTargets"] = ["not-a-uid"]
+        with self.assertRaises(SystemExit):
+            module._build_prompt(bad, [], False)
+
     def test_typed_relationships_pass_only_under_a_declared_edition(self):
         edition=str(REPO_ROOT/"config"/"relationship-types"/"foundry-exp002.json")
         # The CLI schema the fake asserts against is the edition-aware composition.

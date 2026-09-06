@@ -115,7 +115,8 @@ public final class OperatorConsole {
             registryContext = registry.discoveryContext(discoveryQuery, options.catalogLimit());
             registryContextHash = Hashes.canonicalJson(registryContext);
             provider = new RegistryAwareCommandProvider(options.providerCommand(), request, schemaDir,
-                    Duration.ofSeconds(options.timeoutSeconds()), registryContext, options.registry());
+                    Duration.ofSeconds(options.timeoutSeconds()), registryContext, options.registry(),
+                    new ArrayList<>(new java.util.TreeSet<>(options.enrich())));
         }
 
         FoundryPipeline pipeline = registry == null

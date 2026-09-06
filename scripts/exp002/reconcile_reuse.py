@@ -18,7 +18,7 @@ relationships bind both. The refused package stays on disk as evidence of what t
 from __future__ import annotations
 import argparse, json, pathlib, re, subprocess, sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "enrich"))
-from bundle_lib import current_occurrence, SourcePool, registry_source, disambiguate_ids
+from bundle_lib import current_occurrence, SourcePool, restate_identity
 
 def load(p): return json.loads(pathlib.Path(p).read_text())
 def slug(s): return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
@@ -36,32 +36,19 @@ def main():
     registered_cids = {}
     # F-B6: registry sources are installed first under their package of origin; a live source that reuses a registered id is
     # renamed (with its references) instead of standing in for registry bytes behind restated claims.
-    pool = SourcePool()
+    pool = SourcePool(); restated_uids = set()
     taken_claims = {cl["candidateId"] for cl in cands["claims"]}; taken_evidence = {ev["evidenceId"] for ev in cands["evidence"]}
     for c in cands["identities"]:
         ident = by_key.get(c["resolutionKey"])
         if not ident: continue
-        occ = current_occurrence(ident); rp = registry / "packages" / occ["packageId"]   # F-B2: the CURRENT variant, never occurrences[0]
-        rcands = load(rp / "candidate-identities.json"); rclaims = load(rp / "candidate-claims.json"); rev = load(rp / "candidate-evidence.json"); rsnap = load(rp / "provider-snapshot.json")
-        rsources = load(rp / "source-registry.json")["sources"]
-        rc = next(x for x in rcands if x["resolutionKey"] == c["resolutionKey"])
-        # restate the identity verbatim (root flag is this bundle's decision, everything else is the registry's)
-        c.update({k: rc[k] for k in rc if k not in ("candidateId", "root")})
-        registered_cids[c["candidateId"]] = rc["candidateId"]
-        pkg_claims, pkg_evidence = [], []
-        for cl in rclaims:
-            if cl["subjectIdentityRef"] != rc["candidateId"]: continue
-            cl2 = dict(cl); cl2["subjectIdentityRef"] = c["candidateId"]; pkg_claims.append(cl2)
-            for ev in rev:
-                if ev["supportsCandidateRef"] == cl["candidateId"]: pkg_evidence.append(dict(ev))
-        for s in rsources:
-            pool.install(registry_source(s, occ["packageId"], rsnap["fixedClock"]), occ["packageId"], [c] + pkg_claims + pkg_evidence, sha256=s.get("sha256"))
-        notes += disambiguate_ids(pkg_claims, pkg_evidence, taken_claims, taken_evidence, occ["packageId"])
-        keep_claims += pkg_claims; keep_evidence += pkg_evidence
-        restated.append(f"{c['label']} ({c['resolutionKey']}) restated verbatim from {occ['packageId']} (variant {occ['semanticVariantDigest'][:12]}…)")
+        occ = current_occurrence(ident)   # F-B2/F-C1: the CURRENT variant of a single-variant identity, never occurrences[0]
+        registered_cids[c["candidateId"]] = ident["uid"]
+        # restate the identity verbatim, once per identity even when several live candidates share its key (F-E3)
+        pkg_claims, pkg_evidence, pkg_notes = restate_identity(registry, ident, occ, c, pool, taken_claims, taken_evidence, restated_uids)
+        keep_claims += pkg_claims; keep_evidence += pkg_evidence; notes += pkg_notes
+        restated.append(pkg_notes[-1])
     live_records = [c for c in cands["identities"] if c["candidateId"] not in registered_cids] + cands["claims"] + cands["evidence"] + cands.get("relationships", [])
-    for s in bundle["sources"]:
-        pool.install(s, f"live-{refused_id[-8:]}", live_records)
+    pool.install_origin(f"live-{refused_id[-8:]}", bundle["sources"], live_records)
     new_sources = pool.sources
     # drop the provider's own claims/evidence about registered identities
     dropped = [cl for cl in cands["claims"] if cl["subjectIdentityRef"] in registered_cids]
@@ -75,7 +62,7 @@ def main():
     for cl in cands["claims"]:
         assert cl["candidateId"] not in seen, cl["candidateId"]; seen.add(cl["candidateId"])
     bundle["sources"] = list(new_sources.values())
-    bundle["sourceStrategy"]["authorityNotes"] += [f"Reconciled from refused live package {refused_id} (SEMANTIC_VARIANT_DIVERGENCE): registered identities restated verbatim over registry:// sources; provider claims about them dropped ({len(dropped)}); new identities, claims, evidence and relationship candidates kept as produced. No additional provider call."] + restated + pool.notes() + notes
+    bundle["sourceStrategy"]["authorityNotes"] += [f"Reconciled from refused live package {refused_id} (SEMANTIC_VARIANT_DIVERGENCE): registered identities restated verbatim over registry:// sources; provider claims about them dropped ({len(dropped)}); new identities, claims, evidence and relationship candidates kept as produced. No additional provider call."] + pool.notes() + notes
     path = out / f"{slug(bundle['identitySeed'])}-reconciled.json"; path.write_text(json.dumps(bundle, indent=2, ensure_ascii=False) + "\n")
     print(f"{bundle['identitySeed']}: restated {len(restated)}, dropped provider claims {len(dropped)}, new claims {len(kept_new_claims)}, relationships {len(cands['relationships'])}, sources {len(bundle['sources'])} → {path}")
     for n in restated: print("   ", n)

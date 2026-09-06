@@ -1,33 +1,33 @@
 """Shared registry-reading helpers for the 0-provider-call bundle builders
 (scripts/exp002/reconcile_reuse.py, scripts/enrich/build_enrichment_bundle.py).
 
-Written for the Codex pass-B refusal of ADR-0007 (temp/codex-uaofoundry-adr0007-ratification-pass-b-001.md):
-  F-B2  a reader that takes ``occurrences[0]`` can restate a SUPERSEDED variant (occurrences are sorted by
-        package id, not succession) → ``current_occurrence`` selects by ``currentVariant`` and fails closed;
-  F-B5  exact-string novelty lets a paraphrase of a prior assertion count as enrichment → ``split_paraphrases``
-        classifies near-duplicates by content-token overlap and the caller refuses them unless overridden;
-  F-B6  a live source whose id collides with a registered source silently substitutes provenance →
-        ``SourcePool`` renames the LIVE side on collision and rewrites its claim/evidence references,
-        so historical claims keep binding to registry bytes.
-Codex pass C (temp/codex-uaofoundry-adr0007-ratification-pass-c-001.md) tightened all three:
-  F-C1  ``current_occurrence`` also refuses any identity whose ``semanticVariantStatus`` is not SINGLE_VARIANT;
-  F-C3  lexical overlap cannot prove semantic novelty, so ``split_paraphrases`` is a TRIAGE AID only — the bundle
-        builder admits a new assertion only when the operator names it (``--accept``);
-  F-C4  ``SourcePool.install`` rewrites ``sourceRefs``/``sourceRef`` in EVERY record handed to it (identities,
-        claims, evidence, relationships) and re-installing an already-renamed origin is idempotent.
+Written for the Codex refusals of ADR-0007 (temp/codex-uaofoundry-adr0007-ratification-pass-{b,c,d,e}-001.md):
+  F-B2/F-C1  ``current_occurrence`` selects the CURRENT variant by ``currentVariant`` and refuses any identity whose
+             ``semanticVariantStatus`` is not SINGLE_VARIANT (``occurrences`` order is package-id order, never succession);
+  F-B5/F-C3  lexical overlap cannot prove semantic novelty, so ``split_paraphrases`` is a TRIAGE AID only -- the bundle
+             builder admits a new assertion only when the operator names it (``--accept``);
+  F-B6/F-C4/F-D1/F-E1  ``SourcePool.install_origin`` is TWO-PHASE: every source of one origin is planned first (an id is
+             reused only for the same bytes; a colliding id gets a distinct deterministic name that also avoids the
+             origin's own ids), and only then is every reference in the origin's records rewritten exactly once through
+             that plan -- so chained rewrites cannot move a reference twice, whatever the installation order;
+  F-D2/F-E2/F-E3  ``restate_identity`` copies a registered identity from ALL the registry package's candidates that share
+             its resolution key, once per identity, so neither builder drops or duplicates registered assertions.
 No provider calls, no registry writes.
 """
 from __future__ import annotations
-import re
+import json, pathlib, re
 
-# ----------------------------------------------------------------------------------------------- F-B2
+def load(p): return json.loads(pathlib.Path(p).read_text())
+
+# ----------------------------------------------------------------------------------------------- current variant
 
 def current_occurrence(identity: dict) -> dict:
     """The occurrence carrying the identity's CURRENT semantic variant.
 
     ``currentVariant`` is the only succession pointer the registry exposes (ADR-0007); ``occurrences`` is ordered by
-    package id, which says nothing about which state is current. Without ``currentVariant`` the identity must be
-    single-variant, in which case every occurrence carries the same state and the first is as good as any.
+    package id, which says nothing about which state is current. The registry's own verdict on the identity
+    (``semanticVariantStatus``) outranks any pointer. Without a pointer the identity must carry one digest, in which
+    case every occurrence is the same state and the first is as good as any.
     """
     uid = identity.get("uid", "?"); occurrences = identity.get("occurrences") or []
     if not occurrences: raise ValueError(f"{uid} has no occurrences")
@@ -44,7 +44,7 @@ def current_occurrence(identity: dict) -> dict:
         raise ValueError(f"{uid} has {len(digests)} unreconciled semantic variants and no currentVariant; reconcile before restating it")
     return occurrences[0]
 
-# ----------------------------------------------------------------------------------------------- F-B5
+# ----------------------------------------------------------------------------------------------- paraphrase triage
 
 _STOP = {"a", "an", "the", "of", "in", "on", "at", "to", "for", "and", "or", "by", "with", "as", "is", "was", "were", "be",
          "been", "it", "its", "that", "this", "which", "who", "whom", "from", "into", "than", "then", "he", "she", "they",
@@ -68,11 +68,8 @@ def similarity(a: str, b: str) -> float:
     return 1.0 if not union else len(ta & tb) / len(union)
 
 def split_paraphrases(new_claims: list[dict], restated_statements, threshold: float = PARAPHRASE_THRESHOLD):
-    """Partition provider claims into (genuine, paraphrases).
-
-    A claim is a paraphrase when its content tokens overlap a restated statement at or above ``threshold`` (or
-    equal it exactly). ``paraphrases`` items are ``(claim, nearest_restated_statement, score)``.
-    """
+    """Partition provider claims into (genuine, paraphrases) for REVIEW ONLY; ``paraphrases`` items are
+    ``(claim, nearest_restated_statement, score)``. This is a triage aid: lexical overlap proves nothing about novelty."""
     restated = list(restated_statements); genuine, paraphrases = [], []
     for cl in new_claims:
         stmt = cl["statement"]
@@ -85,58 +82,63 @@ def split_paraphrases(new_claims: list[dict], restated_statements, threshold: fl
         else: genuine.append(cl)
     return genuine, paraphrases
 
-# ----------------------------------------------------------------------------------------------- F-B6
+# ----------------------------------------------------------------------------------------------- sources
 
 class SourcePool:
     """Source ids from different origins (the live package, each registry package) merged without substitution.
 
-    ``install`` keeps the first source under an id; a later source with the same id from a DIFFERENT origin is
-    renamed ``<id>--<origin>`` and every ``sourceRefs`` list / ``sourceRef`` field in the records supplied with it is
-    rewritten -- identities, claims, evidence and relationships alike. An existing id is reused only for the SAME
-    BYTES (equal registry sha256, or an identical source record): re-installing the same source is idempotent, two
-    registry snapshots of one document are shared, and everything else gets a distinct, deterministic id.
+    ``install_origin`` takes EVERY source of one origin at once. Phase 1 plans an id for each: an existing id is
+    reused only for the same bytes (equal registry sha256, or an identical source record); otherwise the source gets
+    ``<id>--<origin>`` (then ``-2``, ``-3``…) skipping ids already in the pool with different bytes AND ids the origin
+    itself declares, so a package legitimately carrying both ``src-x`` and ``src-x--live-abc`` keeps both. Phase 2
+    rewrites every ``sourceRefs`` list / ``sourceRef`` field in the origin's records exactly once through that plan,
+    so no reference can be moved twice whatever the installation order. Re-installing an origin is idempotent.
     """
     def __init__(self):
         self.sources: dict[str, dict] = {}; self._origin: dict[str, str] = {}; self._sha: dict[str, str | None] = {}
         self._content: dict[str, str] = {}; self.renames: list[tuple[str, str, str]] = []
 
     @staticmethod
-    def rewrite(records, old: str, new: str) -> int:
-        """Rewrite every reference to ``old`` in ``records`` (any dict carrying ``sourceRefs`` or ``sourceRef``). Returns the count."""
-        n = 0
-        for r in records:
-            refs = r.get("sourceRefs")
-            if isinstance(refs, list) and old in refs: r["sourceRefs"] = [new if x == old else x for x in refs]; n += 1
-            if r.get("sourceRef") == old: r["sourceRef"] = new; n += 1
-        return n
-
-    @staticmethod
     def _content_key(source: dict, sha256: str | None) -> str:
         """What makes two sources 'the same bytes': the registry's sha256 when it has one, else the whole source record."""
-        import json
         return "sha:" + sha256 if sha256 else "rec:" + json.dumps({k: v for k, v in source.items() if k != "sourceId"}, sort_keys=True, ensure_ascii=False)
+
+    def _same_bytes(self, existing: str, key: str, sha256: str | None) -> bool:
+        if self._content[existing] == key: return True
+        return sha256 is not None and self._sha[existing] is not None and sha256 == self._sha[existing]
 
     def _store(self, sid: str, source: dict, origin: str, sha256: str | None, key: str):
         self.sources[sid] = source; self._origin[sid] = origin; self._sha[sid] = sha256; self._content[sid] = key
 
-    def install(self, source: dict, origin: str, records, sha256: str | None = None) -> str:
-        sid = source["sourceId"]; records = list(records); key = self._content_key(source, sha256)
-        # Codex pass D F-D1: "same origin" is never enough on its own -- a live package may legitimately carry both
-        # src-x and src-x--live-<suffix> as DISTINCT sources. An id is reused only for the same bytes.
-        def same_bytes(existing: str) -> bool:
-            if self._content[existing] == key: return True
-            return sha256 is not None and self._sha[existing] is not None and sha256 == self._sha[existing]
-        if sid not in self.sources:
-            self._store(sid, source, origin, sha256, key); return sid
-        if same_bytes(sid): return sid
-        new_id = f"{sid}--{origin}"; n = 1
-        while new_id in self.sources:
-            if same_bytes(new_id): self.rewrite(records, sid, new_id); return new_id
-            n += 1; new_id = f"{sid}--{origin}-{n}"      # different bytes under the renamed id too: keep it distinct, deterministically
-        renamed = dict(source); renamed["sourceId"] = new_id
-        self._store(new_id, renamed, origin, sha256, key)
-        self.rewrite(records, sid, new_id)
-        self.renames.append((sid, new_id, origin)); return new_id
+    @staticmethod
+    def apply(records, mapping: dict[str, str]) -> int:
+        """Rewrite each reference once: ``ref -> mapping.get(ref, ref)``. Returns the number of records touched."""
+        n = 0
+        for r in records:
+            refs = r.get("sourceRefs")
+            if isinstance(refs, list) and any(x in mapping for x in refs): r["sourceRefs"] = [mapping.get(x, x) for x in refs]; n += 1
+            if r.get("sourceRef") in mapping: r["sourceRef"] = mapping[r["sourceRef"]]; n += 1
+        return n
+
+    def install_origin(self, origin: str, sources: list[dict], records, sha256_of: dict[str, str] | None = None) -> dict[str, str]:
+        sha256_of = sha256_of or {}; declared = {s["sourceId"] for s in sources}
+        if len(declared) != len(sources): raise ValueError(f"origin {origin} declares a duplicate source id")
+        mapping: dict[str, str] = {}
+        for source in sources:                                       # phase 1: plan every id before touching a reference
+            sid = source["sourceId"]; sha = sha256_of.get(sid) or source.get("sha256"); key = self._content_key(source, sha)
+            if sid not in self.sources: self._store(sid, source, origin, sha, key); mapping[sid] = sid; continue
+            if self._same_bytes(sid, key, sha): mapping[sid] = sid; continue
+            cand = f"{sid}--{origin}"; n = 1
+            while True:
+                if cand in self.sources:
+                    if self._same_bytes(cand, key, sha): break                     # the same bytes already live here
+                elif cand not in declared:                                         # free, and not one of the origin's own ids
+                    renamed = dict(source); renamed["sourceId"] = cand; self._store(cand, renamed, origin, sha, key)
+                    self.renames.append((sid, cand, origin)); break
+                n += 1; cand = f"{sid}--{origin}-{n}"
+            mapping[sid] = cand
+        self.apply(list(records), {k: v for k, v in mapping.items() if k != v})   # phase 2: one pass, no chaining
+        return mapping
 
     def notes(self) -> list[str]:
         return [f"source id collision: {old} from {origin} renamed {new}; the id stays bound to the bytes first installed under it" for old, new, origin in self.renames]
@@ -170,3 +172,33 @@ def disambiguate_ids(pkg_claims: list[dict], pkg_evidence: list[dict], taken_cla
             ev["evidenceId"] = new; notes.append(f"evidence id collision: {eid} from {origin} renamed {new}")
         taken_evidence_ids.add(ev["evidenceId"])
     return notes
+
+# ----------------------------------------------------------------------------------------------- restatement
+
+def restate_identity(registry: pathlib.Path, ident: dict, occ: dict, c: dict, pool: SourcePool,
+                     taken_claims: set, taken_evidence: set, restated_uids: set) -> tuple[list[dict], list[dict], list[str]]:
+    """Restate the registered identity ``ident`` (current occurrence ``occ``) into live candidate ``c``, verbatim.
+
+    The registry package may hold SEVERAL candidates with this resolution key (the pipeline maps them all to one
+    UAO): the identity fields come from the first, the claims and evidence from ALL of them. Claims are copied once
+    per identity (``restated_uids``), so a second live candidate for the same identity restates nothing again.
+    The package's sources are installed under the package id as origin. Returns (claims, evidence, notes).
+    """
+    rp = registry / "packages" / occ["packageId"]
+    rcs = [x for x in load(rp / "candidate-identities.json") if x["resolutionKey"] == c["resolutionKey"]]
+    if not rcs: raise ValueError(f"{occ['packageId']} carries no candidate with resolution key {c['resolutionKey']}")
+    c.update({k: rcs[0][k] for k in rcs[0] if k not in ("candidateId", "root")})
+    rsnap = load(rp / "provider-snapshot.json"); pkg_claims, pkg_evidence, notes = [], [], []
+    if ident["uid"] not in restated_uids:
+        restated_uids.add(ident["uid"]); rc_ids = {x["candidateId"] for x in rcs}
+        evidence = load(rp / "candidate-evidence.json")
+        for cl in load(rp / "candidate-claims.json"):
+            if cl["subjectIdentityRef"] not in rc_ids: continue
+            cl2 = dict(cl); cl2["subjectIdentityRef"] = c["candidateId"]; pkg_claims.append(cl2)
+            pkg_evidence += [dict(ev) for ev in evidence if ev["supportsCandidateRef"] == cl["candidateId"]]
+    rsources = load(rp / "source-registry.json")["sources"]
+    pool.install_origin(occ["packageId"], [registry_source(s, occ["packageId"], rsnap["fixedClock"]) for s in rsources],
+                        [c] + pkg_claims + pkg_evidence, sha256_of={s["sourceId"]: s.get("sha256") for s in rsources})
+    notes += disambiguate_ids(pkg_claims, pkg_evidence, taken_claims, taken_evidence, occ["packageId"])
+    notes.append(f"{c['label']} ({c['resolutionKey']}) restated verbatim from {occ['packageId']} (variant {occ['semanticVariantDigest'][:12]}…, {len(rcs)} registry candidate(s), {len(pkg_claims)} assertion(s))")
+    return pkg_claims, pkg_evidence, notes

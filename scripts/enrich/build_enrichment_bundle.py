@@ -20,7 +20,7 @@ the package and records the operation as one fail-closed step. Run from the Foun
 from __future__ import annotations
 import argparse, json, pathlib, re, subprocess, sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from bundle_lib import current_occurrence, split_paraphrases, SourcePool, registry_source, PARAPHRASE_THRESHOLD, validate_threshold, similarity, disambiguate_ids
+from bundle_lib import current_occurrence, split_paraphrases, SourcePool, PARAPHRASE_THRESHOLD, validate_threshold, similarity, restate_identity
 
 def load(p): return json.loads(pathlib.Path(p).read_text())
 def fail(msg): print(msg, file=sys.stderr); sys.exit(2)
@@ -61,26 +61,13 @@ def main():
         ident = by_key.get(c["resolutionKey"])
         if not ident: continue
         o = occ if ident["uid"] == a.uid else current_occurrence(ident)
-        rp = registry / "packages" / o["packageId"]
-        rc = next(x for x in load(rp / "candidate-identities.json") if x["resolutionKey"] == c["resolutionKey"])
-        c.update({k: rc[k] for k in rc if k not in ("candidateId", "root")}); registered_cids[c["candidateId"]] = ident["uid"]
+        registered_cids[c["candidateId"]] = ident["uid"]
         if ident["uid"] == a.uid: target_cids.add(c["candidateId"])
-        rsnap = load(rp / "provider-snapshot.json"); pkg_claims, pkg_evidence = [], []
-        if ident["uid"] not in restated_uids:
-            restated_uids.add(ident["uid"])
-            for cl in load(rp / "candidate-claims.json"):
-                if cl["subjectIdentityRef"] != rc["candidateId"]: continue
-                cl2 = dict(cl); cl2["subjectIdentityRef"] = c["candidateId"]; pkg_claims.append(cl2)
-                pkg_evidence += [dict(ev) for ev in load(rp / "candidate-evidence.json") if ev["supportsCandidateRef"] == cl["candidateId"]]
-        for src in load(rp / "source-registry.json")["sources"]:
-            pool.install(registry_source(src, o["packageId"], rsnap["fixedClock"]), o["packageId"], [c] + pkg_claims + pkg_evidence, sha256=src.get("sha256"))
-        notes += disambiguate_ids(pkg_claims, pkg_evidence, taken_claims, taken_evidence, o["packageId"])
-        claims += pkg_claims; evidence += pkg_evidence
-        notes.append(f"{c['label']} ({c['resolutionKey']}) restated verbatim from {o['packageId']} (variant {o['semanticVariantDigest'][:12]}…)")
+        pkg_claims, pkg_evidence, pkg_notes = restate_identity(registry, ident, o, c, pool, taken_claims, taken_evidence, restated_uids)
+        claims += pkg_claims; evidence += pkg_evidence; notes += pkg_notes
     if not target_cids: fail(f"the live package proposes no candidate with {a.uid}'s resolution key ({target['resolutionKey']})")
     live_records = [c for c in cands["identities"] if c["candidateId"] not in registered_cids] + cands["claims"] + cands["evidence"] + cands.get("relationships", [])
-    for src in bundle["sources"]:
-        pool.install(src, f"live-{live_id[-8:]}", live_records)
+    pool.install_origin(f"live-{live_id[-8:]}", bundle["sources"], live_records)
     restated_texts = {cl["statement"] for cl in claims if cl["subjectIdentityRef"] in target_cids}
     # provider claims about the TARGET: every one is listed for review; only operator-named ones (--accept) are admitted (F-C3).
     # provider claims about other registered identities → dropped (reconcile law); about new identities → kept.

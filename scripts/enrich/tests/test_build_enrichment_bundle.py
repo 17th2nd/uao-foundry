@@ -4,19 +4,26 @@ threshold bounds, source-id and claim-id collisions. No jar, no provider."""
 import json, pathlib, subprocess, sys, tempfile, unittest
 HERE = pathlib.Path(__file__).resolve().parent; BUILDER = HERE.parent / "build_enrichment_bundle.py"
 V0 = "a" * 64; UID = "uao-000000000001"; KEY = "ext:wikidata:Q1"; PKG = "pkg-0000000000000001"; LIVE = "pkg-1111111111111111"
-BIRTH = "Norbert Wiener was born on 26 November 1894 in Columbia, Missouri, USA."; DEATH = "Norbert Wiener died on 18 March 1964 in Stockholm, Sweden."
+BIRTH = "Norbert Wiener was born on 26 November 1894 in Columbia, Missouri, USA."; DEATH = "Norbert Wiener died on 18 March 1964 in Stockholm, Sweden."; MIT = "Wiener was a professor of mathematics at MIT."
 
 def write(p, obj): p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(obj, indent=1))
 
-def make_registry(root):
+def make_registry(root, second_candidate=False):
+    """A one-package registry holding Wiener with two assertions; with second_candidate=True the package also carries a
+    second candidate for the SAME resolution key (the pipeline maps both to one UAO) with a third assertion."""
     reg = root / "registry"; pk = reg / "packages" / PKG
     write(reg / "index.json", {"registryVersion": "0.1.0", "packages": [PKG], "identityOperations": [], "identities": [
         {"uid": UID, "resolutionKey": KEY, "semanticVariantStatus": "SINGLE_VARIANT", "occurrences": [{"packageId": PKG, "canonicalPath": "packages/x", "semanticVariantDigest": V0, "stateVersion": "0.1.0"}]}]})
-    write(pk / "candidate-identities.json", [{"candidateId": "cid-root", "root": True, "label": "Norbert Wiener", "aliases": [], "resolutionKey": KEY, "externalIdentifiers": {"wikidata": "Q1"}, "sourceRefs": ["src-wikidata"]}])
-    write(pk / "candidate-claims.json", [{"candidateId": "clm-birth", "subjectIdentityRef": "cid-root", "statement": BIRTH, "channels": ["biography"], "sourceRefs": ["src-wikidata"]},
-                                          {"candidateId": "clm-death", "subjectIdentityRef": "cid-root", "statement": DEATH, "channels": ["biography"], "sourceRefs": ["src-wikidata"]}])
-    write(pk / "candidate-evidence.json", [{"evidenceId": "ev-birth", "sourceRef": "src-wikidata", "supportsCandidateRef": "clm-birth", "extract": "born 1894", "locatorWithinSource": "p1"},
-                                            {"evidenceId": "ev-death", "sourceRef": "src-wikidata", "supportsCandidateRef": "clm-death", "extract": "died 1964", "locatorWithinSource": "p2"}])
+    idents = [{"candidateId": "cid-root", "root": True, "label": "Norbert Wiener", "aliases": [], "resolutionKey": KEY, "externalIdentifiers": {"wikidata": "Q1"}, "sourceRefs": ["src-wikidata"]}]
+    claims = [{"candidateId": "clm-birth", "subjectIdentityRef": "cid-root", "statement": BIRTH, "channels": ["biography"], "sourceRefs": ["src-wikidata"]},
+              {"candidateId": "clm-death", "subjectIdentityRef": "cid-root", "statement": DEATH, "channels": ["biography"], "sourceRefs": ["src-wikidata"]}]
+    evidence = [{"evidenceId": "ev-birth", "sourceRef": "src-wikidata", "supportsCandidateRef": "clm-birth", "extract": "born 1894", "locatorWithinSource": "p1"},
+                {"evidenceId": "ev-death", "sourceRef": "src-wikidata", "supportsCandidateRef": "clm-death", "extract": "died 1964", "locatorWithinSource": "p2"}]
+    if second_candidate:
+        idents.append({"candidateId": "cid-root-2", "root": False, "label": "N. Wiener", "aliases": [], "resolutionKey": KEY, "externalIdentifiers": {"wikidata": "Q1"}, "sourceRefs": ["src-wikidata"]})
+        claims.append({"candidateId": "clm-mit", "subjectIdentityRef": "cid-root-2", "statement": MIT, "channels": ["biography"], "sourceRefs": ["src-wikidata"]})
+        evidence.append({"evidenceId": "ev-mit", "sourceRef": "src-wikidata", "supportsCandidateRef": "clm-mit", "extract": "MIT", "locatorWithinSource": "p3"})
+    write(pk / "candidate-identities.json", idents); write(pk / "candidate-claims.json", claims); write(pk / "candidate-evidence.json", evidence)
     write(pk / "source-registry.json", {"sources": [{"sourceId": "src-wikidata", "locator": "https://www.wikidata.org/wiki/Q1", "snapshotPath": "source-corpus/src-wikidata.txt", "sha256": "1" * 64}]})
     write(pk / "provider-snapshot.json", {"fixedClock": "2026-01-01T00:00:00Z"})
     return reg
@@ -70,6 +77,32 @@ class Builder(unittest.TestCase):
         ids = [x["candidateId"] for x in c["claims"]]; self.assertIn("clm-a", ids); self.assertIn("clm-b", ids)
         self.assertEqual(1, sum(1 for x in c["claims"] if x["statement"] == BIRTH), "registered assertions restated once, not once per candidate")
         self.assertIn("2 new assertion(s) admitted", " ".join(bundle(self.out)["sourceStrategy"]["authorityNotes"]))
+    def test_registry_assertions_from_every_registry_candidate_are_restated(self):
+        # Codex pass E F-E2: the registry package holds two candidates for the key; all three registered assertions must be restated.
+        self.tmp.cleanup(); self.tmp = tempfile.TemporaryDirectory(); self.root = pathlib.Path(self.tmp.name); self.reg = make_registry(self.root, second_candidate=True); self.out = self.root / "out"
+        live = make_live(self.root, [claim("clm-new", "Wiener published Cybernetics in 1948.")])
+        r = run(self.reg, live, self.out, "--accept", "clm-new"); self.assertEqual(0, r.returncode, r.stderr); c = bundle(self.out)["candidates"]
+        self.assertEqual({BIRTH, DEATH, MIT, "Wiener published Cybernetics in 1948."}, {x["statement"] for x in c["claims"]})
+        self.assertEqual(1, len({x["subjectIdentityRef"] for x in c["claims"]}), "all restated onto the one live candidate")
+        self.assertEqual(3, sum(1 for e in c["evidence"] if e["evidenceId"].startswith("ev-") and e["supportsCandidateRef"] in {"clm-birth", "clm-death", "clm-mit"}))
+        self.assertIn("2 registry candidate(s), 3 assertion(s)", " ".join(bundle(self.out)["sourceStrategy"]["authorityNotes"]))
+
+    def test_explicit_generated_namespace_source_keeps_its_own_references_through_the_builder(self):
+        # Codex pass E F-E1: the live package carries src-wikidata (collides with the registry) AND an explicit
+        # src-wikidata--live-<suffix>; each live claim must end up on the bytes it cited, in either declaration order.
+        suffix = LIVE[-8:]; explicit_id = f"src-wikidata--live-{suffix}"
+        for order in ("base-first", "explicit-first"):
+            self.tmp.cleanup(); self.tmp = tempfile.TemporaryDirectory(); self.root = pathlib.Path(self.tmp.name); self.reg = make_registry(self.root); self.out = self.root / "out"
+            base = {"sourceId": "src-wikidata", "locator": "https://live/base", "sourceClass": "web", "retrievedAt": "2026-02-01T00:00:00Z", "license": "CC0", "content": "BASE BYTES"}
+            explicit = {"sourceId": explicit_id, "locator": "https://live/explicit", "sourceClass": "web", "retrievedAt": "2026-02-01T00:00:00Z", "license": "CC0", "content": "EXPLICIT BYTES"}
+            live = make_live(self.root, [claim("clm-a", "Wiener published Cybernetics in 1948.", refs=("src-wikidata",)), claim("clm-b", "Wiener received the National Medal of Science in 1963.", refs=(explicit_id,))],
+                             sources=[base, explicit] if order == "base-first" else [explicit, base])
+            r = run(self.reg, live, self.out, "--accept", "clm-a", "--accept", "clm-b"); self.assertEqual(0, r.returncode, r.stderr); b = bundle(self.out)
+            content = {s["sourceId"]: s.get("content") for s in b["sources"]}
+            ref_a = next(x for x in b["candidates"]["claims"] if x["candidateId"] == "clm-a")["sourceRefs"]; ref_b = next(x for x in b["candidates"]["claims"] if x["candidateId"] == "clm-b")["sourceRefs"]
+            self.assertEqual(["BASE BYTES"], [content[x] for x in ref_a], order); self.assertEqual(["EXPLICIT BYTES"], [content[x] for x in ref_b], order)
+            self.assertTrue(next(s for s in b["sources"] if s["sourceId"] == "src-wikidata")["locator"].startswith("registry://"), order)
+
     def test_exact_restatement_cannot_be_attested(self):
         live = make_live(self.root, [claim("clm-same", BIRTH)])
         r = run(self.reg, live, self.out, "--accept", "clm-same")

@@ -1,0 +1,9 @@
+You are the independent, read-only ratifier for the UAO Foundry programme (Claude implements, Codex ratifies, git/runtime is authority). Pass E on branch feature/enrichment-operation: review `git diff HEAD~5 HEAD` (all five commits of ADR-0007) with emphasis on the fifth commit, which remediates your pass-D refusal (temp/codex-uaofoundry-adr0007-ratification-pass-d-001.md, findings F-D1, F-D2, F-D3, F-D5).
+
+Ratify or refuse, citing file:line you have read yourself:
+1. F-D1: in scripts/enrich/bundle_lib.py SourcePool.install, is an existing id now reused ONLY for the same bytes (equal registry sha256 or an identical source record), in every branch including the generated-namespace collision you reproduced (a live package carrying both src-x and src-x--live-<suffix>), in either installation order? Any path where distinct bytes share an id, or where a reference ends up on the wrong source?
+2. F-D2: does scripts/enrich/build_enrichment_bundle.py treat every live candidate that resolves to the target as the target for review and --accept, and restate the registry's assertions once per identity rather than once per candidate? Any duplicate or dropped claim?
+3. F-D3: is a refusal now write-free, including the output directory, and does the test prove it?
+4. Are the counts and text in docs/ADR-0007-IDENTITY-ENRICHMENT.md accurate against what you can run (`python3 -m unittest discover -s scripts/enrich/tests`, expected 33) and `git diff --check HEAD~5 HEAD`?
+5. Any defect the author missed across the whole ADR-0007 change set.
+Output: verdict line (RATIFIED / RATIFIED WITH CONDITIONS / REFUSED), findings F-E1.. with severity and file:line, one-paragraph closure. Do not modify any file.

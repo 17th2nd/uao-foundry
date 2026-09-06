@@ -184,6 +184,29 @@ class SemanticDeltaTest {
         assertTrue(ex.getMessage().contains("Registry evidence hash mismatch"), ex.getMessage());
     }
 
+    @Test
+    void enrichmentTargetsReachTheProviderOnlyWhenNamed() throws Exception {
+        // ADR-0007 (Codex pass-E F-E4): the live acquisition path can only add new claims to a registered
+        // identity if the provider is told which identities are being enriched.
+        Path registryRoot = temp.resolve("registry-enrich");
+        FoundryRegistry registry = new FoundryRegistry(registryRoot, SCHEMAS);
+        registry.register(manufactureFixture("cow", "biological-cow.json", "prior-enrich").packagePath());
+        RequestLoader loader = new RequestLoader(SCHEMAS.resolve("manufacturing-request.schema.json"));
+        ManufacturingRequest request = loader.fromSeed("cow", "en", "experimental");
+        Map<String,Object> context = registry.discoveryContext("cow", 10);
+        Path bundle = FIXTURES.resolve("biological-cow.json");
+
+        Path plain = temp.resolve("input-plain.json");
+        new RegistryAwareCommandProvider(providerScript(bundle, plain), request, SCHEMAS, java.time.Duration.ofSeconds(30), context, registryRoot);
+        assertFalse(object(object(FileOps.readJson(plain)).get("constraints")).containsKey("enrichmentTargets"), "non-enrichment envelopes keep their prior shape");
+
+        Path named = temp.resolve("input-named.json");
+        new RegistryAwareCommandProvider(providerScript(bundle, named), request, SCHEMAS, java.time.Duration.ofSeconds(30), context, registryRoot,
+                List.of("uao-bbbbbbbbbbbb", "uao-aaaaaaaaaaaa", "uao-bbbbbbbbbbbb"));
+        assertEquals(List.of("uao-aaaaaaaaaaaa", "uao-bbbbbbbbbbbb"), object(object(FileOps.readJson(named)).get("constraints")).get("enrichmentTargets"),
+                "targets are carried sorted and de-duplicated");
+    }
+
     private PipelineResult manufactureFixture(String seed, String fixture, String suffix) {
         return manufactureFixture(seed, FIXTURES.resolve(fixture), suffix);
     }

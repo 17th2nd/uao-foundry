@@ -129,3 +129,23 @@ identity is derivable from bytes alone.
   treats every live candidate resolving to the target as the target for review and attestation, and restates the
   registry's assertions once per identity, not once per candidate. Nothing is written, not even the output directory,
   unless a bundle is built. Python 33/33.
+- **Codex pass E (2026-09-07, read-only, on af79005): REFUSED** — F-E1 HIGH the collision rewrite was applied per source
+  to the same record list, so with `src-x` declared before an explicit `src-x--live-<suffix>` a reference was moved
+  twice and ended on the wrong bytes; F-E2 MEDIUM the builder restated only the FIRST registry candidate for a key,
+  dropping assertions held by a second candidate of the same identity; F-E3 MEDIUM `reconcile_reuse.py` restated an
+  identity once per live candidate, duplicating its assertions; F-E4 MEDIUM the live adapter's "add no new claim to a
+  reused identity" rule contradicted this ADR's live acquisition path and the protocol carried no enrichment intent;
+  F-E5 LOW the whitespace fix in af79005 was a no-op and the ADR's fifth-remediation prose overstated closure. F-E6:
+  F-D3 closed. Report: `temp/codex-uaofoundry-adr0007-ratification-pass-e-001.md`. The pass-D remediation entry above
+  stands as written at the time; pass E shows F-D1 and F-D2 were only partly closed by it.
+- **Remediation (sixth commit):** `SourcePool.install_origin` is two-phase — every source of one origin is planned
+  first (an id is reused only for the same bytes; a colliding id gets a distinct deterministic name that also avoids
+  the origin's own declared ids), and only then is each reference in the origin's records rewritten exactly once
+  through that plan, so no rewrite can chain whatever the declaration order. One shared `restate_identity` now serves
+  both builders: identity fields from the first registry candidate for the key, claims and evidence from ALL of them,
+  copied once per identity. The provider protocol carries `constraints.enrichmentTargets` (the `--enrich` uids, sorted,
+  absent when empty) from `RegistryAwareCommandProvider`, and the adapter demands verbatim restatement PLUS new sourced
+  claims for exactly those uids while keeping the no-new-claim rule for every other reused identity. Trailing
+  whitespace actually removed. Python 36/36 (helper, builder-level and reconcile-level tests on the synthetic
+  registry) + adapter 14/14; Java 182/182, 0 skipped. ⚠ The jar was not rebuilt in this commit (a live batch was using
+  it); the console `--enrich` live acquisition path needs the rebuilt jar before its first use.

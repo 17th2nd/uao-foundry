@@ -24,6 +24,7 @@ public final class RegistryAwareCommandProvider implements FoundryProvider {
     private static final long MAX_STDERR_BYTES = 256L * 1024L;
 
     private final Path source;
+    private final List<String> enrichmentTargets;
     private final Map<String,Object> bundle;
     private final String hash;
     private final String name;
@@ -31,6 +32,20 @@ public final class RegistryAwareCommandProvider implements FoundryProvider {
 
     public RegistryAwareCommandProvider(Path command, ManufacturingRequest request, Path schemaDir,
                                         Duration timeout, Map<String,Object> registryContext, Path registryRoot) {
+        this(command, request, schemaDir, timeout, registryContext, registryRoot, List.of());
+    }
+
+    /**
+     * ADR-0007 (Codex pass-E F-E4): a live acquisition that is meant to enrich registered identities must
+     * tell the provider so. {@code enrichmentTargets} are the uids the operator named with {@code --enrich};
+     * the protocol carries them under {@code constraints.enrichmentTargets} (absent when empty, so every
+     * non-enrichment envelope keeps its prior bytes) and the adapter lifts its "add no new claim to a
+     * reused identity" rule for exactly those identities.
+     */
+    public RegistryAwareCommandProvider(Path command, ManufacturingRequest request, Path schemaDir,
+                                        Duration timeout, Map<String,Object> registryContext, Path registryRoot,
+                                        List<String> enrichmentTargets) {
+        this.enrichmentTargets = enrichmentTargets == null ? List.of() : enrichmentTargets.stream().distinct().sorted().toList();
         this.source = command.toAbsolutePath().normalize();
         if (!Files.isRegularFile(source)) throw new IllegalArgumentException("Provider command is not a regular file: " + source);
         if (!Files.isExecutable(source)) throw new IllegalArgumentException("Provider command is not executable: " + source);
@@ -114,6 +129,7 @@ public final class RegistryAwareCommandProvider implements FoundryProvider {
         constraints.put("responseSchema", "fixture-bundle.schema.json");
         constraints.put("responseRole", "INTERMEDIATE_PROVIDER_BUNDLE_ONLY");
         constraints.put("reusePreference", "REUSE_VERIFIED_REGISTRY_IDENTITIES_BEFORE_NEW_ACQUISITION");
+        if (!enrichmentTargets.isEmpty()) constraints.put("enrichmentTargets", new ArrayList<Object>(enrichmentTargets));
         Map<String,Object> envelope = new LinkedHashMap<>();
         envelope.put("protocolVersion", PROTOCOL_VERSION);
         envelope.put("request", request.toMap());
