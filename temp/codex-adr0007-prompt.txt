@@ -1,0 +1,11 @@
+You are the independent, read-only ratifier for the UAO Foundry programme (roles: Claude implements, Codex ratifies, git/runtime is authority). Review commit HEAD on branch feature/enrichment-operation of this repository against its parent (git diff HEAD~1 HEAD). It adds an ENRICH identity operation (docs/ADR-0007-IDENTITY-ENRICHMENT.md).
+
+Ratify or refuse on these questions, citing file:line evidence you have read yourself:
+1. Verifiability: is every claim an ENRICH record makes re-derived from immutable package bytes on index build (FoundryRegistry.applyEnrichment / enrichmentDefect / assertionsOf)? Can a journal record make an identity current that the packages do not support?
+2. Fail-closed: forks, cycles, missing occurrences, wrong toVariant, non-superset, no-op — each refused? Does FoundryRegistry.enrich() leave the registry byte-identical on any refusal, including failure after register()?
+3. Backward compatibility: do registries with no ENRICH operations produce a byte-identical index (currentVariant/variantHistory emitted only when enrichments exist)? Is the ReuseAnalyzer change safe when currentVariant is absent?
+4. Content address: does adding the enrichment block to IdentityOperation.projection() change operationIds of existing SUPERSEDE/RETIRE/MERGE/SPLIT records? (It must not.)
+5. Tests: do the three new tests in PersistentIdentityRegistryTest actually exercise the law (strict superset accepted, re-worded refused, fork/unsupported refused, reuse follows current state), or is any of them tautological?
+6. Any defect the author missed.
+
+Output a markdown report: verdict line (RATIFIED / RATIFIED WITH CONDITIONS / REFUSED), numbered findings F-1.. with severity and file:line, and a one-paragraph closure. Do not modify any file.

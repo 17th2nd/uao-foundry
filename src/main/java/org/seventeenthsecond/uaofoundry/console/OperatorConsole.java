@@ -129,7 +129,8 @@ public final class OperatorConsole {
         if (registry != null) {
             ReuseAnalyzer analyzer = new ReuseAnalyzer(schemaDir);
             reuse = analyzer.analyze(preIndex, options.registry(), result.packagePath(),
-                    registryContextHash == null ? Hashes.canonicalJson(preIndex) : registryContextHash);
+                    registryContextHash == null ? Hashes.canonicalJson(preIndex) : registryContextHash,
+                    new java.util.LinkedHashSet<>(options.enrich()));
             new SchemaValidator().validate(reuse, schemaDir.resolve("reuse-report.schema.json")).requireValid("Reuse report");
         }
 
@@ -540,6 +541,8 @@ public final class OperatorConsole {
         out.println();
         out.println("  manufacture <identity expression> [--registry <path>] [--fixture <bundle> | --provider <command>]");
         out.println("                                   [--register] [--context <keywords>] [--json]");
+        out.println("                                   [--enrich <uid>]...  accept a strict-superset restatement of a registered identity");
+        out.println("                                                        (ADR-0007); admit the result with RegistryApplication enrich");
         out.println("  search      <query>              --registry <path> [--json]");
         out.println("  identity    <uid|key|scheme:id|alias>  --registry <path> [--json]");
         out.println("  status                           --registry <path> [--json]");

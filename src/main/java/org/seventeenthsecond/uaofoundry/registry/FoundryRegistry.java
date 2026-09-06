@@ -274,8 +274,13 @@ public final class FoundryRegistry {
         if (identity == null) throw new IllegalArgumentException("Resolved identity is absent from the registry index: " + resolution.uid());
 
         List<Object> assertions = List.of();
+        // An enriched identity keeps its superseded occurrences as history; only the current variant's
+        // assertions are the identity's state (ADR-0007). Without enrichment every occurrence shares one
+        // variant and any of them is representative.
+        Object currentVariant = identity.get("currentVariant");
         for (Object raw : array(identity.get("occurrences"), "registry identity occurrences")) {
             Map<String,Object> occurrence = object(raw, "registry identity occurrence");
+            if (currentVariant instanceof String cv && !cv.equals(occurrence.get("semanticVariantDigest"))) continue;
             Path canonical = root.resolve(string(occurrence.get("canonicalPath"), "canonicalPath")).normalize();
             if (!canonical.startsWith(packageRoot)) throw new IllegalArgumentException("Occurrence path escapes the registry package root.");
             for (Object rawUao : array(FileOps.readJson(canonical), "canonical identities")) {
@@ -285,7 +290,6 @@ public final class FoundryRegistry {
                     break;
                 }
             }
-            // Every occurrence shares one semantic variant here, so the first is representative.
             if (!assertions.isEmpty()) break;
         }
         return SignificanceInputs.export(identity, assertions);
@@ -652,7 +656,7 @@ public final class FoundryRegistry {
      * The enrichment law, stated once: the newer assertion set is a strict superset of the older one.
      * Returns a defect description, or {@code null} when the law holds.
      */
-    static String enrichmentDefect(Set<String> older, Set<String> newer) {
+    public static String enrichmentDefect(Set<String> older, Set<String> newer) {
         List<String> missing = older.stream().filter(a -> !newer.contains(a)).toList();
         if (!missing.isEmpty()) {
             return "the newer variant drops or re-words " + missing.size() + " of " + older.size()
@@ -713,12 +717,19 @@ public final class FoundryRegistry {
         String defect = enrichmentDefect(older, newer);
         if (defect != null) throw new IllegalArgumentException("ENRICH refused for " + uid + ": " + defect);
 
+        // The operation record is built — and its metadata validated — BEFORE anything is written, so a
+        // blank justification or empty reason list is refused while the registry is still untouched.
+        String packageId = string(object(FileOps.readJson(packageDir.resolve("manifest.json")), "manifest").get("packageId"), "manifest.packageId");
+        IdentityOperation operation = IdentityOperation.enrich(uid, from, to, packageId, reasonCodes, justification, authority, recordedAt);
+
         RegistrationResult registration = register(packageDir);
-        IdentityOperation operation = IdentityOperation.enrich(uid, from, to, registration.packageId(), reasonCodes, justification, authority, recordedAt);
         try {
+            if (!registration.packageId().equals(packageId)) throw new IllegalArgumentException("Registered package id differs from the candidate manifest: " + registration.packageId());
             OperationResult recorded = applyIdentityOperation(operation);
             return new EnrichmentResult(registration, recorded, from, to, newer.size() - older.size());
         } catch (RuntimeException ex) {
+            // Anything after admission fails closed: a package this call copied in is removed and the
+            // index restored, so the registry is byte-identical to its state before the call.
             if (!registration.alreadyPresent()) {
                 FileOps.deleteTree(registration.registryPath());
                 FileOps.writeJson(indexPath, before);

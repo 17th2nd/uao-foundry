@@ -15,7 +15,7 @@ import java.util.List;
 record Options(List<String> positionals, Path registry, Path schemaDir, Path workDir, Path distDir,
                Path fixture, Path providerCommand, Path runStore, String context, String language, String profile,
                String repositoryCommit, String explicitClock, int catalogLimit, int timeoutSeconds,
-               boolean register, boolean json, Path relationshipEdition) {
+               boolean register, boolean json, Path relationshipEdition, List<String> enrich) {
 
     static Options parse(String[] args) {
         List<String> positionals = new ArrayList<>();
@@ -26,6 +26,7 @@ record Options(List<String> positionals, Path registry, Path schemaDir, Path wor
         String context = null, language = "en", profile = "experimental", repositoryCommit = "local", clock = null;
         int catalogLimit = 5000, timeoutSeconds = 900;
         boolean register = false, json = false;
+        List<String> enrich = new ArrayList<>();
 
         for (int i = 0; i < args.length; i++) {
             String token = args[i];
@@ -50,6 +51,7 @@ record Options(List<String> positionals, Path registry, Path schemaDir, Path wor
                 case "--relationship-edition" -> relationshipEdition = Path.of(value);
                 case "--clock" -> clock = value;
                 case "--context" -> context = value;
+                case "--enrich" -> enrich.add(value);
                 case "--language" -> language = value;
                 case "--profile" -> profile = value;
                 case "--repository-commit" -> repositoryCommit = value;
@@ -61,9 +63,13 @@ record Options(List<String> positionals, Path registry, Path schemaDir, Path wor
         if (fixture != null && providerCommand != null) {
             throw new IllegalArgumentException("--fixture and --provider are mutually exclusive; a manufacture has one evidence source.");
         }
+        if (!enrich.isEmpty() && register) {
+            throw new IllegalArgumentException("--enrich and --register are mutually exclusive; an enriching package is admitted through `RegistryApplication enrich`, which records the operation.");
+        }
+        if (!enrich.isEmpty() && registry == null) throw new IllegalArgumentException("--enrich requires --registry.");
         return new Options(List.copyOf(positionals), registry, schemaDir, workDir, distDir, fixture, providerCommand,
                 runStore, context, language, profile, repositoryCommit, clock, catalogLimit, timeoutSeconds,
-                register, json, relationshipEdition);
+                register, json, relationshipEdition, List.copyOf(enrich));
     }
 
     /**

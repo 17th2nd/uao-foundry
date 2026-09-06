@@ -26,6 +26,16 @@ public final class ReuseAnalyzer {
     public ReuseAnalyzer(Path schemaDir) { this.schemaDir = schemaDir.toAbsolutePath().normalize(); }
 
     public Map<String,Object> analyze(Map<String,Object> registryIndex, Path registryRoot, Path packageDir, String registryContextHash) {
+        return analyze(registryIndex, registryRoot, packageDir, registryContextHash, Set.of());
+    }
+
+    /**
+     * {@code enrichmentOf} names registered uids for which a differing variant is accepted <em>if and
+     * only if</em> its assertion set is a strict superset of the current one (ADR-0007). Such an identity
+     * is reported under {@code enrichedUaos}, not {@code reusedUaos}; the registry's {@code enrich}
+     * admission re-derives the same law from bytes before anything is recorded.
+     */
+    public Map<String,Object> analyze(Map<String,Object> registryIndex, Path registryRoot, Path packageDir, String registryContextHash, Set<String> enrichmentOf) {
         Map<String,Map<String,Object>> existing = new TreeMap<>();
         for (Object raw : array(registryIndex.get("identities"), "registry identities")) {
             Map<String,Object> identity = object(raw, "registry identity");
@@ -34,6 +44,7 @@ public final class ReuseAnalyzer {
 
         List<Object> reused = new ArrayList<>();
         List<Object> created = new ArrayList<>();
+        List<Object> enriched = new ArrayList<>();
         for (Object raw : array(FileOps.readJson(packageDir.resolve("canonical-identities.json")), "canonical identities")) {
             Map<String,Object> uao = object(raw, "canonical UAO");
             String uid = string(uao.get("uid"), "uid");
@@ -85,6 +96,21 @@ public final class ReuseAnalyzer {
                 if (!SemanticVariants.SINGLE_VARIANT.equals(status) || priorVariants.size() != 1) {
                     throw new IllegalArgumentException("REGISTRY_VARIANT_INDEX_INVALID: inconsistent semantic variant status for uid " + uid + ".");
                 }
+                if (!priorVariants.contains(semanticVariantDigest) && enrichmentOf.contains(uid)) {
+                    String priorVariant = priorVariants.iterator().next();
+                    Set<String> older = assertionsOf(registryRoot, prior, priorVariant, uid);
+                    Set<String> newer = new LinkedHashSet<>();
+                    for (Object assertion : array(uao.get("assertions"), "canonical UAO assertions")) newer.add(Json.canonical(assertion));
+                    String defect = org.seventeenthsecond.uaofoundry.registry.FoundryRegistry.enrichmentDefect(older, newer);
+                    if (defect != null) {
+                        throw new IllegalArgumentException("ENRICHMENT_NOT_SUPERSET: enrichment refused for uid " + uid + " resolutionKey " + resolutionKey + "; " + defect);
+                    }
+                    item.put("fromVariant", priorVariant);
+                    item.put("assertionsAdded", java.math.BigDecimal.valueOf(newer.size() - older.size()));
+                    item.put("priorOccurrences", deepCopy(prior.get("occurrences")));
+                    enriched.add(item);
+                    continue;
+                }
                 if (!priorVariants.contains(semanticVariantDigest)) {
                     throw new IllegalArgumentException("SEMANTIC_VARIANT_DIVERGENCE: automatic reuse refused for uid "
                             + uid + " resolutionKey " + resolutionKey + "; candidatePackage="
@@ -98,6 +124,12 @@ public final class ReuseAnalyzer {
             }
         }
         reused.sort(Comparator.comparing(v -> string(object(v, "reused identity").get("uid"), "uid")));
+        enriched.sort(Comparator.comparing(v -> string(object(v, "enriched identity").get("uid"), "uid")));
+        for (String uid : enrichmentOf) {
+            if (enriched.stream().noneMatch(v -> uid.equals(object(v, "enriched identity").get("uid")))) {
+                throw new IllegalArgumentException("ENRICHMENT_TARGET_ABSENT: --enrich named " + uid + " but the package does not enrich it (absent, or restated unchanged).");
+            }
+        }
         created.sort(Comparator.comparing(v -> string(object(v, "new identity").get("uid"), "uid")));
 
         List<Object> reusedSources = new ArrayList<>();
@@ -130,6 +162,7 @@ public final class ReuseAnalyzer {
         counts.put("newUaoCount", java.math.BigDecimal.valueOf(created.size()));
         counts.put("registrySourceCount", java.math.BigDecimal.valueOf(reusedSources.size()));
         counts.put("newSourceCount", java.math.BigDecimal.valueOf(newSources.size()));
+        if (!enriched.isEmpty()) counts.put("enrichedUaoCount", java.math.BigDecimal.valueOf(enriched.size()));
 
         Map<String,Object> report = new LinkedHashMap<>();
         report.put("reportVersion", REPORT_VERSION);
@@ -137,6 +170,7 @@ public final class ReuseAnalyzer {
         report.put("registryIndexHash", Hashes.canonicalJson(registryIndex));
         report.put("reusedUaos", reused);
         report.put("newUaos", created);
+        if (!enriched.isEmpty()) report.put("enrichedUaos", enriched);
         report.put("registrySources", reusedSources);
         report.put("newSources", newSources);
         report.put("counts", counts);
@@ -197,6 +231,23 @@ public final class ReuseAnalyzer {
             }
         } catch (Exception ex) { throw new IllegalArgumentException("Unable to rewrite package checksums: " + ex.getMessage(), ex); }
         FileOps.writeText(packageDir.resolve("checksums.sha256"), out.toString());
+    }
+
+    /** Canonical-JSON assertions of the registered occurrence carrying {@code variant}, read from immutable package bytes. */
+    private static Set<String> assertionsOf(Path registryRoot, Map<String,Object> prior, String variant, String uid) {
+        for (Object raw : array(prior.get("occurrences"), "registry identity occurrences")) {
+            Map<String,Object> occurrence = object(raw, "registry identity occurrence");
+            if (!variant.equals(occurrence.get("semanticVariantDigest"))) continue;
+            Path file = registryRoot.toAbsolutePath().normalize().resolve(string(occurrence.get("canonicalPath"), "canonicalPath")).normalize();
+            for (Object rawUao : array(FileOps.readJson(file), "canonical identities")) {
+                Map<String,Object> uao = object(rawUao, "canonical UAO");
+                if (!uid.equals(uao.get("uid"))) continue;
+                Set<String> out = new LinkedHashSet<>();
+                for (Object assertion : array(uao.get("assertions"), "canonical UAO assertions")) out.add(Json.canonical(assertion));
+                return out;
+            }
+        }
+        throw new IllegalArgumentException("REGISTRY_VARIANT_INDEX_INVALID: no readable occurrence carries the current variant of uid " + uid + ".");
     }
 
     private static Object deepCopy(Object value) { return Json.parse(Json.canonical(value)); }

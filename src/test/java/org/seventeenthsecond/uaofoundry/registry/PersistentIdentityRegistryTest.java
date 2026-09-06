@@ -13,9 +13,11 @@ import org.seventeenthsecond.uaofoundry.pipeline.PipelineResult;
 import org.seventeenthsecond.uaofoundry.provider.FixtureProvider;
 import org.seventeenthsecond.uaofoundry.util.FileOps;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -243,29 +245,109 @@ class PersistentIdentityRegistryTest {
     }
 
     @Test
-    void anEnrichmentForkOrAnUnsupportedJournalEntryFailsClosed() {
+    void aGenuineEnrichmentForkInTheJournalFailsTheIndexClosed() {
         PipelineResult t0 = manufacture("enr3-t0", fixture -> {});
         PipelineResult t1 = manufacture("enr3-t1", fixture -> addRootClaim(fixture, "Fixture assertion: branch one."));
         PipelineResult t2 = manufacture("enr3-t2", fixture -> addRootClaim(fixture, "Fixture assertion: branch two."));
         FoundryRegistry registry = registryWith(t0);
         String uid = rootUid(t0);
-        registry.enrich(t1.packagePath(), uid, List.of("LIFE_CHRONOLOGY"), "branch one", "operator", "2026-09-06T00:00:00Z");
+        String v0 = object(array(identityByUid(registry.index(), uid).get("occurrences")).getFirst()).get("semanticVariantDigest").toString();
+        FoundryRegistry.EnrichmentResult first = registry.enrich(t1.packagePath(), uid, List.of("LIFE_CHRONOLOGY"), "branch one", "operator", "2026-09-06T00:00:00Z");
 
-        // A second enrichment leaving the ORIGINAL variant would be a fork. enrich() works from the
-        // current variant, so t2 (which restates t0, not t1) is refused as dropping t1's assertion.
-        IllegalArgumentException fork = assertThrows(IllegalArgumentException.class, () -> registry.enrich(t2.packagePath(), uid,
-                List.of("LIFE_CHRONOLOGY"), "branch two", "operator", "2026-09-06T00:00:00Z"));
-        assertTrue(fork.getMessage().contains("restate every prior assertion verbatim"), fork.getMessage());
+        // Register the second superset as a plain occurrence, then write a second ENRICH leaving v0 straight
+        // into the journal: two successors of one variant is a history that cannot have happened.
+        FoundryRegistry.RegistrationResult second = registry.register(t2.packagePath());
+        String v2 = array(identityByUid(registry.index(), uid).get("occurrences")).stream().map(PersistentIdentityRegistryTest::object)
+                .filter(o -> second.packageId().equals(o.get("packageId"))).map(o -> o.get("semanticVariantDigest").toString()).findFirst().orElseThrow();
+        String before = FileOps.treeHash(registryRoot);
+        IdentityOperation fork = IdentityOperation.enrich(uid, v0, v2, second.packageId(), List.of("LIFE_CHRONOLOGY"), "branch two", "operator", "2026-09-06T00:00:00Z");
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class, () -> registry.applyIdentityOperation(fork));
+        assertTrue(refused.getMessage().contains("two enrichments leaving variant"), refused.getMessage());
+        assertEquals(before, FileOps.treeHash(registryRoot), "a refused journal entry is removed again");
+        assertTrue(registry.verify().passed());
+        Map<String,Object> after = identityByUid(registry.index(), uid);
+        assertEquals(1, array(after.get("variantHistory")).size());
+        assertEquals(first.toVariant(), object(array(after.get("variantHistory")).getFirst()).get("toVariant"), "the accepted succession is untouched by the refused fork");
+        assertEquals(SemanticVariants.MULTIPLE_UNRECONCILED_VARIANTS, after.get("semanticVariantStatus"),
+                "the unlinked second superset is an unreconciled sibling of the enriched state, reported as such");
+        assertNull(after.get("currentVariant"), "with an unreconciled sibling present there is no single current variant to name");
 
-        // A journal entry the packages do not support is refused at admission and never lands.
-        Map<String,Object> identity = identityByUid(registry.index(), uid);
-        String current = identity.get("currentVariant").toString();
-        IdentityOperation bogus = IdentityOperation.enrich(uid, current, "f".repeat(64), "pkg-0000000000000000",
+        // A journal entry the packages do not support never lands either.
+        IdentityOperation bogus = IdentityOperation.enrich(uid, first.toVariant(), "f".repeat(64), "pkg-0000000000000000",
                 List.of("LIFE_CHRONOLOGY"), "unsupported", "operator", "2026-09-06T00:00:00Z");
         IllegalArgumentException unsupported = assertThrows(IllegalArgumentException.class, () -> registry.applyIdentityOperation(bogus));
         assertTrue(unsupported.getMessage().contains("holds no occurrence"), unsupported.getMessage());
         assertTrue(registry.verify().passed());
-        assertEquals(1, array(identity.get("variantHistory")).size());
+    }
+
+    @Test
+    void enrichLeavesTheRegistryByteIdenticalOnRefusalBeforeAndAfterAdmission() throws Exception {
+        PipelineResult t0 = manufacture("enr5-t0", fixture -> {});
+        PipelineResult t1 = manufacture("enr5-t1", fixture -> addRootClaim(fixture, "Fixture assertion: enriched."));
+        FoundryRegistry registry = registryWith(t0);
+        String uid = rootUid(t0);
+        String before = FileOps.treeHash(registryRoot);
+
+        // Before admission: operation metadata is validated first, so a blank justification never writes.
+        IllegalArgumentException blank = assertThrows(IllegalArgumentException.class, () -> registry.enrich(t1.packagePath(), uid,
+                List.of("LIFE_CHRONOLOGY"), "   ", "operator", "2026-09-06T00:00:00Z"));
+        assertTrue(blank.getMessage().contains("justification"), blank.getMessage());
+        assertEquals(before, FileOps.treeHash(registryRoot), "refusal before admission must not touch the registry");
+        assertEquals(1, array(identityByUid(registry.index(), uid).get("occurrences")).size());
+
+        // After admission: pre-seed the journal with a colliding record (same content address, different
+        // content), so registration succeeds and the operation is refused only afterwards. The admitted
+        // package must be rolled back and the index restored.
+        String v0 = object(array(identityByUid(registry.index(), uid).get("occurrences")).getFirst()).get("semanticVariantDigest").toString();
+        String packageId = object(FileOps.readJson(t1.packagePath().resolve("manifest.json"))).get("packageId").toString();
+        String v1 = SemanticVariants.digest(array(FileOps.readJson(t1.packagePath().resolve("canonical-identities.json"))).stream()
+                .map(PersistentIdentityRegistryTest::object).filter(u -> uid.equals(u.get("uid"))).findFirst().orElseThrow());
+        IdentityOperation expected = IdentityOperation.enrich(uid, v0, v1, packageId, List.of("LIFE_CHRONOLOGY"), "collide", "operator", "2026-09-06T00:00:00Z");
+        Path journal = registryRoot.resolve("identity-operations"); Files.createDirectories(journal);
+        Map<String,Object> tampered = new java.util.LinkedHashMap<>(expected.toMap()); tampered.put("justification", "different bytes under the same address");
+        FileOps.writeJson(journal.resolve(expected.operationId() + ".json"), tampered);
+        // The registry is now internally inconsistent, so verify() fails; enrich() must still not compound it.
+        IllegalArgumentException collision = assertThrows(IllegalArgumentException.class, () -> registry.enrich(t1.packagePath(), uid,
+                List.of("LIFE_CHRONOLOGY"), "collide", "operator", "2026-09-06T00:00:00Z"));
+        assertFalse(Files.isDirectory(registryRoot.resolve("packages").resolve(packageId)), "the package admitted before the refusal is rolled back: " + collision.getMessage());
+        Files.delete(journal.resolve(expected.operationId() + ".json"));
+        registry.rebuildAndPersist();
+        assertEquals(before, FileOps.treeHash(registryRoot), "with the seeded collision removed, the registry is byte-identical to before the call");
+        assertTrue(registry.verify().passed());
+    }
+
+    @Test
+    void theReuseAnalyzerAcceptsAnEnrichmentOnlyWhenNamedAndOnlyAsAStrictSuperset() {
+        PipelineResult t0 = manufacture("enr4-t0", fixture -> {});
+        FoundryRegistry registry = registryWith(t0);
+        String uid = rootUid(t0);
+        org.seventeenthsecond.uaofoundry.reuse.ReuseAnalyzer analyzer = new org.seventeenthsecond.uaofoundry.reuse.ReuseAnalyzer(SCHEMAS);
+        String contextHash = org.seventeenthsecond.uaofoundry.util.Hashes.canonicalJson(Map.of("test", "context"));
+
+        PipelineResult superset = manufactureAgainst("enr4-superset", registry, fixture -> addRootClaim(fixture, "Fixture assertion: one more sourced statement."));
+        // Unnamed, a superset is still divergence: enrichment is an operator decision, never a default.
+        IllegalArgumentException unnamed = assertThrows(IllegalArgumentException.class, () -> analyzer.analyze(registry.index(), registryRoot, superset.packagePath(), contextHash));
+        assertTrue(unnamed.getMessage().contains("SEMANTIC_VARIANT_DIVERGENCE"), unnamed.getMessage());
+        // Named, it is reported as an enrichment with the variant it supersedes and the count it adds.
+        Map<String,Object> report = analyzer.analyze(registry.index(), registryRoot, superset.packagePath(), contextHash, Set.of(uid));
+        Map<String,Object> enriched = object(array(report.get("enrichedUaos")).getFirst());
+        assertEquals(uid, enriched.get("uid"));
+        assertEquals(java.math.BigDecimal.ONE, enriched.get("assertionsAdded"));
+        assertEquals(object(array(identityByUid(registry.index(), uid).get("occurrences")).getFirst()).get("semanticVariantDigest"), enriched.get("fromVariant"));
+        assertTrue(array(report.get("reusedUaos")).stream().map(PersistentIdentityRegistryTest::object).noneMatch(v -> uid.equals(v.get("uid"))), "an enriched identity is not also counted as reused");
+
+        // Named but re-worded: refused under the enrichment law, not silently accepted.
+        PipelineResult reworded = manufactureAgainst("enr4-reworded", registry, fixture -> {
+            claim(fixture, "clm-root-scope").put("statement", "Fixture assertion: re-worded.");
+            addRootClaim(fixture, "Fixture assertion: one more sourced statement.");
+        });
+        IllegalArgumentException notSuperset = assertThrows(IllegalArgumentException.class, () -> analyzer.analyze(registry.index(), registryRoot, reworded.packagePath(), contextHash, Set.of(uid)));
+        assertTrue(notSuperset.getMessage().contains("ENRICHMENT_NOT_SUPERSET"), notSuperset.getMessage());
+
+        // Named but unchanged: the flag promised an enrichment the package does not deliver.
+        PipelineResult unchanged = manufactureAgainst("enr4-unchanged", registry, fixture -> {});
+        IllegalArgumentException absent = assertThrows(IllegalArgumentException.class, () -> analyzer.analyze(registry.index(), registryRoot, unchanged.packagePath(), contextHash, Set.of(uid)));
+        assertTrue(absent.getMessage().contains("ENRICHMENT_TARGET_ABSENT"), absent.getMessage());
     }
 
     // ---------------------------------------------------------------- helpers

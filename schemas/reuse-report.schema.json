@@ -4,23 +4,64 @@
   "title": "UAO Foundry Reuse Report",
   "type": "object",
   "additionalProperties": false,
-  "required": ["reportVersion", "registryContextHash", "registryIndexHash", "reusedUaos", "newUaos", "registrySources", "newSources", "counts"],
+  "required": [
+    "reportVersion",
+    "registryContextHash",
+    "registryIndexHash",
+    "reusedUaos",
+    "newUaos",
+    "registrySources",
+    "newSources",
+    "counts"
+  ],
   "properties": {
-    "reportVersion": {"const": "0.1.0"},
-    "registryContextHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-    "registryIndexHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "reportVersion": {
+      "const": "0.1.0"
+    },
+    "registryContextHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "registryIndexHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
     "reusedUaos": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["uid", "resolutionKey", "canonicalLabel", "semanticVariantDigest", "priorOccurrences"],
+        "required": [
+          "uid",
+          "resolutionKey",
+          "canonicalLabel",
+          "semanticVariantDigest",
+          "priorOccurrences"
+        ],
         "properties": {
-          "uid": {"type": "string", "pattern": "^uao-[a-f0-9]{12}$"},
-          "resolutionKey": {"type": "string", "minLength": 1},
-          "canonicalLabel": {"type": "string", "minLength": 1},
-          "semanticVariantDigest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-          "priorOccurrences": {"type": "array", "minItems": 1, "items": {"type": "object"}}
+          "uid": {
+            "type": "string",
+            "pattern": "^uao-[a-f0-9]{12}$"
+          },
+          "resolutionKey": {
+            "type": "string",
+            "minLength": 1
+          },
+          "canonicalLabel": {
+            "type": "string",
+            "minLength": 1
+          },
+          "semanticVariantDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "priorOccurrences": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object"
+            }
+          }
         }
       }
     },
@@ -29,12 +70,29 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["uid", "resolutionKey", "canonicalLabel", "semanticVariantDigest"],
+        "required": [
+          "uid",
+          "resolutionKey",
+          "canonicalLabel",
+          "semanticVariantDigest"
+        ],
         "properties": {
-          "uid": {"type": "string", "pattern": "^uao-[a-f0-9]{12}$"},
-          "resolutionKey": {"type": "string", "minLength": 1},
-          "canonicalLabel": {"type": "string", "minLength": 1},
-          "semanticVariantDigest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+          "uid": {
+            "type": "string",
+            "pattern": "^uao-[a-f0-9]{12}$"
+          },
+          "resolutionKey": {
+            "type": "string",
+            "minLength": 1
+          },
+          "canonicalLabel": {
+            "type": "string",
+            "minLength": 1
+          },
+          "semanticVariantDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
         }
       }
     },
@@ -43,13 +101,34 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["sourceId", "locator", "registryPackageId", "registryPath", "sha256"],
+        "required": [
+          "sourceId",
+          "locator",
+          "registryPackageId",
+          "registryPath",
+          "sha256"
+        ],
         "properties": {
-          "sourceId": {"type": "string", "minLength": 1},
-          "locator": {"type": "string", "minLength": 1},
-          "registryPackageId": {"type": "string", "pattern": "^pkg-[a-f0-9]{16}$"},
-          "registryPath": {"type": "string", "minLength": 1},
-          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+          "sourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "locator": {
+            "type": "string",
+            "minLength": 1
+          },
+          "registryPackageId": {
+            "type": "string",
+            "pattern": "^pkg-[a-f0-9]{16}$"
+          },
+          "registryPath": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
         }
       }
     },
@@ -58,22 +137,102 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["sourceId", "locator"],
+        "required": [
+          "sourceId",
+          "locator"
+        ],
         "properties": {
-          "sourceId": {"type": "string", "minLength": 1},
-          "locator": {"type": "string", "minLength": 1}
+          "sourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "locator": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },
     "counts": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["reusedUaoCount", "newUaoCount", "registrySourceCount", "newSourceCount"],
+      "required": [
+        "reusedUaoCount",
+        "newUaoCount",
+        "registrySourceCount",
+        "newSourceCount"
+      ],
       "properties": {
-        "reusedUaoCount": {"type": "integer", "minimum": 0},
-        "newUaoCount": {"type": "integer", "minimum": 0},
-        "registrySourceCount": {"type": "integer", "minimum": 0},
-        "newSourceCount": {"type": "integer", "minimum": 0}
+        "reusedUaoCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "newUaoCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "registrySourceCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "newSourceCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "enrichedUaoCount": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "enrichedUaos": {
+      "$comment": "ADR-0007. Registered identities this package enriches: a strict superset of their current assertions, accepted only when the operator named them with --enrich. Present only when non-empty.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "uid",
+          "resolutionKey",
+          "canonicalLabel",
+          "semanticVariantDigest",
+          "fromVariant",
+          "assertionsAdded",
+          "priorOccurrences"
+        ],
+        "properties": {
+          "uid": {
+            "type": "string",
+            "pattern": "^uao-[a-f0-9]{12}$"
+          },
+          "resolutionKey": {
+            "type": "string",
+            "minLength": 1
+          },
+          "canonicalLabel": {
+            "type": "string",
+            "minLength": 1
+          },
+          "semanticVariantDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "fromVariant": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "assertionsAdded": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "priorOccurrences": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object"
+            }
+          }
+        }
       }
     }
   }

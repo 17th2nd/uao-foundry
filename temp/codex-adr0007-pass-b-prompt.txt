@@ -1,0 +1,10 @@
+You are the independent, read-only ratifier for the UAO Foundry programme (Claude implements, Codex ratifies, git/runtime is authority). Pass B: review the SECOND commit on branch feature/enrichment-operation (git diff HEAD~1 HEAD), which completes ADR-0007 with the operator path: console `--enrich <uid>` (console/Options.java, OperatorConsole.java), ReuseAnalyzer enrichment acceptance (reuse/ReuseAnalyzer.java: analyze(..., Set<String> enrichmentOf), enrichedUaos, ENRICHMENT_NOT_SUPERSET / ENRICHMENT_TARGET_ABSENT), schemas/reuse-report.schema.json, scripts/enrich/build_enrichment_bundle.py, one new test, ADR text.
+
+Questions, each answered with file:line evidence you read yourself:
+1. Is the analyzer's acceptance exactly the same law as FoundryRegistry.enrichmentDefect (strict superset, verbatim canonical-JSON equality), and is it applied ONLY to uids the operator named?
+2. Can --enrich be combined with --register, or otherwise bypass `RegistryApplication enrich`'s re-derivation from bytes?
+3. Does the reuse report stay byte-identical for every non-enrichment manufacture (enrichedUaos / enrichedUaoCount emitted only when non-empty; schema optional)?
+4. build_enrichment_bundle.py: does it restate the target's CURRENT assertions verbatim (currentVariant occurrence), keep only genuinely new claims about the target, drop provider claims about other registered identities, and fail (not silently proceed) when nothing new is added? Any path where a re-worded prior assertion could slip in as "new"?
+5. Is the new test non-tautological?
+6. Any defect the author missed.
+Output: verdict line (RATIFIED / RATIFIED WITH CONDITIONS / REFUSED), findings F-B1.. with severity and file:line, one-paragraph closure. Do not modify any file.
