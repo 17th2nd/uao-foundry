@@ -40,7 +40,7 @@ def main():
     ap.add_argument("--paraphrase-threshold", type=threshold_arg, default=PARAPHRASE_THRESHOLD, help="content-token overlap in [0,1] at or above which a provider claim is FLAGGED as a likely paraphrase in the review listing (triage aid only)")
     ap.add_argument("--accept", action="append", default=[], metavar="CANDIDATE_ID", help="operator attestation: this provider claim about the target adds a fact not already asserted; repeatable. Without it nothing is built.")
     a = ap.parse_args()
-    registry = pathlib.Path(a.registry).resolve(); pkg = pathlib.Path(a.package).resolve(); out = pathlib.Path(a.out); out.mkdir(parents=True, exist_ok=True)
+    registry = pathlib.Path(a.registry).resolve(); pkg = pathlib.Path(a.package).resolve(); out = pathlib.Path(a.out)   # created only when a bundle is written (F-D3)
     index = load(registry / "index.json"); by_key = {i["resolutionKey"]: i for i in index["identities"]}; by_uid = {i["uid"]: i for i in index["identities"]}
     target = by_uid.get(a.uid) or fail(f"{a.uid} is not a registered identity")
     if target["semanticVariantStatus"] != "SINGLE_VARIANT": fail(f"{a.uid} has unreconciled variants; reconcile before enriching")
@@ -49,7 +49,9 @@ def main():
     snap = load(pkg / "provider-snapshot.json"); live_id = load(pkg / "manifest.json")["packageId"]
     bundle = json.loads(json.dumps(snap)); cands = bundle["candidates"]
     claims, evidence, notes = [], [], []
-    target_cid = None; registered_cids = {}
+    # Codex pass D F-D2: several live candidates may resolve to one registered identity (same resolution key); every
+    # one of them is "the target" for review, and the registry's assertions are restated once per identity.
+    target_cids = set(); registered_cids = {}; restated_uids = set()
     # F-B6: one pool for every source id. Registry sources are installed first, each under its own package as origin, so a
     # live source that reuses a registered id is renamed (with its claim/evidence references) rather than substituting bytes
     # behind historical claims; registry packages that share an id with different bytes are separated the same way.
@@ -62,25 +64,27 @@ def main():
         rp = registry / "packages" / o["packageId"]
         rc = next(x for x in load(rp / "candidate-identities.json") if x["resolutionKey"] == c["resolutionKey"])
         c.update({k: rc[k] for k in rc if k not in ("candidateId", "root")}); registered_cids[c["candidateId"]] = ident["uid"]
-        if ident["uid"] == a.uid: target_cid = c["candidateId"]
+        if ident["uid"] == a.uid: target_cids.add(c["candidateId"])
         rsnap = load(rp / "provider-snapshot.json"); pkg_claims, pkg_evidence = [], []
-        for cl in load(rp / "candidate-claims.json"):
-            if cl["subjectIdentityRef"] != rc["candidateId"]: continue
-            cl2 = dict(cl); cl2["subjectIdentityRef"] = c["candidateId"]; pkg_claims.append(cl2)
-            pkg_evidence += [dict(ev) for ev in load(rp / "candidate-evidence.json") if ev["supportsCandidateRef"] == cl["candidateId"]]
+        if ident["uid"] not in restated_uids:
+            restated_uids.add(ident["uid"])
+            for cl in load(rp / "candidate-claims.json"):
+                if cl["subjectIdentityRef"] != rc["candidateId"]: continue
+                cl2 = dict(cl); cl2["subjectIdentityRef"] = c["candidateId"]; pkg_claims.append(cl2)
+                pkg_evidence += [dict(ev) for ev in load(rp / "candidate-evidence.json") if ev["supportsCandidateRef"] == cl["candidateId"]]
         for src in load(rp / "source-registry.json")["sources"]:
             pool.install(registry_source(src, o["packageId"], rsnap["fixedClock"]), o["packageId"], [c] + pkg_claims + pkg_evidence, sha256=src.get("sha256"))
         notes += disambiguate_ids(pkg_claims, pkg_evidence, taken_claims, taken_evidence, o["packageId"])
         claims += pkg_claims; evidence += pkg_evidence
         notes.append(f"{c['label']} ({c['resolutionKey']}) restated verbatim from {o['packageId']} (variant {o['semanticVariantDigest'][:12]}…)")
-    if target_cid is None: fail(f"the live package proposes no candidate with {a.uid}'s resolution key ({target['resolutionKey']})")
+    if not target_cids: fail(f"the live package proposes no candidate with {a.uid}'s resolution key ({target['resolutionKey']})")
     live_records = [c for c in cands["identities"] if c["candidateId"] not in registered_cids] + cands["claims"] + cands["evidence"] + cands.get("relationships", [])
     for src in bundle["sources"]:
         pool.install(src, f"live-{live_id[-8:]}", live_records)
-    restated_texts = {cl["statement"] for cl in claims if cl["subjectIdentityRef"] == target_cid}
+    restated_texts = {cl["statement"] for cl in claims if cl["subjectIdentityRef"] in target_cids}
     # provider claims about the TARGET: every one is listed for review; only operator-named ones (--accept) are admitted (F-C3).
     # provider claims about other registered identities → dropped (reconcile law); about new identities → kept.
-    about_target = [cl for cl in cands["claims"] if cl["subjectIdentityRef"] == target_cid]
+    about_target = [cl for cl in cands["claims"] if cl["subjectIdentityRef"] in target_cids]
     _, flagged = split_paraphrases(about_target, restated_texts, a.paraphrase_threshold); flagged_ids = {cl["candidateId"] for cl, _, _ in flagged}
     def nearest(stmt):
         best = max(restated_texts, key=lambda r: similarity(stmt, r), default=None); return best, (similarity(stmt, best) if best else 0.0)
@@ -98,7 +102,7 @@ def main():
     accepted = [(cl, near, score) for cl, near, score in review if cl["candidateId"] in a.accept]
     not_accepted = [cl for cl in about_target if cl["candidateId"] not in a.accept]
     new_target = [cl for cl, _, _ in accepted]
-    dropped = len(not_accepted) + sum(1 for cl in cands["claims"] if cl["subjectIdentityRef"] in registered_cids and cl["subjectIdentityRef"] != target_cid)
+    dropped = len(not_accepted) + sum(1 for cl in cands["claims"] if cl["subjectIdentityRef"] in registered_cids and cl["subjectIdentityRef"] not in target_cids)
     new_target += [cl for cl in cands["claims"] if cl["subjectIdentityRef"] not in registered_cids]
     kept_ids = {cl["candidateId"] for cl in new_target} | {c["candidateId"] for c in cands["identities"]}
     cands["claims"] = new_target + claims
@@ -107,11 +111,11 @@ def main():
     for cl in cands["claims"]:
         if cl["candidateId"] in seen: fail(f"duplicate claim id after disambiguation: {cl['candidateId']}")
         seen.add(cl["candidateId"])
-    added = sum(1 for cl in new_target if cl["subjectIdentityRef"] == target_cid)
+    added = sum(1 for cl in new_target if cl["subjectIdentityRef"] in target_cids)
     if added == 0: fail("no accepted assertion about the target survived; nothing to enrich")
     bundle["sources"] = list(pool.sources.values())
     bundle["sourceStrategy"]["authorityNotes"] += [f"ENRICHMENT bundle (ADR-0007) for {a.uid} from live package {live_id}: registered assertions restated verbatim over registry:// sources; {added} new assertion(s) admitted by operator attestation (--accept), {len(not_accepted)} provider claim(s) about the target not accepted; other registered identities restated verbatim, provider claims about them dropped. Novelty is the operator's attestation, not a computation. No additional provider call."] + notes + pool.notes() + [f"operator attested {cl['candidateId']} adds a fact (overlap {score:.2f} with nearest registered assertion{', flagged PARAPHRASE? at threshold ' + str(a.paraphrase_threshold) if cl['candidateId'] in flagged_ids else ''})" for cl, _, score in accepted]
-    path = out / f"{slug(bundle['identitySeed'])}-enrichment.json"; path.write_text(json.dumps(bundle, indent=2, ensure_ascii=False) + "\n")
+    out.mkdir(parents=True, exist_ok=True); path = out / f"{slug(bundle['identitySeed'])}-enrichment.json"; path.write_text(json.dumps(bundle, indent=2, ensure_ascii=False) + "\n")
     print(f"{a.uid}: current variant {current[:12]}…, restated {len(restated_texts)} assertion(s), +{added} attested new, {len(not_accepted)} not accepted, {len(pool.renames)} source id(s) renamed, bundle → {path}")
     if not a.run: return
     dist = out / "dist"; work = out / "work"

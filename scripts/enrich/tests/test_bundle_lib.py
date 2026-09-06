@@ -82,8 +82,27 @@ class Sources(unittest.TestCase):
         pool = SourcePool()
         pool.install({"sourceId": "src-x"}, "pkg-a", [], sha256="1" * 64)
         r1 = [{"candidateId": "c1", "sourceRefs": ["src-x"]}]; r2 = [{"candidateId": "c2", "sourceRefs": ["src-x"]}]
-        first = pool.install({"sourceId": "src-x"}, "pkg-b", r1, sha256="2" * 64); second = pool.install({"sourceId": "src-x"}, "pkg-b", r2, sha256="2" * 64)
+        first = pool.install({"sourceId": "src-x"}, "pkg-b", r1, sha256="2" * 64); second = pool.install({"sourceId": "src-x"}, "pkg-b", r2, sha256="2" * 64)   # same bytes: idempotent
         self.assertEqual(first, second); self.assertEqual(["src-x--pkg-b"], r2[0]["sourceRefs"]); self.assertEqual(1, len(pool.renames)); self.assertEqual(2, len(pool.sources))
+    def test_an_explicit_source_in_the_generated_namespace_is_never_collapsed(self):
+        # Codex pass D F-D1: a live package may carry both src-x and src-x--live-abc as distinct sources; renaming the
+        # live src-x must not land on (or discard) the explicit one, in either installation order.
+        for order in ("explicit-first", "base-first"):
+            pool = SourcePool(); pool.install({"sourceId": "src-x", "content": "REG"}, "pkg-a", [], sha256="1" * 64)
+            base = {"sourceId": "src-x", "content": "BASE BYTES"}; explicit = {"sourceId": "src-x--live-abc", "content": "EXPLICIT BYTES"}
+            r_base = [{"candidateId": "c1", "sourceRefs": ["src-x"]}]; r_exp = [{"candidateId": "c2", "sourceRefs": ["src-x--live-abc"]}]
+            seq = [(explicit, r_exp), (base, r_base)] if order == "explicit-first" else [(base, r_base), (explicit, r_exp)]
+            ids = [pool.install(src, "live-abc", recs) for src, recs in seq]
+            contents = {s["sourceId"]: s["content"] for s in pool.sources.values()}
+            self.assertEqual({"REG", "EXPLICIT BYTES", "BASE BYTES"}, set(contents.values()), order); self.assertEqual(3, len(contents), order)
+            self.assertEqual("REG", contents["src-x"], order)
+            self.assertEqual("BASE BYTES", contents[r_base[0]["sourceRefs"][0]], order); self.assertEqual("EXPLICIT BYTES", contents[r_exp[0]["sourceRefs"][0]], order)
+            self.assertEqual(2, len(ids)); self.assertNotEqual(ids[0], ids[1], order)
+    def test_same_origin_same_bytes_is_idempotent_but_different_bytes_is_not(self):
+        pool = SourcePool(); a = {"sourceId": "src-x", "content": "A"}
+        self.assertEqual("src-x", pool.install(a, "live-1", [])); self.assertEqual("src-x", pool.install(dict(a), "live-1", []))
+        r = [{"candidateId": "c", "sourceRefs": ["src-x"]}]
+        self.assertEqual("src-x--live-1", pool.install({"sourceId": "src-x", "content": "B"}, "live-1", r)); self.assertEqual(["src-x--live-1"], r[0]["sourceRefs"])
     def test_a_renamed_id_baked_into_a_registered_package_is_shared_on_equal_bytes(self):
         # Macleay reconcile run 63: pkg-062b (registered from an earlier reconciliation) carries src-x--pkg-a with pkg-a's bytes;
         # restating pkg-a itself later must land on that id, not fail.

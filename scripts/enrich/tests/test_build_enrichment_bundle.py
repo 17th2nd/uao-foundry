@@ -48,7 +48,7 @@ class Builder(unittest.TestCase):
         live = make_live(self.root, [claim("clm-new", "Wiener published Cybernetics in 1948."), claim("clm-same", BIRTH)])
         r = run(self.reg, live, self.out)
         self.assertEqual(2, r.returncode, r.stderr); self.assertIn("review required", r.stderr)
-        self.assertIn("[EXACT", r.stdout); self.assertIn("[candidate", r.stdout); self.assertFalse(self.out.exists() and any(self.out.glob("*.json")))
+        self.assertIn("[EXACT", r.stdout); self.assertIn("[candidate", r.stdout); self.assertFalse(self.out.exists(), "a refusal writes nothing, not even the output directory")
 
     def test_operator_attestation_admits_exactly_the_named_claims(self):
         live = make_live(self.root, [claim("clm-new", "Wiener published Cybernetics in 1948."), claim("clm-other", "Wiener taught at MIT."), claim("clm-same", BIRTH)])
@@ -60,6 +60,16 @@ class Builder(unittest.TestCase):
         notes = " ".join(b["sourceStrategy"]["authorityNotes"])
         self.assertIn("operator attested clm-new", notes); self.assertIn("1 new assertion(s) admitted by operator attestation", notes); self.assertIn("2 provider claim(s) about the target not accepted", notes)
 
+    def test_every_candidate_resolving_to_the_target_is_reviewed(self):
+        # Codex pass D F-D2: two live candidates share the target's resolution key; both their claims must be listed and attestable.
+        twin = {"candidateId": "cid-twin", "root": False, "label": "N. Wiener", "aliases": [], "resolutionKey": KEY, "externalIdentifiers": {"wikidata": "Q1"}, "sourceRefs": ["src-wikidata"]}
+        root = {"candidateId": "cid-live-root", "root": True, "label": "Norbert Wiener", "aliases": [], "resolutionKey": KEY, "externalIdentifiers": {"wikidata": "Q1"}, "sourceRefs": ["src-wikidata"]}
+        live = make_live(self.root, [claim("clm-a", "Wiener published Cybernetics in 1948."), claim("clm-b", "Wiener taught at MIT.", subj="cid-twin")], identities=[root, twin])
+        listed = run(self.reg, live, self.out); self.assertEqual(2, listed.returncode); self.assertIn("clm-a", listed.stdout); self.assertIn("clm-b", listed.stdout)
+        r = run(self.reg, live, self.out, "--accept", "clm-a", "--accept", "clm-b"); self.assertEqual(0, r.returncode, r.stderr); c = bundle(self.out)["candidates"]
+        ids = [x["candidateId"] for x in c["claims"]]; self.assertIn("clm-a", ids); self.assertIn("clm-b", ids)
+        self.assertEqual(1, sum(1 for x in c["claims"] if x["statement"] == BIRTH), "registered assertions restated once, not once per candidate")
+        self.assertIn("2 new assertion(s) admitted", " ".join(bundle(self.out)["sourceStrategy"]["authorityNotes"]))
     def test_exact_restatement_cannot_be_attested(self):
         live = make_live(self.root, [claim("clm-same", BIRTH)])
         r = run(self.reg, live, self.out, "--accept", "clm-same")

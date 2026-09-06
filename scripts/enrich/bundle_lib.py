@@ -92,12 +92,13 @@ class SourcePool:
 
     ``install`` keeps the first source under an id; a later source with the same id from a DIFFERENT origin is
     renamed ``<id>--<origin>`` and every ``sourceRefs`` list / ``sourceRef`` field in the records supplied with it is
-    rewritten -- identities, claims, evidence and relationships alike -- unless both are registry snapshots with the
-    same sha256 (the same bytes, safely shared). Re-installing a source from an origin that was already renamed
-    returns the renamed id again instead of failing.
+    rewritten -- identities, claims, evidence and relationships alike. An existing id is reused only for the SAME
+    BYTES (equal registry sha256, or an identical source record): re-installing the same source is idempotent, two
+    registry snapshots of one document are shared, and everything else gets a distinct, deterministic id.
     """
     def __init__(self):
-        self.sources: dict[str, dict] = {}; self._origin: dict[str, str] = {}; self._sha: dict[str, str | None] = {}; self.renames: list[tuple[str, str, str]] = []
+        self.sources: dict[str, dict] = {}; self._origin: dict[str, str] = {}; self._sha: dict[str, str | None] = {}
+        self._content: dict[str, str] = {}; self.renames: list[tuple[str, str, str]] = []
 
     @staticmethod
     def rewrite(records, old: str, new: str) -> int:
@@ -109,21 +110,31 @@ class SourcePool:
             if r.get("sourceRef") == old: r["sourceRef"] = new; n += 1
         return n
 
+    @staticmethod
+    def _content_key(source: dict, sha256: str | None) -> str:
+        """What makes two sources 'the same bytes': the registry's sha256 when it has one, else the whole source record."""
+        import json
+        return "sha:" + sha256 if sha256 else "rec:" + json.dumps({k: v for k, v in source.items() if k != "sourceId"}, sort_keys=True, ensure_ascii=False)
+
+    def _store(self, sid: str, source: dict, origin: str, sha256: str | None, key: str):
+        self.sources[sid] = source; self._origin[sid] = origin; self._sha[sid] = sha256; self._content[sid] = key
+
     def install(self, source: dict, origin: str, records, sha256: str | None = None) -> str:
-        sid = source["sourceId"]; records = list(records)
+        sid = source["sourceId"]; records = list(records); key = self._content_key(source, sha256)
+        # Codex pass D F-D1: "same origin" is never enough on its own -- a live package may legitimately carry both
+        # src-x and src-x--live-<suffix> as DISTINCT sources. An id is reused only for the same bytes.
+        def same_bytes(existing: str) -> bool:
+            if self._content[existing] == key: return True
+            return sha256 is not None and self._sha[existing] is not None and sha256 == self._sha[existing]
         if sid not in self.sources:
-            self.sources[sid] = source; self._origin[sid] = origin; self._sha[sid] = sha256; return sid
-        if self._origin[sid] == origin: return sid
-        if sha256 is not None and self._sha[sid] is not None and sha256 == self._sha[sid]: return sid
+            self._store(sid, source, origin, sha256, key); return sid
+        if same_bytes(sid): return sid
         new_id = f"{sid}--{origin}"; n = 1
         while new_id in self.sources:
-            # already renamed for this origin (idempotent), or the same bytes registered under that renamed id by an
-            # earlier reconciled package (Macleay run 63: a renamed id baked into a registered package re-collides)
-            if self._origin[new_id] == origin or (sha256 is not None and self._sha[new_id] is not None and sha256 == self._sha[new_id]):
-                self.rewrite(records, sid, new_id); return new_id
+            if same_bytes(new_id): self.rewrite(records, sid, new_id); return new_id
             n += 1; new_id = f"{sid}--{origin}-{n}"      # different bytes under the renamed id too: keep it distinct, deterministically
         renamed = dict(source); renamed["sourceId"] = new_id
-        self.sources[new_id] = renamed; self._origin[new_id] = origin; self._sha[new_id] = sha256
+        self._store(new_id, renamed, origin, sha256, key)
         self.rewrite(records, sid, new_id)
         self.renames.append((sid, new_id, origin)); return new_id
 

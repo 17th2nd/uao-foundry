@@ -1,0 +1,11 @@
+You are the independent, read-only ratifier for the UAO Foundry programme (Claude implements, Codex ratifies, git/runtime is authority). Pass D on branch feature/enrichment-operation: review `git diff HEAD~4 HEAD` (all four commits of ADR-0007) with emphasis on the fourth commit, which remediates your pass-C refusal (temp/codex-uaofoundry-adr0007-ratification-pass-c-001.md, findings F-C1..F-C4).
+
+Ratify or refuse, citing file:line you have read yourself:
+1. F-C3: novelty is now an operator attestation. Without --accept, does scripts/enrich/build_enrichment_bundle.py list every provider claim about the target and exit 2 without writing? Can any claim enter the bundle unnamed? Can an exact restatement be accepted? Is --paraphrase-threshold bounded to a finite [0,1] and is the lexical score now only a triage flag with no admission effect? Are the notes in authorityNotes sufficient for a later reader to see what the operator attested and with what overlap?
+2. F-C4: does scripts/enrich/bundle_lib.py SourcePool.install rewrite sourceRefs/sourceRef on every record class the schemas carry them (candidate identities, claims, evidence, relationships), do both callers pass all of them, is re-installation from an already-renamed origin idempotent, and is the equal-sha256 share / further-suffix rule for a renamed id already present sound? Any path where a reference is left pointing at another origin's bytes?
+3. F-C1: does current_occurrence refuse any semanticVariantStatus other than SINGLE_VARIANT before consulting currentVariant?
+4. F-C2: does enrichLeavesTheRegistryByteIdenticalOnRefusalBeforeAndAfterAdmission (a plain file squatting identity-operations/) still genuinely cross register() before failing, with no Assumptions and no environment dependence, and are its postconditions non-tautological?
+5. disambiguate_ids (new): restated claim/evidence ids colliding with live ones are renamed with supportsCandidateRef rewritten — any reference class missed?
+6. Tests: scripts/enrich/tests (31, `python3 -m unittest discover -s scripts/enrich/tests`) including builder-level tests on a synthetic registry; Java 181/181, 0 skipped. Any tautology or gap.
+7. Any defect the author missed.
+Output: verdict line (RATIFIED / RATIFIED WITH CONDITIONS / REFUSED), findings F-D1.. with severity and file:line, one-paragraph closure. Do not modify any file.

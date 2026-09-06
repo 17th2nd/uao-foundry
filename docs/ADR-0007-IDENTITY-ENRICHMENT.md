@@ -116,4 +116,16 @@ identity is derivable from bytes alone.
   claim/evidence ids that collide with live ones (found on Macleay reconcile runs 16/23). `current_occurrence` refuses any
   identity whose `semanticVariantStatus` is not `SINGLE_VARIANT`. The rollback test squats the journal path with a plain
   file, so `register()` succeeds and only the ENRICH record write fails, with no permission dependence and no skip
-  path. Python 29/29 (helper + builder-level tests on a synthetic registry).
+  path. Python 30/30 at that commit (helper + builder-level tests on a synthetic registry).
+- **Codex pass D (2026-09-07, read-only, on 60df8cc): REFUSED** — F-D1 HIGH `SourcePool` reused an id for "same origin"
+  without comparing bytes, so a live package legitimately carrying both `src-x` and `src-x--live-<suffix>` could have the
+  second collapsed onto the first; F-D2 MEDIUM the builder kept one scalar target candidate id, so a target represented
+  by two live candidates (same resolution key, an input topology the pipeline supports) had only one candidate's claims
+  reviewed; F-D3 LOW the output directory was created before the refusal; F-D5 INFO the ADR's Python count was wrong
+  (30, not 29) and one trailing space. F-D4 INFO: attestation, threshold, reference rewrite, id disambiguation and
+  variant-status guard close as designed; F-C2 closes. Report: `temp/codex-uaofoundry-adr0007-ratification-pass-d-001.md`.
+- **Remediation (fifth commit):** an id is reused only for the same bytes (equal registry sha256, or an identical source
+  record); same origin with different bytes gets a distinct, deterministic id like any other collision. The builder
+  treats every live candidate resolving to the target as the target for review and attestation, and restates the
+  registry's assertions once per identity, not once per candidate. Nothing is written, not even the output directory,
+  unless a bundle is built. Python 33/33.
