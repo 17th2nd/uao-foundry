@@ -179,26 +179,41 @@ def restate_identity(registry: pathlib.Path, ident: dict, occ: dict, c: dict, po
                      taken_claims: set, taken_evidence: set, restated_uids: set) -> tuple[list[dict], list[dict], list[str]]:
     """Restate the registered identity ``ident`` (current occurrence ``occ``) into live candidate ``c``, verbatim.
 
-    The registry package may hold SEVERAL candidates with this resolution key (the pipeline maps them all to one
-    UAO): the identity fields come from the first, the claims and evidence from ALL of them. Claims are copied once
-    per identity (``restated_uids``), so a second live candidate for the same identity restates nothing again.
-    The package's sources are installed under the package id as origin. Returns (claims, evidence, notes).
+    The identity's NAMES and durable identifiers come from the registry's CANONICAL UAO for the occurrence
+    (``canonical_label``, ``aliases``, ``external_identifiers``) -- the very fields the semantic-variant digest covers
+    -- not from any one candidate: the registry package may hold several candidates for this resolution key, and
+    canonicalisation chose the label from the first by candidate id and unioned the rest (Codex pass F F-F1). The
+    live candidate's ``sourceRefs`` become the union over those candidates. Claims and evidence are copied from ALL
+    of them, including evidence attached to the identity candidates themselves (F-F2), once per identity
+    (``restated_uids``). The package's sources are installed under the package id as origin.
+    Returns (claims, evidence, notes).
     """
     rp = registry / "packages" / occ["packageId"]
-    rcs = [x for x in load(rp / "candidate-identities.json") if x["resolutionKey"] == c["resolutionKey"]]
+    rcs = sorted([x for x in load(rp / "candidate-identities.json") if x["resolutionKey"] == c["resolutionKey"]], key=lambda x: x["candidateId"])
     if not rcs: raise ValueError(f"{occ['packageId']} carries no candidate with resolution key {c['resolutionKey']}")
-    c.update({k: rcs[0][k] for k in rcs[0] if k not in ("candidateId", "root")})
+    canonical = next((u for u in load(rp / "canonical-identities.json") if u.get("uid") == ident["uid"]), None)
+    if canonical is None: raise ValueError(f"{occ['packageId']} carries no canonical UAO for {ident['uid']}")
+    fi = canonical["internal_state"]["foundry_identity"]
+    aliases = [a for a in fi.get("aliases", []) if a != fi["canonical_label"]]
+    source_refs = []
+    for rc in rcs:
+        for r in rc.get("sourceRefs", []):
+            if r not in source_refs: source_refs.append(r)
+    c["label"] = fi["canonical_label"]; c["aliases"] = aliases; c["externalIdentifiers"] = dict(fi.get("external_identifiers", {})); c["sourceRefs"] = source_refs
     rsnap = load(rp / "provider-snapshot.json"); pkg_claims, pkg_evidence, notes = [], [], []
     if ident["uid"] not in restated_uids:
         restated_uids.add(ident["uid"]); rc_ids = {x["candidateId"] for x in rcs}
-        evidence = load(rp / "candidate-evidence.json")
+        evidence = load(rp / "candidate-evidence.json"); copied_claim_ids = set()
         for cl in load(rp / "candidate-claims.json"):
             if cl["subjectIdentityRef"] not in rc_ids: continue
-            cl2 = dict(cl); cl2["subjectIdentityRef"] = c["candidateId"]; pkg_claims.append(cl2)
-            pkg_evidence += [dict(ev) for ev in evidence if ev["supportsCandidateRef"] == cl["candidateId"]]
+            cl2 = dict(cl); cl2["subjectIdentityRef"] = c["candidateId"]; pkg_claims.append(cl2); copied_claim_ids.add(cl["candidateId"])
+        for ev in evidence:
+            ref = ev["supportsCandidateRef"]
+            if ref in copied_claim_ids: pkg_evidence.append(dict(ev))
+            elif ref in rc_ids: ev2 = dict(ev); ev2["supportsCandidateRef"] = c["candidateId"]; pkg_evidence.append(ev2)   # identity-level evidence (F-F2)
     rsources = load(rp / "source-registry.json")["sources"]
     pool.install_origin(occ["packageId"], [registry_source(s, occ["packageId"], rsnap["fixedClock"]) for s in rsources],
                         [c] + pkg_claims + pkg_evidence, sha256_of={s["sourceId"]: s.get("sha256") for s in rsources})
     notes += disambiguate_ids(pkg_claims, pkg_evidence, taken_claims, taken_evidence, occ["packageId"])
-    notes.append(f"{c['label']} ({c['resolutionKey']}) restated verbatim from {occ['packageId']} (variant {occ['semanticVariantDigest'][:12]}…, {len(rcs)} registry candidate(s), {len(pkg_claims)} assertion(s))")
+    notes.append(f"{c['label']} ({c['resolutionKey']}) restated verbatim from {occ['packageId']} (variant {occ['semanticVariantDigest'][:12]}…, canonical names and identifiers, {len(rcs)} registry candidate(s), {len(pkg_claims)} assertion(s), {len(pkg_evidence)} evidence record(s))")
     return pkg_claims, pkg_evidence, notes

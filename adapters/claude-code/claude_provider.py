@@ -308,7 +308,14 @@ def _relationship_rules() -> list[str]:
         f"- Relationship candidates are permitted and typed ONLY from the relationship type edition {edition['registryVersion']} ({edition['digest']}); typeVersion must be exactly one of the ids below, participants use the listed role names and reference candidate identities in this bundle (cid-...), every relationship cites the sourceIds evidencing it, and `basis` is EXPLICIT when a source states it or INFERRED when you inferred it. Prefer the most precise defensible type; if the evidence does not establish a specific relationship, omit it rather than reaching for related-to/associated-with. Do not assert authorship, creation, influence or membership that no cited source supports.",
         "  Available relationship types (id  roles: name(kinds min..max)):",
         *_edition_vocabulary(edition),
-        "- A relationship may bind an identity that already exists in the registry: include that identity as a candidate identity with its EXACT registered resolutionKey, restate its registered assertions VERBATIM as claims (copy the statement text exactly; cite the registry:// source that carries them; add no new claim to a reused identity unless it is listed as an ENRICHMENT TARGET below), and let the relationship supply the new knowledge. A re-worded assertion set is a divergent semantic variant that the registry will refuse to reuse automatically.",
+        "- A relationship may bind an identity that already exists in the registry: include it as a candidate identity under the reused-identity rule below and let the relationship supply the new knowledge.",
+    ]
+
+
+def _reuse_rules() -> list[str]:
+    """Always emitted (Codex pass-F F-F4): the reuse gate is the same with or without a relationship edition."""
+    return [
+        "- A reused identity (one that already exists in the registry) is included as a candidate identity with its EXACT registered resolutionKey, its registered label, aliases and external identifiers kept, and its registered assertions restated VERBATIM as claims (copy the statement text exactly; cite the registry:// source that carries them). Add no new claim to a reused identity unless it is listed as an ENRICHMENT TARGET below: a re-worded or extended assertion set is a divergent semantic variant that the registry will refuse to reuse automatically.",
     ]
 
 
@@ -323,7 +330,7 @@ def _enrichment_rules(envelope: dict[str, Any]) -> list[str]:
     if not isinstance(targets, list) or not all(isinstance(t, str) and re.fullmatch(r"uao-[a-f0-9]{12}", t) for t in targets):
         _die("constraints.enrichmentTargets must be a list of registered uids")
     return [
-        "- ENRICHMENT TARGETS (ADR-0007): the registered identities " + ", ".join(targets) + " are being ENRICHED in this run. For each of them: include it as a candidate identity with its EXACT registered resolutionKey; restate EVERY registered assertion VERBATIM as a claim (copy the statement text exactly, cite the registry:// source that carries it); and ADD new sourced claims about it that the registered assertions do not already state, each citing a real source you acquired in this run. Do not re-word a registered assertion: a re-wording is neither a restatement nor new knowledge. This rule overrides the no-new-claim rule for these identities only.",
+        "- ENRICHMENT TARGETS (ADR-0007): the registered identities " + ", ".join(targets) + " are being ENRICHED in this run. For each of them: include it as a candidate identity with its EXACT registered resolutionKey; restate EVERY registered assertion VERBATIM as a claim (copy the statement text exactly, cite the registry:// source that carries it); keep its registered label, aliases and external identifiers (you may add names and identifiers, never drop or change them); and ADD new sourced claims about it that the registered assertions do not already state, each citing a real source you acquired in this run. Do not re-word a registered assertion: a re-wording is neither a restatement nor new knowledge. This rule overrides the no-new-claim rule for these identities only.",
     ]
 
 
@@ -345,6 +352,7 @@ def _build_prompt(envelope: dict[str, Any], evidence: list[dict[str, Any]], trun
             "- Every candidate identity and claim must cite one or more supplied sourceIds.",
             "- When evidence supports separable reusable component identities materially inside the requested scope, include them as non-root candidate identities rather than flattening everything into the root; do not enumerate speculative concepts merely to increase reuse.",
             *_relationship_rules(),
+            *_reuse_rules(),
             *_enrichment_rules(envelope),
             "- If the registry contains the same semantic identity and reuse is justified, reuse its exact resolutionKey.",
             "- For a new identity with a durable external identifier use resolutionKey `ext:<scheme>:<identifier>`.",

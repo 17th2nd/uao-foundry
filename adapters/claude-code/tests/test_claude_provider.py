@@ -173,6 +173,9 @@ class ClaudeProviderAdapterTest(unittest.TestCase):
                 "constraints": {"canonicalWriteAllowed": False, "responseRole": "INTERMEDIATE_PROVIDER_BUNDLE_ONLY"}}
         plain = module._build_prompt(base, [], False)
         self.assertNotIn("ENRICHMENT TARGETS", plain)
+        # Codex pass-F F-F4: the reused-identity rule is emitted with or without a relationship edition
+        self.assertIn("Add no new claim to a reused identity unless it is listed as an ENRICHMENT TARGET", plain)
+        self.assertNotIn("Relationship candidates are permitted", plain, "no edition configured in this test")
         named = json.loads(json.dumps(base)); named["constraints"]["enrichmentTargets"] = ["uao-0123456789ab"]
         prompt = module._build_prompt(named, [], False)
         self.assertIn("ENRICHMENT TARGETS (ADR-0007): the registered identities uao-0123456789ab", prompt)

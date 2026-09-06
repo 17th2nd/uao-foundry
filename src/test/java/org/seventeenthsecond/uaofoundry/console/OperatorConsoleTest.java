@@ -184,6 +184,10 @@ class OperatorConsoleTest {
         assertEquals(2, run("nonsense").exit());
         assertEquals(2, run("manufacture", "x", "--fixture", "a", "--provider", "b").exit(),
                 "a manufacture has one evidence source, not two");
+        Result two = run("manufacture", "x", "--fixture", DEMO.resolve("electric-motor.json").toString(), "--registry", temp.resolve("r").toString(),
+                "--enrich", "uao-aaaaaaaaaaaa", "--enrich", "uao-bbbbbbbbbbbb");
+        assertEquals(2, two.exit(), "a manufacture enriches exactly one identity (Codex pass-F F-F3)");
+        assertTrue(two.err().contains("exactly one identity"), two.err());
     }
 
     @Test

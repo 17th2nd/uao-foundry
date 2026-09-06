@@ -19,12 +19,20 @@ def make_registry(root, second_candidate=False):
               {"candidateId": "clm-death", "subjectIdentityRef": "cid-root", "statement": DEATH, "channels": ["biography"], "sourceRefs": ["src-wikidata"]}]
     evidence = [{"evidenceId": "ev-birth", "sourceRef": "src-wikidata", "supportsCandidateRef": "clm-birth", "extract": "born 1894", "locatorWithinSource": "p1"},
                 {"evidenceId": "ev-death", "sourceRef": "src-wikidata", "supportsCandidateRef": "clm-death", "extract": "died 1964", "locatorWithinSource": "p2"}]
+    canonical_fi = {"canonical_label": "Norbert Wiener", "aliases": [], "external_identifiers": {"wikidata": "Q1"}, "resolution_key": KEY}
     if second_candidate:
-        idents.append({"candidateId": "cid-root-2", "root": False, "label": "N. Wiener", "aliases": [], "resolutionKey": KEY, "externalIdentifiers": {"wikidata": "Q1"}, "sourceRefs": ["src-wikidata"]})
+        # a second candidate for the same key, as the pipeline groups them: canonicalisation keeps the first label (by
+        # candidate id), unions aliases and external identifiers, and maps every claim to the one UAO
+        idents.append({"candidateId": "cid-root-2", "root": False, "label": "N. Wiener", "aliases": ["Wiener, Norbert"], "resolutionKey": KEY, "externalIdentifiers": {"wikidata": "Q1", "viaf": "12345"}, "sourceRefs": ["src-wikidata", "src-viaf"]})
         claims.append({"candidateId": "clm-mit", "subjectIdentityRef": "cid-root-2", "statement": MIT, "channels": ["biography"], "sourceRefs": ["src-wikidata"]})
         evidence.append({"evidenceId": "ev-mit", "sourceRef": "src-wikidata", "supportsCandidateRef": "clm-mit", "extract": "MIT", "locatorWithinSource": "p3"})
+        evidence.append({"evidenceId": "ev-ident-2", "sourceRef": "src-viaf", "supportsCandidateRef": "cid-root-2", "extract": "VIAF record", "locatorWithinSource": "p4"})
+        canonical_fi = {"canonical_label": "Norbert Wiener", "aliases": ["N. Wiener", "Wiener, Norbert"], "external_identifiers": {"viaf": "12345", "wikidata": "Q1"}, "resolution_key": KEY}
     write(pk / "candidate-identities.json", idents); write(pk / "candidate-claims.json", claims); write(pk / "candidate-evidence.json", evidence)
-    write(pk / "source-registry.json", {"sources": [{"sourceId": "src-wikidata", "locator": "https://www.wikidata.org/wiki/Q1", "snapshotPath": "source-corpus/src-wikidata.txt", "sha256": "1" * 64}]})
+    write(pk / "canonical-identities.json", [{"uid": UID, "assertions": [{"statement": c["statement"], "channels": c["channels"], "epistemic_class": "ASSERTED"} for c in claims],
+                                              "internal_state": {"foundry_identity": canonical_fi}, "relationship_references": [], "disclaimer": "synthetic", "lifecycle_status": "ACTIVE", "provenance": {}}])
+    write(pk / "source-registry.json", {"sources": [{"sourceId": "src-wikidata", "locator": "https://www.wikidata.org/wiki/Q1", "snapshotPath": "source-corpus/src-wikidata.txt", "sha256": "1" * 64},
+                                                     {"sourceId": "src-viaf", "locator": "https://viaf.org/12345", "snapshotPath": "source-corpus/src-viaf.txt", "sha256": "3" * 64}]})
     write(pk / "provider-snapshot.json", {"fixedClock": "2026-01-01T00:00:00Z"})
     return reg
 
@@ -85,7 +93,12 @@ class Builder(unittest.TestCase):
         self.assertEqual({BIRTH, DEATH, MIT, "Wiener published Cybernetics in 1948."}, {x["statement"] for x in c["claims"]})
         self.assertEqual(1, len({x["subjectIdentityRef"] for x in c["claims"]}), "all restated onto the one live candidate")
         self.assertEqual(3, sum(1 for e in c["evidence"] if e["evidenceId"].startswith("ev-") and e["supportsCandidateRef"] in {"clm-birth", "clm-death", "clm-mit"}))
-        self.assertIn("2 registry candidate(s), 3 assertion(s)", " ".join(bundle(self.out)["sourceStrategy"]["authorityNotes"]))
+        self.assertIn("2 registry candidate(s), 3 assertion(s), 4 evidence record(s)", " ".join(bundle(self.out)["sourceStrategy"]["authorityNotes"]))
+        # Codex pass F F-F1/F-F2: names, identifiers and identity-level evidence follow the registry's canonical UAO
+        restated = next(i for i in c["identities"] if i["resolutionKey"] == KEY)
+        self.assertEqual("Norbert Wiener", restated["label"]); self.assertEqual(["N. Wiener", "Wiener, Norbert"], restated["aliases"])
+        self.assertEqual({"viaf": "12345", "wikidata": "Q1"}, restated["externalIdentifiers"]); self.assertEqual(["src-wikidata", "src-viaf"], restated["sourceRefs"])
+        ident_ev = next(e for e in c["evidence"] if e["evidenceId"] == "ev-ident-2"); self.assertEqual(restated["candidateId"], ident_ev["supportsCandidateRef"]); self.assertEqual("src-viaf", ident_ev["sourceRef"])
 
     def test_explicit_generated_namespace_source_keeps_its_own_references_through_the_builder(self):
         # Codex pass E F-E1: the live package carries src-wikidata (collides with the registry) AND an explicit
@@ -133,7 +146,7 @@ class Builder(unittest.TestCase):
                          evidence=[{"evidenceId": "ev-new", "sourceRef": "src-wikidata", "supportsCandidateRef": "clm-new", "extract": "1948", "locatorWithinSource": "p3"}],
                          relationships=[{"candidateId": "rel-author", "typeVersion": "asa:type:x/author-of@1", "participants": [], "identityLiterals": {}, "contextualBindings": [], "sourceRefs": ["src-wikidata"], "basis": "EXPLICIT"}])
         r = run(self.reg, live, self.out, "--accept", "clm-new"); self.assertEqual(0, r.returncode, r.stderr); b = bundle(self.out); c = b["candidates"]
-        src_ids = {s["sourceId"] for s in b["sources"]}; self.assertEqual({"src-wikidata", f"src-wikidata--live-{LIVE[-8:]}"}, src_ids)
+        src_ids = {s["sourceId"] for s in b["sources"]}; self.assertEqual({"src-wikidata", "src-viaf", f"src-wikidata--live-{LIVE[-8:]}"}, src_ids)
         reg = next(s for s in b["sources"] if s["sourceId"] == "src-wikidata"); self.assertTrue(reg["locator"].startswith("registry://" + PKG), "the registered id keeps registry bytes")
         live_id = f"src-wikidata--live-{LIVE[-8:]}"
         self.assertEqual([live_id], next(x for x in c["claims"] if x["candidateId"] == "clm-new")["sourceRefs"])

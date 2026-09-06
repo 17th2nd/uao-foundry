@@ -245,6 +245,43 @@ class PersistentIdentityRegistryTest {
     }
 
     @Test
+    void anEnrichmentThatRenamesOrForgetsTheIdentityIsRefusedByRegistryAndAnalyzer() {
+        // Codex pass-F F-F1: the enrichment law covers identity continuity, not only the assertion superset.
+        PipelineResult t0 = manufacture("enr6-t0", fixture -> identity(fixture, "cid-root").put("aliases", List.of("cow", "heifer")));
+        FoundryRegistry registry = registryWith(t0);
+        String uid = rootUid(t0);
+        String indexBefore = Json.canonical(registry.index());
+        org.seventeenthsecond.uaofoundry.reuse.ReuseAnalyzer analyzer = new org.seventeenthsecond.uaofoundry.reuse.ReuseAnalyzer(SCHEMAS);
+        String contextHash = org.seventeenthsecond.uaofoundry.util.Hashes.canonicalJson(Map.of("test", "context"));
+
+        PipelineResult lostAlias = manufacture("enr6-alias", fixture -> {
+            identity(fixture, "cid-root").put("aliases", List.of("cow"));
+            addRootClaim(fixture, "Fixture assertion: one more sourced statement.");
+        });
+        IllegalArgumentException a = assertThrows(IllegalArgumentException.class, () -> registry.enrich(lostAlias.packagePath(), uid, List.of("LIFE_CHRONOLOGY"), "drops heifer", "operator", "2026-09-07T00:00:00Z"));
+        assertTrue(a.getMessage().contains("drops 1 alias"), a.getMessage());
+        IllegalArgumentException a2 = assertThrows(IllegalArgumentException.class, () -> analyzer.analyze(registry.index(), registryRoot, lostAlias.packagePath(), contextHash, Set.of(uid)));
+        assertTrue(a2.getMessage().contains("ENRICHMENT_IDENTITY_REGRESSION"), a2.getMessage());
+
+        PipelineResult renamed = manufacture("enr6-label", fixture -> {
+            identity(fixture, "cid-root").put("label", "female bovine");
+            identity(fixture, "cid-root").put("aliases", List.of("cow", "heifer", "adult female cattle"));
+            addRootClaim(fixture, "Fixture assertion: one more sourced statement.");
+        });
+        IllegalArgumentException b = assertThrows(IllegalArgumentException.class, () -> registry.enrich(renamed.packagePath(), uid, List.of("LIFE_CHRONOLOGY"), "renames", "operator", "2026-09-07T00:00:00Z"));
+        assertTrue(b.getMessage().contains("renames the identity"), b.getMessage());
+        assertEquals(indexBefore, Json.canonical(registry.index()), "refused enrichments leave the registry byte-identical");
+
+        // Names may only grow: an added alias with an added assertion is an enrichment.
+        PipelineResult grown = manufacture("enr6-grown", fixture -> {
+            identity(fixture, "cid-root").put("aliases", List.of("cow", "heifer", "bovine female"));
+            addRootClaim(fixture, "Fixture assertion: one more sourced statement.");
+        });
+        assertEquals(1, registry.enrich(grown.packagePath(), uid, List.of("LIFE_CHRONOLOGY"), "grown", "operator", "2026-09-07T00:00:00Z").assertionsAdded());
+        assertTrue(registry.verify().passed());
+    }
+
+    @Test
     void aGenuineEnrichmentForkInTheJournalFailsTheIndexClosed() {
         PipelineResult t0 = manufacture("enr3-t0", fixture -> {});
         PipelineResult t1 = manufacture("enr3-t1", fixture -> addRootClaim(fixture, "Fixture assertion: branch one."));

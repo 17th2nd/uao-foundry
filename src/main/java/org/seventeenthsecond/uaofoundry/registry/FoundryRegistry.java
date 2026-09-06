@@ -631,25 +631,64 @@ public final class FoundryRegistry {
                 throw new IllegalArgumentException("ENRICH " + operation.operationId() + ": package " + toPackage + " carries variant "
                         + newer.semanticVariantDigest() + " for " + uid + ", not the declared toVariant.");
             }
-            String defect = enrichmentDefect(assertionsOf(older, uid), assertionsOf(newer, uid));
+            // Re-derived from package bytes on every index read: the same whole law (identity continuity, then
+            // strict assertion superset) that admission applied, so a journal can never assert an enrichment the
+            // packages do not support.
+            String defect = enrichmentDefect(uaoOf(older, uid), uaoOf(newer, uid));
             if (defect != null) throw new IllegalArgumentException("ENRICH " + operation.operationId() + " refused for " + uid + ": " + defect);
             aggregate.addEnrichment(from, to, toPackage, operation.operationId());
         }
     }
 
-    /** Canonical-JSON forms of one occurrence's assertions, read from the immutable package. */
-    private Set<String> assertionsOf(Occurrence occurrence, String uid) {
+    /** One occurrence's canonical UAO, read from the immutable package. */
+    private Map<String,Object> uaoOf(Occurrence occurrence, String uid) {
         Path file = root.resolve(occurrence.path()).normalize();
         if (!file.startsWith(root)) throw new IllegalArgumentException("Occurrence path escapes the registry: " + occurrence.path());
         for (Object raw : array(FileOps.readJson(file), "canonical identities")) {
             Map<String,Object> uao = object(raw, "canonical UAO");
-            if (uid.equals(uao.get("uid"))) {
-                Set<String> out = new LinkedHashSet<>();
-                for (Object assertion : array(uao.get("assertions"), "canonical UAO assertions")) out.add(Json.canonical(assertion));
-                return out;
-            }
+            if (uid.equals(uao.get("uid"))) return uao;
         }
         throw new IllegalArgumentException("Occurrence " + occurrence.packageId() + " no longer carries " + uid + ".");
+    }
+
+    /** Canonical-JSON forms of a canonical UAO's assertions. */
+    public static Set<String> assertionsOf(Map<String,Object> uao) {
+        Set<String> out = new LinkedHashSet<>();
+        for (Object assertion : array(uao.get("assertions"), "canonical UAO assertions")) out.add(Json.canonical(assertion));
+        return out;
+    }
+
+    /**
+     * The identity-continuity half of the enrichment law (Codex pass-F F-F1): an enrichment adds
+     * assertions to an identity, it never renames it, forgets a name for it, or loses a durable
+     * identifier of it. The canonical label stays; aliases and external identifiers may only grow.
+     * Returns a defect description, or {@code null} when continuity holds.
+     */
+    public static String identityContinuityDefect(Map<String,Object> older, Map<String,Object> newer) {
+        Map<String,Object> before = object(object(older.get("internal_state"), "internal_state").get("foundry_identity"), "foundry_identity");
+        Map<String,Object> after = object(object(newer.get("internal_state"), "internal_state").get("foundry_identity"), "foundry_identity");
+        if (!java.util.Objects.equals(before.get("canonical_label"), after.get("canonical_label"))) {
+            return "the newer variant renames the identity from " + Json.canonical(before.get("canonical_label")) + " to " + Json.canonical(after.get("canonical_label")) + "; enrichment keeps the canonical label.";
+        }
+        Set<String> beforeAliases = new LinkedHashSet<>(), afterAliases = new LinkedHashSet<>();
+        for (Object a : array(before.get("aliases") == null ? List.of() : before.get("aliases"), "aliases")) beforeAliases.add(Json.canonical(a));
+        for (Object a : array(after.get("aliases") == null ? List.of() : after.get("aliases"), "aliases")) afterAliases.add(Json.canonical(a));
+        List<String> lostAliases = beforeAliases.stream().filter(a -> !afterAliases.contains(a)).toList();
+        if (!lostAliases.isEmpty()) return "the newer variant drops " + lostAliases.size() + " alias(es); enrichment keeps every name. First: " + abbreviate(lostAliases.getFirst());
+        Map<String,Object> beforeIds = before.get("external_identifiers") == null ? Map.of() : object(before.get("external_identifiers"), "external_identifiers");
+        Map<String,Object> afterIds = after.get("external_identifiers") == null ? Map.of() : object(after.get("external_identifiers"), "external_identifiers");
+        for (Map.Entry<String,Object> e : beforeIds.entrySet()) {
+            if (!java.util.Objects.equals(e.getValue(), afterIds.get(e.getKey()))) {
+                return "the newer variant loses or changes external identifier " + e.getKey() + "; enrichment keeps every durable identifier.";
+            }
+        }
+        return null;
+    }
+
+    /** The whole enrichment law on two canonical UAOs: identity continuity, then the strict assertion superset. */
+    public static String enrichmentDefect(Map<String,Object> older, Map<String,Object> newer) {
+        String continuity = identityContinuityDefect(older, newer);
+        return continuity != null ? continuity : enrichmentDefect(assertionsOf(older), assertionsOf(newer));
     }
 
     /**
@@ -694,15 +733,16 @@ public final class FoundryRegistry {
         }
         String from = prior.get("currentVariant") instanceof String cv ? cv
                 : string(object(array(prior.get("occurrences"), "occurrences").getFirst(), "occurrence").get("semanticVariantDigest"), "semanticVariantDigest");
-        Set<String> older = null;
+        Map<String,Object> olderUao = null;
         for (Object raw : array(prior.get("occurrences"), "occurrences")) {
             Map<String,Object> occurrence = object(raw, "occurrence");
             if (from.equals(occurrence.get("semanticVariantDigest"))) {
-                older = assertionsOf(new Occurrence(string(occurrence.get("packageId"), "packageId"), string(occurrence.get("canonicalPath"), "canonicalPath"), from, string(occurrence.get("stateVersion"), "stateVersion")), uid);
+                olderUao = uaoOf(new Occurrence(string(occurrence.get("packageId"), "packageId"), string(occurrence.get("canonicalPath"), "canonicalPath"), from, string(occurrence.get("stateVersion"), "stateVersion")), uid);
                 break;
             }
         }
-        if (older == null) throw new IllegalArgumentException("ENRICH refused: current variant of " + uid + " has no readable occurrence.");
+        if (olderUao == null) throw new IllegalArgumentException("ENRICH refused: current variant of " + uid + " has no readable occurrence.");
+        Set<String> older = assertionsOf(olderUao);
 
         Map<String,Object> candidateUao = null;
         for (Object raw : array(FileOps.readJson(packageDir.resolve("canonical-identities.json")), "canonical identities")) {
@@ -712,9 +752,8 @@ public final class FoundryRegistry {
         if (candidateUao == null) throw new IllegalArgumentException("ENRICH refused: the candidate package carries no occurrence of " + uid + ".");
         String to = SemanticVariants.digest(candidateUao);
         if (to.equals(from)) throw new IllegalArgumentException("ENRICH refused: the candidate package restates " + uid + " unchanged; nothing to enrich.");
-        Set<String> newer = new LinkedHashSet<>();
-        for (Object assertion : array(candidateUao.get("assertions"), "canonical UAO assertions")) newer.add(Json.canonical(assertion));
-        String defect = enrichmentDefect(older, newer);
+        Set<String> newer = assertionsOf(candidateUao);
+        String defect = enrichmentDefect(olderUao, candidateUao);
         if (defect != null) throw new IllegalArgumentException("ENRICH refused for " + uid + ": " + defect);
 
         // The operation record is built — and its metadata validated — BEFORE anything is written, so a

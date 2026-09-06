@@ -149,3 +149,22 @@ identity is derivable from bytes alone.
   whitespace actually removed. Python 36/36 (helper, builder-level and reconcile-level tests on the synthetic
   registry) + adapter 14/14; Java 182/182, 0 skipped. ⚠ The jar was not rebuilt in this commit (a live batch was using
   it); the console `--enrich` live acquisition path needs the rebuilt jar before its first use.
+- **Codex pass F (2026-09-07, read-only, on 971123d): REFUSED** — F-F1 HIGH `restate_identity` took names and
+  identifiers from the first registry candidate in file order, while canonicalisation sorts candidates by id and unions
+  aliases and external identifiers, so a restatement could rename an identity or forget its names — and the enrichment
+  law, checking only assertion containment, would have admitted that regression; F-F2 MEDIUM evidence attached directly
+  to identity candidates was not restated; F-F3 HIGH `--enrich` accepted several uids while `RegistryApplication enrich`
+  admits one subject, leaving a second target an unreconciled variant; F-F4 MEDIUM the reused-identity no-new-claim
+  rule was emitted only in relationship-edition mode, so the adapter and the reuse gate disagreed without an edition.
+  F-F5/F-F6 INFO: F-E1 and the assertion halves of F-E2/F-E3 closed; counts and whitespace verified. Report:
+  `temp/codex-uaofoundry-adr0007-ratification-pass-f-001.md`. The sixth-remediation entry's "claims and evidence from
+  ALL candidates" and "every other reused identity" claims were overstated, as pass F shows.
+- **Remediation (seventh commit):** the enrichment law now has two halves, both re-derived from package bytes at
+  admission, in the analyzer and on every index rebuild: **identity continuity** (`identityContinuityDefect`: the
+  canonical label stays; aliases and external identifiers may only grow — analyzer code
+  `ENRICHMENT_IDENTITY_REGRESSION`) and then the strict assertion superset. `restate_identity` takes the identity's
+  label, aliases and external identifiers from the registry's canonical UAO (the fields the variant digest covers),
+  unions `sourceRefs` over the registry candidates, and restates evidence attached to identity candidates as well as to
+  claims. `--enrich` accepts exactly one uid per manufacture. The reused-identity rule is emitted by the adapter with
+  or without a relationship edition, and the enrichment-target rule tells the provider to keep names and identifiers.
+  Python 36/36 + adapter 14/14; Java 183/183, 0 skipped. ⚠ Jar still not rebuilt (live batch in flight).

@@ -32,6 +32,9 @@ class Reconcile(unittest.TestCase):
         live = make_live(self.root, [claim("clm-a", "reworded birth")])
         r = run(reg, live, self.out); self.assertEqual(0, r.returncode, r.stderr); c = bundle(self.out)["candidates"]
         self.assertEqual({BIRTH, DEATH, MIT}, {x["statement"] for x in c["claims"]})
+        restated = next(i for i in c["identities"] if i["resolutionKey"] == KEY)
+        self.assertEqual(("Norbert Wiener", ["N. Wiener", "Wiener, Norbert"], {"viaf": "12345", "wikidata": "Q1"}), (restated["label"], restated["aliases"], restated["externalIdentifiers"]))
+        self.assertTrue(any(e["evidenceId"] == "ev-ident-2" and e["supportsCandidateRef"] == restated["candidateId"] for e in c["evidence"]), "identity-level evidence restated")
 
     def test_colliding_live_sources_keep_their_own_references(self):
         reg = make_registry(self.root); suffix = LIVE[-8:]; explicit_id = f"src-wikidata--live-{suffix}"
