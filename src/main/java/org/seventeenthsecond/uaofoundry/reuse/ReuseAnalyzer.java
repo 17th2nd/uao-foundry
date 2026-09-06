@@ -74,6 +74,14 @@ public final class ReuseAnalyzer {
                     }
                     priorVariants.add(digest);
                 }
+                // An enriched identity carries superseded variants as history; only its current
+                // variant is the state a re-observation must match.
+                if (prior.get("currentVariant") instanceof String currentVariant) {
+                    if (!priorVariants.contains(currentVariant)) {
+                        throw new IllegalArgumentException("REGISTRY_VARIANT_INDEX_INVALID: current variant is not an occurrence for uid " + uid + ".");
+                    }
+                    priorVariants = new LinkedHashSet<>(List.of(currentVariant));
+                }
                 if (!SemanticVariants.SINGLE_VARIANT.equals(status) || priorVariants.size() != 1) {
                     throw new IllegalArgumentException("REGISTRY_VARIANT_INDEX_INVALID: inconsistent semantic variant status for uid " + uid + ".");
                 }

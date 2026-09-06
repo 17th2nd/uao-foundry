@@ -443,6 +443,7 @@ public final class FoundryRegistry {
         }
         List<IdentityOperation> operations = readOperations();
         applyLifecycle(identities, operations);
+        applyEnrichment(identities, operations);
 
         Map<String,Object> out = new LinkedHashMap<>();
         out.put("registryVersion", REGISTRY_VERSION);
@@ -599,6 +600,133 @@ public final class FoundryRegistry {
         });
     }
 
+    /**
+     * Applies {@code ENRICH} operations: within one uid, one semantic variant is declared the successor
+     * state of another. Nothing about the packages changes; the derived view gains a current variant.
+     *
+     * <p>Every claim the operation makes is re-checked from immutable package bytes on every build, so
+     * the journal cannot assert an enrichment the packages do not support: both variants must be
+     * occurrences of the subject, the named package must carry the newer one, and the newer assertion
+     * set must contain every older assertion verbatim plus at least one more. A fork (two enrichments
+     * leaving the same variant) or a cycle is a history that cannot have happened and fails closed.
+     */
+    private void applyEnrichment(Map<String,IdentityAggregate> identities, List<IdentityOperation> operations) {
+        for (IdentityOperation operation : operations) {
+            if (operation.operation() != IdentityOperation.Kind.ENRICH) continue;
+            String uid = operation.subjects().getFirst();
+            IdentityAggregate aggregate = identities.get(uid);
+            if (aggregate == null) throw new IllegalArgumentException("ENRICH " + operation.operationId() + " names an identity absent from the registry: " + uid);
+            String from = string(operation.enrichment().get("fromVariant"), "enrichment.fromVariant");
+            String to = string(operation.enrichment().get("toVariant"), "enrichment.toVariant");
+            String toPackage = string(operation.enrichment().get("toPackageId"), "enrichment.toPackageId");
+            Occurrence older = aggregate.occurrences.stream().filter(o -> o.semanticVariantDigest().equals(from)).findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("ENRICH " + operation.operationId() + ": fromVariant is not an occurrence of " + uid + "."));
+            Occurrence newer = aggregate.occurrences.stream().filter(o -> o.packageId().equals(toPackage)).findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("ENRICH " + operation.operationId() + ": toPackageId " + toPackage + " holds no occurrence of " + uid + "."));
+            if (!newer.semanticVariantDigest().equals(to)) {
+                throw new IllegalArgumentException("ENRICH " + operation.operationId() + ": package " + toPackage + " carries variant "
+                        + newer.semanticVariantDigest() + " for " + uid + ", not the declared toVariant.");
+            }
+            String defect = enrichmentDefect(assertionsOf(older, uid), assertionsOf(newer, uid));
+            if (defect != null) throw new IllegalArgumentException("ENRICH " + operation.operationId() + " refused for " + uid + ": " + defect);
+            aggregate.addEnrichment(from, to, toPackage, operation.operationId());
+        }
+    }
+
+    /** Canonical-JSON forms of one occurrence's assertions, read from the immutable package. */
+    private Set<String> assertionsOf(Occurrence occurrence, String uid) {
+        Path file = root.resolve(occurrence.path()).normalize();
+        if (!file.startsWith(root)) throw new IllegalArgumentException("Occurrence path escapes the registry: " + occurrence.path());
+        for (Object raw : array(FileOps.readJson(file), "canonical identities")) {
+            Map<String,Object> uao = object(raw, "canonical UAO");
+            if (uid.equals(uao.get("uid"))) {
+                Set<String> out = new LinkedHashSet<>();
+                for (Object assertion : array(uao.get("assertions"), "canonical UAO assertions")) out.add(Json.canonical(assertion));
+                return out;
+            }
+        }
+        throw new IllegalArgumentException("Occurrence " + occurrence.packageId() + " no longer carries " + uid + ".");
+    }
+
+    /**
+     * The enrichment law, stated once: the newer assertion set is a strict superset of the older one.
+     * Returns a defect description, or {@code null} when the law holds.
+     */
+    static String enrichmentDefect(Set<String> older, Set<String> newer) {
+        List<String> missing = older.stream().filter(a -> !newer.contains(a)).toList();
+        if (!missing.isEmpty()) {
+            return "the newer variant drops or re-words " + missing.size() + " of " + older.size()
+                    + " prior assertion(s); enrichment must restate every prior assertion verbatim. First: " + abbreviate(missing.getFirst());
+        }
+        if (newer.size() == older.size()) return "the newer variant adds no assertion; nothing is enriched.";
+        return null;
+    }
+
+    private static String abbreviate(String value) { return value.length() <= 160 ? value : value.substring(0, 157) + "..."; }
+
+    /**
+     * Admits an enriching package and records the {@code ENRICH} operation as one fail-closed step.
+     *
+     * <p>The superset law is checked against the candidate package <em>before</em> anything is
+     * written, so a package that does not enrich never enters the registry as a stray unreconciled
+     * variant. If recording the operation still fails after admission, a package this call copied in
+     * is removed again and the index restored, leaving the registry byte-identical.
+     */
+    public EnrichmentResult enrich(Path packageDir, String uid, List<String> reasonCodes, String justification,
+                                   String authority, String recordedAt) {
+        packageDir = packageDir.toAbsolutePath().normalize();
+        Map<String,Object> before = index();
+        Map<String,Object> prior = null;
+        for (Object raw : array(before.get("identities"), "registry identities")) {
+            Map<String,Object> identity = object(raw, "registry identity");
+            if (uid.equals(identity.get("uid"))) { prior = identity; break; }
+        }
+        if (prior == null) throw new IllegalArgumentException("ENRICH subject is not a registered identity: " + uid);
+        if (!IdentityOperation.ACTIVE.equals(prior.get("lifecycleState"))) {
+            throw new IllegalArgumentException("ENRICH refused: " + uid + " is " + prior.get("lifecycleState") + ", not ACTIVE.");
+        }
+        if (!SemanticVariants.SINGLE_VARIANT.equals(prior.get("semanticVariantStatus"))) {
+            throw new IllegalArgumentException("ENRICH refused: " + uid + " has unreconciled variants; reconcile before enriching.");
+        }
+        String from = prior.get("currentVariant") instanceof String cv ? cv
+                : string(object(array(prior.get("occurrences"), "occurrences").getFirst(), "occurrence").get("semanticVariantDigest"), "semanticVariantDigest");
+        Set<String> older = null;
+        for (Object raw : array(prior.get("occurrences"), "occurrences")) {
+            Map<String,Object> occurrence = object(raw, "occurrence");
+            if (from.equals(occurrence.get("semanticVariantDigest"))) {
+                older = assertionsOf(new Occurrence(string(occurrence.get("packageId"), "packageId"), string(occurrence.get("canonicalPath"), "canonicalPath"), from, string(occurrence.get("stateVersion"), "stateVersion")), uid);
+                break;
+            }
+        }
+        if (older == null) throw new IllegalArgumentException("ENRICH refused: current variant of " + uid + " has no readable occurrence.");
+
+        Map<String,Object> candidateUao = null;
+        for (Object raw : array(FileOps.readJson(packageDir.resolve("canonical-identities.json")), "canonical identities")) {
+            Map<String,Object> uao = object(raw, "canonical UAO");
+            if (uid.equals(uao.get("uid"))) { candidateUao = uao; break; }
+        }
+        if (candidateUao == null) throw new IllegalArgumentException("ENRICH refused: the candidate package carries no occurrence of " + uid + ".");
+        String to = SemanticVariants.digest(candidateUao);
+        if (to.equals(from)) throw new IllegalArgumentException("ENRICH refused: the candidate package restates " + uid + " unchanged; nothing to enrich.");
+        Set<String> newer = new LinkedHashSet<>();
+        for (Object assertion : array(candidateUao.get("assertions"), "canonical UAO assertions")) newer.add(Json.canonical(assertion));
+        String defect = enrichmentDefect(older, newer);
+        if (defect != null) throw new IllegalArgumentException("ENRICH refused for " + uid + ": " + defect);
+
+        RegistrationResult registration = register(packageDir);
+        IdentityOperation operation = IdentityOperation.enrich(uid, from, to, registration.packageId(), reasonCodes, justification, authority, recordedAt);
+        try {
+            OperationResult recorded = applyIdentityOperation(operation);
+            return new EnrichmentResult(registration, recorded, from, to, newer.size() - older.size());
+        } catch (RuntimeException ex) {
+            if (!registration.alreadyPresent()) {
+                FileOps.deleteTree(registration.registryPath());
+                FileOps.writeJson(indexPath, before);
+            }
+            throw ex;
+        }
+    }
+
     private Map<String,Object> emptyIndex() {
         Map<String,Object> out = new LinkedHashMap<>();
         out.put("registryVersion", REGISTRY_VERSION);
@@ -687,7 +815,32 @@ public final class FoundryRegistry {
         private String lifecycleState = IdentityOperation.ACTIVE;
         private List<String> successorUids = List.of();
         private String lifecycleOperationId;
+        private final List<Map<String,Object>> enrichments = new ArrayList<>();
         private IdentityAggregate(String uid, String resolutionKey) { this.uid = uid; this.resolutionKey = resolutionKey; }
+
+        /** Records one verified ENRICH edge between two of this identity's variants. */
+        private void addEnrichment(String from, String to, String packageId, String operationId) {
+            for (Map<String,Object> existing : enrichments) {
+                if (from.equals(existing.get("fromVariant")) && !operationId.equals(existing.get("operationId"))) {
+                    throw new IllegalArgumentException("Identity " + uid + " has two enrichments leaving variant " + from
+                            + " (" + existing.get("operationId") + ", " + operationId + "); the registry has no rule for choosing between them.");
+                }
+            }
+            Map<String,Object> edge = new LinkedHashMap<>();
+            edge.put("fromVariant", from); edge.put("toVariant", to); edge.put("packageId", packageId); edge.put("operationId", operationId);
+            enrichments.add(edge);
+            enrichments.sort(Comparator.comparing(Json::canonical));
+            // A cycle is a history that cannot have happened.
+            Map<String,String> next = new LinkedHashMap<>();
+            enrichments.forEach(e -> next.put(String.valueOf(e.get("fromVariant")), String.valueOf(e.get("toVariant"))));
+            for (String start : next.keySet()) {
+                Set<String> seen = new LinkedHashSet<>(); String current = start;
+                while (current != null) {
+                    if (!seen.add(current)) throw new IllegalArgumentException("Identity " + uid + " enrichment history forms a cycle at variant " + current + ".");
+                    current = next.get(current);
+                }
+            }
+        }
 
         /**
          * Durable external identity is aggregated across occurrences and must not disagree. Two
@@ -777,8 +930,19 @@ public final class FoundryRegistry {
             out.put("semanticType", semanticType);
             out.put("canonicalLabels", labels.stream().sorted().toList()); out.put("aliases", aliases.stream().sorted().toList());
             out.put("externalIdentifiers", new LinkedHashMap<String,Object>(externalIdentifiers));
-            out.put("semanticVariantStatus", variants.size() > 1
-                    ? SemanticVariants.MULTIPLE_UNRECONCILED_VARIANTS : SemanticVariants.SINGLE_VARIANT);
+            // Variants that an ENRICH operation has declared superseded are not unreconciled: they are
+            // history. The identity is a single variant when exactly one current variant remains.
+            Set<String> superseded = new LinkedHashSet<>();
+            enrichments.forEach(e -> superseded.add(String.valueOf(e.get("fromVariant"))));
+            Set<String> current = new LinkedHashSet<>(variants); current.removeAll(superseded);
+            out.put("semanticVariantStatus", current.size() == 1
+                    ? SemanticVariants.SINGLE_VARIANT : SemanticVariants.MULTIPLE_UNRECONCILED_VARIANTS);
+            // Present only when the identity has been enriched, so registries without ENRICH
+            // operations keep verifying byte-for-byte without an explicit rebuild.
+            if (!enrichments.isEmpty()) {
+                if (current.size() == 1) out.put("currentVariant", current.iterator().next());
+                out.put("variantHistory", new ArrayList<>(enrichments));
+            }
             out.put("stateVersions", new ArrayList<>(stateVersions));
             out.put("lifecycleState", lifecycleState);
             out.put("successorUids", new ArrayList<>(successorUids));
@@ -877,6 +1041,15 @@ public final class FoundryRegistry {
             out.put("operationId", operationId); out.put("operation", operation);
             out.put("alreadyPresent", alreadyPresent);
             out.put("operationCount", new java.math.BigDecimal(operationCount));
+            return out;
+        }
+    }
+
+    public record EnrichmentResult(RegistrationResult registration, OperationResult operation, String fromVariant, String toVariant, int assertionsAdded) {
+        public Map<String,Object> toMap() {
+            Map<String,Object> out = new LinkedHashMap<>();
+            out.put("registration", registration.toMap()); out.put("operation", operation.toMap());
+            out.put("fromVariant", fromVariant); out.put("toVariant", toVariant); out.put("assertionsAdded", assertionsAdded);
             return out;
         }
     }

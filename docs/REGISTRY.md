@@ -176,3 +176,12 @@ reuse-report.json   # legacy packages only; see ADR-0006
 ```
 
 The registry remains Foundry-owned infrastructure throughout; ASA CSS remains the authority for ASA semantics.
+
+## Enrichment (ADR-0007)
+
+An identity's assertion set can grow without a new uid. `ENRICH` is a journal operation over two semantic
+variants of the same uid: the newer must restate every assertion of the older verbatim and add at least one,
+which the registry re-checks from package bytes on every build. The superseded variant becomes history
+(`variantHistory`), the identity stays `SINGLE_VARIANT` with a `currentVariant`, and reuse compares against the
+current variant. Forks and cycles fail closed. `RegistryApplication enrich <package> --subject <uid> …` admits
+the enriching package and records the operation as one fail-closed step. See `ADR-0007-IDENTITY-ENRICHMENT.md`.

@@ -44,7 +44,8 @@ public record IdentityOperation(
         String justification,
         List<Map<String,Object>> evidence,
         String authority,
-        String recordedAt) {
+        String recordedAt,
+        Map<String,Object> enrichment) {
 
     public static final String RECORD_VERSION = "0.1.0";
 
@@ -56,7 +57,14 @@ public record IdentityOperation(
         /** Several identities are determined to denote one object. Foundry-owned mapping. */
         MERGE,
         /** One identity is determined to have conflated several objects. Foundry-owned mapping. */
-        SPLIT
+        SPLIT,
+        /**
+         * One semantic variant of an identity is declared the successor STATE of another, within the
+         * same uid. Foundry-owned mapping over occurrences: the newer variant must restate every
+         * assertion of the older one verbatim and add at least one more, which the registry checks
+         * from package bytes. The identity stays ACTIVE; only which occurrence counts as current changes.
+         */
+        ENRICH
     }
 
     /** Lifecycle state an identity is left in by the operations that name it as a subject. */
@@ -71,6 +79,14 @@ public record IdentityOperation(
         targets = List.copyOf(targets);
         reasonCodes = List.copyOf(reasonCodes);
         evidence = evidence == null ? List.of() : List.copyOf(evidence);
+        enrichment = enrichment == null ? null : Json.object(Json.parse(Json.canonical(enrichment)), "enrichment");
+    }
+
+    /** Backwards-compatible constructor for the four lifecycle kinds, which carry no enrichment block. */
+    public IdentityOperation(String operationId, Kind operation, List<String> subjects, List<String> targets,
+                             List<String> reasonCodes, String justification, List<Map<String,Object>> evidence,
+                             String authority, String recordedAt) {
+        this(operationId, operation, subjects, targets, reasonCodes, justification, evidence, authority, recordedAt, null);
     }
 
     /**
@@ -80,6 +96,27 @@ public record IdentityOperation(
     public static IdentityOperation create(Kind operation, List<String> subjects, List<String> targets,
                                            List<String> reasonCodes, String justification,
                                            List<Map<String,Object>> evidence, String authority, String recordedAt) {
+        return create(operation, subjects, targets, reasonCodes, justification, evidence, authority, recordedAt, null);
+    }
+
+    /**
+     * Builds an {@code ENRICH} operation. {@code fromVariant} and {@code toVariant} are semantic-variant
+     * digests of the same uid; {@code toPackageId} names the registered package whose occurrence carries
+     * {@code toVariant}. The registry, not this record, verifies the superset relation between them.
+     */
+    public static IdentityOperation enrich(String uid, String fromVariant, String toVariant, String toPackageId,
+                                           List<String> reasonCodes, String justification, String authority, String recordedAt) {
+        Map<String,Object> enrichment = new LinkedHashMap<>();
+        enrichment.put("fromVariant", fromVariant);
+        enrichment.put("toVariant", toVariant);
+        enrichment.put("toPackageId", toPackageId);
+        return create(Kind.ENRICH, List.of(uid), List.of(uid), reasonCodes, justification, List.of(), authority, recordedAt, enrichment);
+    }
+
+    public static IdentityOperation create(Kind operation, List<String> subjects, List<String> targets,
+                                           List<String> reasonCodes, String justification,
+                                           List<Map<String,Object>> evidence, String authority, String recordedAt,
+                                           Map<String,Object> enrichment) {
         requireNonBlank(justification, "justification");
         requireNonBlank(recordedAt, "recordedAt");
         if (reasonCodes == null || reasonCodes.isEmpty()) {
@@ -111,8 +148,26 @@ public record IdentityOperation(
                     throw new IllegalArgumentException("SPLIT requires exactly one subject and at least two resulting identities.");
                 }
             }
+            case ENRICH -> {
+                // The identity persists: subject and target are the same uid. What changes is which
+                // semantic variant counts as its current state, named in the enrichment block.
+                if (subjectList.size() != 1 || !targetList.equals(subjectList)) {
+                    throw new IllegalArgumentException("ENRICH requires exactly one subject, named again as its only target.");
+                }
+                if (enrichment == null) throw new IllegalArgumentException("ENRICH requires an enrichment block (fromVariant, toVariant, toPackageId).");
+                String from = string(enrichment.get("fromVariant"), "enrichment.fromVariant");
+                String to = string(enrichment.get("toVariant"), "enrichment.toVariant");
+                String pkg = string(enrichment.get("toPackageId"), "enrichment.toPackageId");
+                if (!from.matches("[a-f0-9]{64}") || !to.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("ENRICH variants must be sha256 hex digests.");
+                if (from.equals(to)) throw new IllegalArgumentException("ENRICH from and to variants are identical; nothing is enriched.");
+                if (!pkg.matches("pkg-[a-f0-9]{16}")) throw new IllegalArgumentException("ENRICH toPackageId must be a package id.");
+                if (enrichment.size() != 3) throw new IllegalArgumentException("ENRICH enrichment block carries exactly fromVariant, toVariant and toPackageId.");
+            }
         }
-        if (operation != Kind.MERGE) {
+        if (operation != Kind.ENRICH && enrichment != null) {
+            throw new IllegalArgumentException(operation + " does not carry an enrichment block.");
+        }
+        if (operation != Kind.MERGE && operation != Kind.ENRICH) {
             for (String subject : subjectList) {
                 if (targetList.contains(subject)) {
                     throw new IllegalArgumentException("An identity may not be both subject and target of " + operation + ": " + subject);
@@ -124,10 +179,10 @@ public record IdentityOperation(
         }
 
         IdentityOperation draft = new IdentityOperation(null, operation, subjectList, targetList,
-                List.copyOf(reasonCodes), justification, evidence, authority, recordedAt);
+                List.copyOf(reasonCodes), justification, evidence, authority, recordedAt, enrichment);
         String operationId = StableIdentifiers.forJson("idop", 16, draft.projection());
         return new IdentityOperation(operationId, operation, subjectList, targetList,
-                List.copyOf(reasonCodes), justification, evidence, authority, recordedAt);
+                List.copyOf(reasonCodes), justification, evidence, authority, recordedAt, enrichment);
     }
 
     /** Reads an operation back from its stored form and re-derives its content address. */
@@ -151,7 +206,8 @@ public record IdentityOperation(
                 string(raw.get("justification"), "justification"),
                 evidence,
                 raw.get("authority") instanceof String s ? s : null,
-                string(raw.get("recordedAt"), "recordedAt"));
+                string(raw.get("recordedAt"), "recordedAt"),
+                raw.get("enrichment") == null ? null : Json.object(raw.get("enrichment"), "enrichment"));
         if (!rebuilt.operationId().equals(raw.get("operationId"))) {
             throw new IllegalArgumentException("Identity operation content address does not match its contents: "
                     + raw.get("operationId") + " expected " + rebuilt.operationId() + ".");
@@ -166,6 +222,7 @@ public record IdentityOperation(
             case RETIRE -> RETIRED;
             case MERGE -> MERGED;
             case SPLIT -> SPLIT_STATE;
+            case ENRICH -> ACTIVE;
         };
     }
 
@@ -181,6 +238,7 @@ public record IdentityOperation(
         out.put("evidence", Json.parse(Json.canonical(evidence)));
         if (authority != null) out.put("authority", authority);
         out.put("recordedAt", recordedAt);
+        if (enrichment != null) out.put("enrichment", Json.parse(Json.canonical(enrichment)));
         return out;
     }
 
@@ -196,6 +254,7 @@ public record IdentityOperation(
         if (!evidence.isEmpty()) out.put("evidence", Json.parse(Json.canonical(evidence)));
         if (authority != null) out.put("authority", authority);
         out.put("recordedAt", recordedAt);
+        if (enrichment != null) out.put("enrichment", Json.parse(Json.canonical(enrichment)));
         return out;
     }
 

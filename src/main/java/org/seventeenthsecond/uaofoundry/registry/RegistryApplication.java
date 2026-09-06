@@ -39,6 +39,7 @@ public final class RegistryApplication {
                 case "retire" -> operation(registry, parsed, IdentityOperation.Kind.RETIRE);
                 case "merge" -> operation(registry, parsed, IdentityOperation.Kind.MERGE);
                 case "split" -> operation(registry, parsed, IdentityOperation.Kind.SPLIT);
+                case "enrich" -> enrich(registry, parsed);
                 case "operations" -> operations(registry, parsed);
                 case "significance-inputs" -> significanceInputs(registry, parsed);
                 case "list" -> list(registry, parsed);
@@ -120,6 +121,22 @@ public final class RegistryApplication {
         IdentityOperation operation = IdentityOperation.create(kind, subjects, targets, parsed.reasonCodes(),
                 parsed.justification(), List.of(), parsed.authority(), parsed.recordedAt());
         out.println(Json.canonical(registry.applyIdentityOperation(operation).toMap()));
+        return 0;
+    }
+
+    /**
+     * Admits an enriching package and records ENRICH for one identity in a single fail-closed step.
+     * The package must restate every current assertion of the subject verbatim and add at least one.
+     */
+    private int enrich(FoundryRegistry registry, Parsed parsed) {
+        requirePositionals(parsed, 1, "enrich requires exactly one positional argument: the enriching package directory.");
+        if (parsed.subjects().size() != 1) throw new IllegalArgumentException("enrich requires exactly one --subject.");
+        if (!parsed.targets().isEmpty()) throw new IllegalArgumentException("enrich takes no --target; the subject persists.");
+        if (parsed.reasonCodes().isEmpty()) throw new IllegalArgumentException("enrich requires at least one --reason.");
+        if (parsed.justification() == null) throw new IllegalArgumentException("enrich requires --justification.");
+        if (parsed.recordedAt() == null) throw new IllegalArgumentException("enrich requires --recorded-at (an explicit timestamp, not the wall clock).");
+        out.println(Json.canonical(registry.enrich(Path.of(parsed.positionals().getFirst()), parsed.subjects().getFirst(),
+                parsed.reasonCodes(), parsed.justification(), parsed.authority(), parsed.recordedAt()).toMap()));
         return 0;
     }
 
@@ -218,6 +235,7 @@ public final class RegistryApplication {
         out.println("  ... RegistryApplication retire    --subject <uid> --reason <CODE> --justification <text> --recorded-at <iso8601>");
         out.println("  ... RegistryApplication merge     --subject <uid> --subject <uid> --target <uid> --reason <CODE> --justification <text> --recorded-at <iso8601>");
         out.println("  ... RegistryApplication split     --subject <uid> --target <uid> --target <uid> --reason <CODE> --justification <text> --recorded-at <iso8601>");
+        out.println("  ... RegistryApplication enrich    <package> --subject <uid> --reason <CODE> --justification <text> --recorded-at <iso8601>");
         out.println("  ... RegistryApplication operations");
         out.println("  ... RegistryApplication significance-inputs <uid|resolution-key|scheme:identifier>");
     }

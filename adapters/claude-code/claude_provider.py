@@ -255,6 +255,12 @@ def _registry_evidence(envelope: dict[str, Any]) -> tuple[list[dict[str, Any]], 
         occurrences = identity.get("occurrences", [])
         if not isinstance(occurrences, list):
             continue
+        # ADR-0007: an enriched identity's superseded variants are history. Feed the model the
+        # current variant's occurrences first and leave superseded ones out, so a restatement is of
+        # the current state rather than of a variant the registry no longer counts as current.
+        current_variant = identity.get("currentVariant")
+        if isinstance(current_variant, str):
+            occurrences = [o for o in occurrences if isinstance(o, dict) and o.get("semanticVariantDigest") == current_variant]
         for occurrence in occurrences:
             if not isinstance(occurrence, dict):
                 continue

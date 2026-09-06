@@ -2,6 +2,7 @@ package org.seventeenthsecond.uaofoundry.registry;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.seventeenthsecond.uaofoundry.identity.IdentityOperation;
 import org.seventeenthsecond.uaofoundry.identity.IdentityReference;
 import org.seventeenthsecond.uaofoundry.identity.IdentityResolution;
 import org.seventeenthsecond.uaofoundry.io.RequestLoader;
@@ -166,6 +167,105 @@ class PersistentIdentityRegistryTest {
 
         assertEquals(before, FileOps.treeHash(root), "a refused admission must not mutate the registry");
         assertTrue(registry.verify().passed(), "and must leave it verifiable");
+    }
+
+
+    // ---------------------------------------------------------------- ENRICH (ADR-0007)
+
+    /** Adds one sourced claim about the root identity while restating every fixture claim verbatim. */
+    private static void addRootClaim(Map<String,Object> fixture, String statement) {
+        Map<String,Object> candidates = object(fixture.get("candidates"));
+        Map<String,Object> claim = new java.util.LinkedHashMap<>();
+        claim.put("candidateId", "clm-root-enriched"); claim.put("subjectIdentityRef", "cid-root");
+        claim.put("statement", statement); claim.put("channels", List.of("foundry")); claim.put("sourceRefs", List.of("src-cow-bio"));
+        array(candidates.get("claims")).add(claim);
+        Map<String,Object> evidence = new java.util.LinkedHashMap<>();
+        evidence.put("evidenceId", "ev-root-enriched"); evidence.put("sourceRef", "src-cow-bio"); evidence.put("supportsCandidateRef", "clm-root-enriched");
+        evidence.put("extract", "Synthetic fixture evidence for the enriching assertion."); evidence.put("locatorWithinSource", "sentence-2");
+        array(candidates.get("evidence")).add(evidence);
+    }
+
+    @Test
+    void enrichmentMakesAStrictSupersetTheCurrentStateAndReuseFollowsIt() {
+        PipelineResult t0 = manufacture("enr-t0", fixture -> {});
+        PipelineResult t1 = manufacture("enr-t1", fixture -> addRootClaim(fixture, "Fixture assertion: enriched with a second sourced statement."));
+        FoundryRegistry registry = registryWith(t0);
+        String uid = rootUid(t0);
+        String before = object(array(identityByUid(registry.index(), uid).get("occurrences")).getFirst()).get("semanticVariantDigest").toString();
+
+        FoundryRegistry.EnrichmentResult result = registry.enrich(t1.packagePath(), uid, List.of("LIFE_CHRONOLOGY"),
+                "Second sourced statement added; prior assertions restated verbatim.", "operator", "2026-09-06T00:00:00Z");
+        assertEquals(1, result.assertionsAdded());
+        assertEquals(before, result.fromVariant());
+
+        Map<String,Object> identity = identityByUid(registry.index(), uid);
+        assertEquals(SemanticVariants.SINGLE_VARIANT, identity.get("semanticVariantStatus"), "a superseded variant is history, not an unreconciled sibling");
+        assertEquals(result.toVariant(), identity.get("currentVariant"));
+        assertEquals(1, array(identity.get("variantHistory")).size());
+        assertEquals(IdentityOperation.ACTIVE, identity.get("lifecycleState"), "enrichment never changes lifecycle");
+        assertEquals(2, array(identity.get("occurrences")).size(), "both packages remain inspectable occurrences");
+        assertTrue(registry.verify().passed());
+        assertEquals("SAME", object(registry.identityRecord(IdentityReference.uid(uid)).get("resolution")).get("decision"));
+
+        // Reuse follows the current state: restating the enriched form is a re-observation ...
+        org.seventeenthsecond.uaofoundry.reuse.ReuseAnalyzer analyzer = new org.seventeenthsecond.uaofoundry.reuse.ReuseAnalyzer(SCHEMAS);
+        String contextHash = org.seventeenthsecond.uaofoundry.util.Hashes.canonicalJson(Map.of("test", "context"));
+        PipelineResult restated = manufactureAgainst("enr-restate", registry, fixture -> addRootClaim(fixture, "Fixture assertion: enriched with a second sourced statement."));
+        Map<String,Object> report = analyzer.analyze(registry.index(), registryRoot, restated.packagePath(), contextHash);
+        assertEquals(1, array(report.get("reusedUaos")).stream().map(PersistentIdentityRegistryTest::object).filter(v -> uid.equals(v.get("uid"))).count(),
+                "restating the enriched form must count as reuse of the current state");
+        // ... while restating the superseded form is now divergence.
+        PipelineResult stalePackage = manufactureAgainst("enr-stale", registry, fixture -> {});
+        IllegalArgumentException stale = assertThrows(IllegalArgumentException.class, () -> analyzer.analyze(registry.index(), registryRoot, stalePackage.packagePath(), contextHash));
+        assertTrue(stale.getMessage().contains("SEMANTIC_VARIANT_DIVERGENCE"), stale.getMessage());
+    }
+
+    @Test
+    void enrichmentIsRefusedWhenPriorAssertionsAreRewordedOrDropped() {
+        PipelineResult t0 = manufacture("enr2-t0", fixture -> {});
+        PipelineResult reworded = manufacture("enr2-reworded", fixture -> {
+            claim(fixture, "clm-root-scope").put("statement", "Fixture assertion: re-worded, not restated.");
+            addRootClaim(fixture, "Fixture assertion: an additional statement.");
+        });
+        FoundryRegistry registry = registryWith(t0);
+        String uid = rootUid(t0);
+        String indexBefore = Json.canonical(registry.index());
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class, () -> registry.enrich(reworded.packagePath(), uid,
+                List.of("LIFE_CHRONOLOGY"), "attempt", "operator", "2026-09-06T00:00:00Z"));
+        assertTrue(refused.getMessage().contains("restate every prior assertion verbatim"), refused.getMessage());
+        assertEquals(indexBefore, Json.canonical(registry.index()), "a refused enrichment leaves the registry byte-identical");
+        assertEquals(1, array(identityByUid(registry.index(), uid).get("occurrences")).size(), "the non-enriching package was never admitted");
+
+        IllegalArgumentException unchanged = assertThrows(IllegalArgumentException.class, () -> registry.enrich(t0.packagePath(), uid,
+                List.of("LIFE_CHRONOLOGY"), "attempt", "operator", "2026-09-06T00:00:00Z"));
+        assertTrue(unchanged.getMessage().contains("nothing to enrich"), unchanged.getMessage());
+    }
+
+    @Test
+    void anEnrichmentForkOrAnUnsupportedJournalEntryFailsClosed() {
+        PipelineResult t0 = manufacture("enr3-t0", fixture -> {});
+        PipelineResult t1 = manufacture("enr3-t1", fixture -> addRootClaim(fixture, "Fixture assertion: branch one."));
+        PipelineResult t2 = manufacture("enr3-t2", fixture -> addRootClaim(fixture, "Fixture assertion: branch two."));
+        FoundryRegistry registry = registryWith(t0);
+        String uid = rootUid(t0);
+        registry.enrich(t1.packagePath(), uid, List.of("LIFE_CHRONOLOGY"), "branch one", "operator", "2026-09-06T00:00:00Z");
+
+        // A second enrichment leaving the ORIGINAL variant would be a fork. enrich() works from the
+        // current variant, so t2 (which restates t0, not t1) is refused as dropping t1's assertion.
+        IllegalArgumentException fork = assertThrows(IllegalArgumentException.class, () -> registry.enrich(t2.packagePath(), uid,
+                List.of("LIFE_CHRONOLOGY"), "branch two", "operator", "2026-09-06T00:00:00Z"));
+        assertTrue(fork.getMessage().contains("restate every prior assertion verbatim"), fork.getMessage());
+
+        // A journal entry the packages do not support is refused at admission and never lands.
+        Map<String,Object> identity = identityByUid(registry.index(), uid);
+        String current = identity.get("currentVariant").toString();
+        IdentityOperation bogus = IdentityOperation.enrich(uid, current, "f".repeat(64), "pkg-0000000000000000",
+                List.of("LIFE_CHRONOLOGY"), "unsupported", "operator", "2026-09-06T00:00:00Z");
+        IllegalArgumentException unsupported = assertThrows(IllegalArgumentException.class, () -> registry.applyIdentityOperation(bogus));
+        assertTrue(unsupported.getMessage().contains("holds no occurrence"), unsupported.getMessage());
+        assertTrue(registry.verify().passed());
+        assertEquals(1, array(identity.get("variantHistory")).size());
     }
 
     // ---------------------------------------------------------------- helpers
