@@ -1,0 +1,110 @@
+"""Builder-level tests for scripts/enrich/build_enrichment_bundle.py on a synthetic registry (Codex pass C F-C3/F-C4):
+review-required exit, operator attestation, exact-restatement refusal, unknown id refusal, paraphrase attestation note,
+threshold bounds, source-id and claim-id collisions. No jar, no provider."""
+import json, pathlib, subprocess, sys, tempfile, unittest
+HERE = pathlib.Path(__file__).resolve().parent; BUILDER = HERE.parent / "build_enrichment_bundle.py"
+V0 = "a" * 64; UID = "uao-000000000001"; KEY = "ext:wikidata:Q1"; PKG = "pkg-0000000000000001"; LIVE = "pkg-1111111111111111"
+BIRTH = "Norbert Wiener was born on 26 November 1894 in Columbia, Missouri, USA."; DEATH = "Norbert Wiener died on 18 March 1964 in Stockholm, Sweden."
+
+def write(p, obj): p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(obj, indent=1))
+
+def make_registry(root):
+    reg = root / "registry"; pk = reg / "packages" / PKG
+    write(reg / "index.json", {"registryVersion": "0.1.0", "packages": [PKG], "identityOperations": [], "identities": [
+        {"uid": UID, "resolutionKey": KEY, "semanticVariantStatus": "SINGLE_VARIANT", "occurrences": [{"packageId": PKG, "canonicalPath": "packages/x", "semanticVariantDigest": V0, "stateVersion": "0.1.0"}]}]})
+    write(pk / "candidate-identities.json", [{"candidateId": "cid-root", "root": True, "label": "Norbert Wiener", "aliases": [], "resolutionKey": KEY, "externalIdentifiers": {"wikidata": "Q1"}, "sourceRefs": ["src-wikidata"]}])
+    write(pk / "candidate-claims.json", [{"candidateId": "clm-birth", "subjectIdentityRef": "cid-root", "statement": BIRTH, "channels": ["biography"], "sourceRefs": ["src-wikidata"]},
+                                          {"candidateId": "clm-death", "subjectIdentityRef": "cid-root", "statement": DEATH, "channels": ["biography"], "sourceRefs": ["src-wikidata"]}])
+    write(pk / "candidate-evidence.json", [{"evidenceId": "ev-birth", "sourceRef": "src-wikidata", "supportsCandidateRef": "clm-birth", "extract": "born 1894", "locatorWithinSource": "p1"},
+                                            {"evidenceId": "ev-death", "sourceRef": "src-wikidata", "supportsCandidateRef": "clm-death", "extract": "died 1964", "locatorWithinSource": "p2"}])
+    write(pk / "source-registry.json", {"sources": [{"sourceId": "src-wikidata", "locator": "https://www.wikidata.org/wiki/Q1", "snapshotPath": "source-corpus/src-wikidata.txt", "sha256": "1" * 64}]})
+    write(pk / "provider-snapshot.json", {"fixedClock": "2026-01-01T00:00:00Z"})
+    return reg
+
+def make_live(root, claims, sources=None, identities=None, evidence=None, relationships=None):
+    live = root / "live"
+    write(live / "manifest.json", {"packageId": LIVE})
+    write(live / "provider-snapshot.json", {"identitySeed": "Norbert Wiener", "fixedClock": "2026-02-01T00:00:00Z", "knowledgeHorizon": "2026-02-01",
+        "candidates": {"identities": identities or [{"candidateId": "cid-live-root", "root": True, "label": "Norbert Wiener", "aliases": [], "resolutionKey": KEY, "externalIdentifiers": {"wikidata": "Q1"}, "sourceRefs": ["src-wikidata"]}],
+                       "claims": claims, "evidence": evidence or [], "relationships": relationships or []},
+        "sources": sources or [{"sourceId": "src-wikidata", "locator": "https://www.wikidata.org/wiki/Q1", "sourceClass": "wikidata", "retrievedAt": "2026-02-01T00:00:00Z", "license": "CC0", "content": "LIVE BYTES"}],
+        "sourceStrategy": {"authorityNotes": []}})
+    return live
+
+def claim(cid, statement, subj="cid-live-root", refs=("src-wikidata",)):
+    return {"candidateId": cid, "subjectIdentityRef": subj, "statement": statement, "channels": ["biography"], "sourceRefs": list(refs)}
+
+def run(reg, live, out, *extra):
+    return subprocess.run([sys.executable, str(BUILDER), "--registry", str(reg), "--uid", UID, "--package", str(live), "--edition", "edition.json", "--out", str(out), *extra], capture_output=True, text=True)
+
+def bundle(out): return json.loads(next(out.glob("*-enrichment.json")).read_text())
+
+class Builder(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(); self.root = pathlib.Path(self.tmp.name); self.reg = make_registry(self.root); self.out = self.root / "out"
+    def tearDown(self): self.tmp.cleanup()
+
+    def test_without_accept_the_tool_lists_and_refuses(self):
+        live = make_live(self.root, [claim("clm-new", "Wiener published Cybernetics in 1948."), claim("clm-same", BIRTH)])
+        r = run(self.reg, live, self.out)
+        self.assertEqual(2, r.returncode, r.stderr); self.assertIn("review required", r.stderr)
+        self.assertIn("[EXACT", r.stdout); self.assertIn("[candidate", r.stdout); self.assertFalse(self.out.exists() and any(self.out.glob("*.json")))
+
+    def test_operator_attestation_admits_exactly_the_named_claims(self):
+        live = make_live(self.root, [claim("clm-new", "Wiener published Cybernetics in 1948."), claim("clm-other", "Wiener taught at MIT."), claim("clm-same", BIRTH)])
+        r = run(self.reg, live, self.out, "--accept", "clm-new")
+        self.assertEqual(0, r.returncode, r.stderr); b = bundle(self.out)
+        ids = [c["candidateId"] for c in b["candidates"]["claims"]]
+        self.assertIn("clm-new", ids); self.assertNotIn("clm-other", ids); self.assertNotIn("clm-same", ids)
+        self.assertEqual({BIRTH, DEATH, "Wiener published Cybernetics in 1948."}, {c["statement"] for c in b["candidates"]["claims"]})
+        notes = " ".join(b["sourceStrategy"]["authorityNotes"])
+        self.assertIn("operator attested clm-new", notes); self.assertIn("1 new assertion(s) admitted by operator attestation", notes); self.assertIn("2 provider claim(s) about the target not accepted", notes)
+
+    def test_exact_restatement_cannot_be_attested(self):
+        live = make_live(self.root, [claim("clm-same", BIRTH)])
+        r = run(self.reg, live, self.out, "--accept", "clm-same")
+        self.assertEqual(2, r.returncode); self.assertIn("exact restatements", r.stderr)
+
+    def test_unknown_or_foreign_claim_ids_are_refused(self):
+        live = make_live(self.root, [claim("clm-new", "Wiener published Cybernetics in 1948.")])
+        r = run(self.reg, live, self.out, "--accept", "clm-nope")
+        self.assertEqual(2, r.returncode); self.assertIn("not provider claims about the target", r.stderr)
+
+    def test_a_flagged_paraphrase_is_admissible_only_by_name_and_the_note_says_so(self):
+        live = make_live(self.root, [claim("clm-para", "Wiener was born in Columbia, Missouri, in 1894.")])
+        listed = run(self.reg, live, self.out); self.assertEqual(2, listed.returncode); self.assertIn("[PARAPHRASE?", listed.stdout)
+        r = run(self.reg, live, self.out, "--accept", "clm-para")
+        self.assertEqual(0, r.returncode, r.stderr); notes = " ".join(bundle(self.out)["sourceStrategy"]["authorityNotes"])
+        self.assertIn("operator attested clm-para", notes); self.assertIn("flagged PARAPHRASE?", notes)
+
+    def test_threshold_outside_unit_interval_is_a_usage_error(self):
+        live = make_live(self.root, [claim("clm-new", "Wiener published Cybernetics in 1948.")])
+        for bad in ("1.5", "nan", "-1"):
+            r = run(self.reg, live, self.out, "--accept", "clm-new", "--paraphrase-threshold", bad)
+            self.assertEqual(2, r.returncode, bad); self.assertIn("paraphrase threshold", r.stderr)
+
+    def test_colliding_live_source_is_renamed_with_every_reference(self):
+        new_ident = {"candidateId": "cid-book", "root": False, "label": "Cybernetics (book)", "aliases": [], "resolutionKey": "ext:wikidata:Q2", "externalIdentifiers": {"wikidata": "Q2"}, "sourceRefs": ["src-wikidata"]}
+        live = make_live(self.root, [claim("clm-new", "Wiener published Cybernetics in 1948."), claim("clm-book", "Cybernetics appeared in 1948.", subj="cid-book")],
+                         identities=[{"candidateId": "cid-live-root", "root": True, "label": "Norbert Wiener", "aliases": [], "resolutionKey": KEY, "externalIdentifiers": {"wikidata": "Q1"}, "sourceRefs": ["src-wikidata"]}, new_ident],
+                         evidence=[{"evidenceId": "ev-new", "sourceRef": "src-wikidata", "supportsCandidateRef": "clm-new", "extract": "1948", "locatorWithinSource": "p3"}],
+                         relationships=[{"candidateId": "rel-author", "typeVersion": "asa:type:x/author-of@1", "participants": [], "identityLiterals": {}, "contextualBindings": [], "sourceRefs": ["src-wikidata"], "basis": "EXPLICIT"}])
+        r = run(self.reg, live, self.out, "--accept", "clm-new"); self.assertEqual(0, r.returncode, r.stderr); b = bundle(self.out); c = b["candidates"]
+        src_ids = {s["sourceId"] for s in b["sources"]}; self.assertEqual({"src-wikidata", f"src-wikidata--live-{LIVE[-8:]}"}, src_ids)
+        reg = next(s for s in b["sources"] if s["sourceId"] == "src-wikidata"); self.assertTrue(reg["locator"].startswith("registry://" + PKG), "the registered id keeps registry bytes")
+        live_id = f"src-wikidata--live-{LIVE[-8:]}"
+        self.assertEqual([live_id], next(x for x in c["claims"] if x["candidateId"] == "clm-new")["sourceRefs"])
+        self.assertEqual([live_id], next(x for x in c["identities"] if x["candidateId"] == "cid-book")["sourceRefs"])
+        self.assertEqual([live_id], c["relationships"][0]["sourceRefs"]); self.assertEqual(live_id, next(e for e in c["evidence"] if e["evidenceId"] == "ev-new")["sourceRef"])
+        restated_root = next(x for x in c["identities"] if x["resolutionKey"] == KEY); self.assertEqual(["src-wikidata"], restated_root["sourceRefs"], "restated identity keeps registry provenance")
+        for x in c["claims"]:
+            if x["candidateId"] in ("clm-birth", "clm-death"): self.assertEqual(["src-wikidata"], x["sourceRefs"])
+
+    def test_colliding_claim_ids_from_the_registry_are_renamed(self):
+        live = make_live(self.root, [claim("clm-birth", "Wiener published Cybernetics in 1948.")])   # live reuses a registered claim id
+        r = run(self.reg, live, self.out, "--accept", "clm-birth"); self.assertEqual(0, r.returncode, r.stderr); c = bundle(self.out)["candidates"]
+        ids = [x["candidateId"] for x in c["claims"]]; self.assertEqual(len(ids), len(set(ids)))
+        renamed = next(x for x in c["claims"] if x["statement"] == BIRTH); self.assertEqual("clm-birth--" + PKG, renamed["candidateId"])
+        self.assertEqual(renamed["candidateId"], next(e for e in c["evidence"] if e["extract"] == "born 1894")["supportsCandidateRef"])
+
+if __name__ == "__main__": unittest.main()

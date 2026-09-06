@@ -295,36 +295,29 @@ class PersistentIdentityRegistryTest {
         assertEquals(before, FileOps.treeHash(registryRoot), "refusal before admission must not touch the registry");
         assertEquals(1, array(identityByUid(registry.index(), uid).get("occurrences")).size());
 
-        // After admission (Codex pass-B F-B3): the journal directory is made unwritable. index() still reads
-        // it, register() still admits the package -- packages/ and index.json are writable siblings -- and
-        // only the ENRICH record write fails. That failure is genuinely after admission, so the rollback
-        // must remove the admitted package, restore the index byte-for-byte and leave no journal entry.
-        Path journal = registryRoot.resolve("identity-operations"); Files.createDirectories(journal);
-        String beforeWithJournal = FileOps.treeHash(registryRoot);
+        // After admission (Codex pass-B F-B3, pass-C F-C2): a plain FILE squats the journal path. index() treats a
+        // non-directory journal as empty, register() still admits the package -- packages/ and index.json are
+        // siblings -- and only the ENRICH record write fails (its parent cannot be created). That failure is
+        // genuinely after admission, needs no permission trick, and can never be skipped: the rollback must remove
+        // the admitted package, restore the index byte-for-byte and leave no journal behind.
         String indexBefore = Files.readString(registryRoot.resolve("index.json"));
         String packageId = object(FileOps.readJson(t1.packagePath().resolve("manifest.json"))).get("packageId").toString();
-        Set<java.nio.file.attribute.PosixFilePermission> writable = Files.getPosixFilePermissions(journal);
-        Files.setPosixFilePermissions(journal, java.util.EnumSet.of(
-                java.nio.file.attribute.PosixFilePermission.OWNER_READ, java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE,
-                java.nio.file.attribute.PosixFilePermission.GROUP_READ, java.nio.file.attribute.PosixFilePermission.GROUP_EXECUTE,
-                java.nio.file.attribute.PosixFilePermission.OTHERS_READ, java.nio.file.attribute.PosixFilePermission.OTHERS_EXECUTE));
-        org.junit.jupiter.api.Assumptions.assumeFalse(Files.isWritable(journal),
-                "directory permissions are not enforced for this user (root?), so the post-admission path cannot be forced here");
-        try {
-            IllegalArgumentException afterAdmission = assertThrows(IllegalArgumentException.class, () -> registry.enrich(t1.packagePath(), uid,
-                    List.of("LIFE_CHRONOLOGY"), "fails after admission", "operator", "2026-09-06T00:00:00Z"));
-            assertTrue(afterAdmission.getMessage().contains("Unable to write"), "the failure is the journal write, after admission: " + afterAdmission.getMessage());
-            assertFalse(Files.isDirectory(registryRoot.resolve("packages").resolve(packageId)), "the package admitted before the failure is rolled back");
-            assertEquals(indexBefore, Files.readString(registryRoot.resolve("index.json")), "the index is restored byte-for-byte");
-            try (var entries = Files.list(journal)) { assertEquals(0, entries.count(), "no ENRICH record survives a rolled-back admission"); }
-        } finally {
-            Files.setPosixFilePermissions(journal, writable);
-        }
-        assertEquals(beforeWithJournal, FileOps.treeHash(registryRoot), "the registry is byte-identical to before the call, with nothing to clean up");
+        Path journal = registryRoot.resolve("identity-operations");
+        Files.writeString(journal, "not a directory");
+        String beforeWithJournal = FileOps.treeHash(registryRoot);
+        IllegalArgumentException afterAdmission = assertThrows(IllegalArgumentException.class, () -> registry.enrich(t1.packagePath(), uid,
+                List.of("LIFE_CHRONOLOGY"), "fails after admission", "operator", "2026-09-06T00:00:00Z"));
+        assertTrue(afterAdmission.getMessage().contains("Unable to write"), "the failure is the journal write, after admission: " + afterAdmission.getMessage());
+        assertFalse(Files.isDirectory(registryRoot.resolve("packages").resolve(packageId)), "the package admitted before the failure is rolled back");
+        assertEquals(indexBefore, Files.readString(registryRoot.resolve("index.json")), "the index is restored byte-for-byte");
+        assertTrue(Files.isRegularFile(journal), "nothing replaced the squatting file, so no ENRICH record was written");
+        assertEquals(beforeWithJournal, FileOps.treeHash(registryRoot), "the registry is byte-identical to before the call");
+        Files.delete(journal);
+        assertEquals(before, FileOps.treeHash(registryRoot), "with the squatting file gone, byte-identical to before both attempts");
         assertTrue(registry.verify().passed());
         assertEquals(1, array(identityByUid(registry.index(), uid).get("occurrences")).size());
 
-        // The rollback left nothing behind that blocks the same enrichment once the journal is writable again.
+        // The rollback left nothing behind that blocks the same enrichment once the journal path is free again.
         FoundryRegistry.EnrichmentResult recovered = registry.enrich(t1.packagePath(), uid, List.of("LIFE_CHRONOLOGY"), "after recovery", "operator", "2026-09-06T00:00:00Z");
         assertEquals(1, recovered.assertionsAdded());
         assertTrue(Files.isDirectory(registryRoot.resolve("packages").resolve(packageId)));

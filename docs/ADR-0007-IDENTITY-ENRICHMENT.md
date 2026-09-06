@@ -101,3 +101,19 @@ identity is derivable from bytes alone.
   write fails (package removed, index byte-identical, no journal entry, and the same enrichment succeeds afterwards).
   The console report carries `existingIdentitiesEnriched` and `enrichedIdentities`, emitted only when non-empty so
   non-enrichment reports keep their bytes. 13 Python unit tests for the helper.
+- **Codex pass C (2026-09-07, read-only, on 9488e26): REFUSED** — F-C3 HIGH token-overlap novelty is evadable (a semantic
+  restatement scored 0.27 and passed) and the threshold was unbounded; F-C4 HIGH `SourcePool` rewrote only claim/evidence
+  references, leaving identity and relationship `sourceRefs` on the wrong source, and re-installing an already-renamed
+  origin threw; F-C1 MEDIUM `current_occurrence` ignored `semanticVariantStatus`; F-C2 MEDIUM the rollback test's
+  `Assumptions` guard could skip silently. F-C5/F-C6 INFO: F-B7 closed, suites verified. Report:
+  `temp/codex-uaofoundry-adr0007-ratification-pass-c-001.md`.
+- **Remediation (fourth commit):** novelty is an operator attestation, not a computation — without `--accept` the bundle
+  builder lists every provider claim about the target beside its nearest registered assertion (overlap score,
+  `PARAPHRASE?` flag as a triage aid) and exits 2; only claims named with `--accept <candidateId>` enter the bundle, each
+  recorded in `authorityNotes` with its score; exact restatements can never be accepted; the threshold must be a finite
+  number in [0, 1]. `SourcePool.install` rewrites `sourceRefs`/`sourceRef` in every record handed to it (identities,
+  claims, evidence, relationships) and is idempotent for an already-renamed origin; `disambiguate_ids` renames restated
+  claim/evidence ids that collide with live ones (found on Macleay reconcile runs 16/23). `current_occurrence` refuses any
+  identity whose `semanticVariantStatus` is not `SINGLE_VARIANT`. The rollback test squats the journal path with a plain
+  file, so `register()` succeeds and only the ENRICH record write fails, with no permission dependence and no skip
+  path. Python 29/29 (helper + builder-level tests on a synthetic registry).
