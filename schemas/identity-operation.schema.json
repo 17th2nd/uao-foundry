@@ -99,7 +99,7 @@
       "format": "date-time"
     },
     "enrichment": {
-      "$comment": "ENRICH only. Declares toVariant (carried by toPackageId's occurrence of the subject) the successor state of fromVariant within the same uid. The registry verifies from package bytes that toVariant keeps the canonical label and every alias and external identifier of fromVariant (names and identifiers may only grow) and restates every assertion of fromVariant verbatim while adding at least one; an operation that fails either half is refused at admission and fails verification thereafter.",
+      "$comment": "ENRICH only. Declares toVariant (carried by toPackageId's occurrence of the subject) the successor state of fromVariant within the same uid. The registry verifies from package bytes that toVariant keeps the canonical label and every alias and external identifier of fromVariant (names and identifiers may only grow) and restates every assertion of fromVariant verbatim while adding at least one; an operation that fails either half is refused at admission and fails verification thereafter. The package named by toPackageId may carry other registered identities only in their accepted lineage (see the ENRICH conditional below).",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -133,9 +133,19 @@
         }
       },
       "then": {
+        "$comment": "ENRICH names exactly one identity as both subject and target (the identity persists; one enrichment per package). The registry also re-derives on every build that the package named by toPackageId carries every OTHER registered identity only in a state of that identity's accepted lineage, so a recorded ENRICH can never leave a second identity an unreconciled variant.",
         "required": [
           "enrichment"
-        ]
+        ],
+        "properties": {
+          "subjects": {
+            "maxItems": 1
+          },
+          "targets": {
+            "minItems": 1,
+            "maxItems": 1
+          }
+        }
       },
       "else": {
         "not": {

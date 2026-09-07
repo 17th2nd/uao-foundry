@@ -448,6 +448,7 @@ public final class FoundryRegistry {
         List<IdentityOperation> operations = readOperations();
         applyLifecycle(identities, operations);
         applyEnrichment(identities, operations);
+        enforceWholePackageRule(identities, operations);
 
         Map<String,Object> out = new LinkedHashMap<>();
         out.put("registryVersion", REGISTRY_VERSION);
@@ -637,6 +638,31 @@ public final class FoundryRegistry {
             String defect = enrichmentDefect(uaoOf(older, uid), uaoOf(newer, uid));
             if (defect != null) throw new IllegalArgumentException("ENRICH " + operation.operationId() + " refused for " + uid + ": " + defect);
             aggregate.addEnrichment(from, to, toPackage, operation.operationId());
+        }
+    }
+
+    /**
+     * The whole-package half of the ENRICH rule (Codex pass-H F-H1), re-derived on every index build after all
+     * enrichments are applied: the package an ENRICH names may carry other registered identities only in a state
+     * that belongs to that identity's accepted lineage (its single state, or a variant linked by its own ENRICH
+     * chain). Otherwise the enrichment would have left a second identity an unreconciled variant -- the state the
+     * Decision forbids -- whichever public path admitted the package and recorded the operation.
+     */
+    private void enforceWholePackageRule(Map<String,IdentityAggregate> identities, List<IdentityOperation> operations) {
+        for (IdentityOperation operation : operations) {
+            if (operation.operation() != IdentityOperation.Kind.ENRICH) continue;
+            String subject = operation.subjects().getFirst();
+            String toPackage = string(operation.enrichment().get("toPackageId"), "enrichment.toPackageId");
+            for (IdentityAggregate other : identities.values()) {
+                if (other.uid.equals(subject)) continue;
+                for (Occurrence occurrence : other.occurrences) {
+                    if (!occurrence.packageId().equals(toPackage)) continue;
+                    if (!other.inLineage(occurrence.semanticVariantDigest())) {
+                        throw new IllegalArgumentException("ENRICH " + operation.operationId() + " refused: package " + toPackage + " also carries " + other.uid
+                                + " (" + other.resolutionKey + ") in a variant outside that identity's accepted lineage; an enrichment package restates every other registered identity verbatim, and enriches exactly one.");
+                    }
+                }
+            }
         }
     }
 
@@ -887,6 +913,19 @@ public final class FoundryRegistry {
         private String lifecycleOperationId;
         private final List<Map<String,Object>> enrichments = new ArrayList<>();
         private IdentityAggregate(String uid, String resolutionKey) { this.uid = uid; this.resolutionKey = resolutionKey; }
+
+        /**
+         * Whether {@code digest} is a state this identity accepts as its own: its single state when it has never
+         * been enriched, or a variant linked by its ENRICH chain. An unlinked sibling is not in the lineage.
+         */
+        private boolean inLineage(String digest) {
+            Set<String> variants = new LinkedHashSet<>();
+            occurrences.forEach(o -> variants.add(o.semanticVariantDigest()));
+            if (enrichments.isEmpty()) return variants.size() == 1 && variants.contains(digest);
+            Set<String> chain = new LinkedHashSet<>();
+            enrichments.forEach(e -> { chain.add(String.valueOf(e.get("fromVariant"))); chain.add(String.valueOf(e.get("toVariant"))); });
+            return chain.contains(digest);
+        }
 
         /** Records one verified ENRICH edge between two of this identity's variants. */
         private void addEnrichment(String from, String to, String packageId, String operationId) {

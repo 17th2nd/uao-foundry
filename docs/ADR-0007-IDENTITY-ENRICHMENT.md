@@ -189,3 +189,20 @@ identity is derivable from bytes alone.
   refused). The Decision, `REGISTRY.md` and the operation schema now state the two-half law and the one-identity rule.
   Java 184/184, 0 skipped; Python and adapter counts unchanged. The jar is rebuilt from this commit as soon as the live
   batch using it finishes; until then the operator tool's default runtime is the pre-remediation jar (F-G2).
+- **Codex pass H (2026-09-07 12:05, read-only, on 702af40): REFUSED** — F-H1 HIGH the whole-package rule was enforced
+  only in the convenience `enrich()` path: a plain `register()` followed by `applyIdentityOperation(ENRICH)` produced a
+  verified index with the subject `SINGLE_VARIANT` and a second identity `MULTIPLE_UNRECONCILED_VARIANTS`, because the
+  index rebuild validated only the subject and its two variants; F-H2 MEDIUM the operation schema neither constrained
+  ENRICH to one subject/target nor stated the other-identity rule (a two-subject record validated). F-H3/F-H4 INFO:
+  the rebuilt jar matched `target/classes` and carried the continuity law; guards and counts verified. Report:
+  `temp/codex-uaofoundry-adr0007-ratification-pass-h-001.md` (a first launch at 08:50 hit the Codex usage limit and is
+  filed non-dispositive as `temp/codex-adr0007-pass-h-usage-limit-001.log`).
+- **Remediation (ninth commit):** the whole-package rule is now re-derived on every index build, after all enrichments
+  are applied (`enforceWholePackageRule`): the package an ENRICH names may carry another registered identity only in a
+  state of that identity's *accepted lineage* — its single state when never enriched, or a variant linked by its own
+  ENRICH chain; an unlinked sibling refuses the operation and the journal entry is removed, whichever public path
+  recorded it. The operation schema's ENRICH branch now requires exactly one subject and one target and states the
+  other-identity rule. Tests: register-then-apply refused byte-identical with both identities left as the plain admission
+  made them, the clean journal path accepted; a two-subject ENRICH fails schema validation. Java 186/186, 0 skipped.
+  ⚠ The jar is NOT rebuilt in this commit: a live batch (the `ai` collection, ~150 seeds) holds it; the rebuild follows
+  the batch and is the condition on which the operator tool's default runtime carries this rule.

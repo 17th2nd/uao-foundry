@@ -315,6 +315,58 @@ class PersistentIdentityRegistryTest {
     }
 
     @Test
+    void theJournalPathCannotLeaveASecondIdentityUnreconciledEither() throws Exception {
+        // Codex pass-H F-H1: plain register() followed by applyIdentityOperation(ENRICH) bypassed the convenience
+        // path's preflight. The whole-package rule is now re-derived on every index build, so the journal entry is
+        // refused and removed, whichever path recorded it.
+        PipelineResult t0 = manufacture("enr8-t0", fixture -> {});
+        PipelineResult mixed = manufacture("enr8-mixed", fixture -> {
+            addRootClaim(fixture, "Fixture assertion: one more sourced statement.");
+            for (Object raw : array(object(fixture.get("candidates")).get("claims"))) {
+                Map<String,Object> claim = object(raw);
+                if ("cid-bovine-context".equals(claim.get("subjectIdentityRef"))) claim.put("statement", claim.get("statement") + " (re-worded)");
+            }
+        });
+        FoundryRegistry registry = registryWith(t0);
+        String uid = rootUid(t0);
+        String v0 = object(array(identityByUid(registry.index(), uid).get("occurrences")).getFirst()).get("semanticVariantDigest").toString();
+        FoundryRegistry.RegistrationResult admitted = registry.register(mixed.packagePath());   // legal on its own: both identities become unreconciled
+        String v1 = array(identityByUid(registry.index(), uid).get("occurrences")).stream().map(PersistentIdentityRegistryTest::object)
+                .filter(o -> admitted.packageId().equals(o.get("packageId"))).map(o -> o.get("semanticVariantDigest").toString()).findFirst().orElseThrow();
+        String before = FileOps.treeHash(registryRoot);
+        IdentityOperation enrich = IdentityOperation.enrich(uid, v0, v1, admitted.packageId(), List.of("LIFE_CHRONOLOGY"), "journal path", "operator", "2026-09-07T00:00:00Z");
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class, () -> registry.applyIdentityOperation(enrich));
+        assertTrue(refused.getMessage().contains("outside that identity's accepted lineage"), refused.getMessage());
+        assertEquals(before, FileOps.treeHash(registryRoot), "the refused journal entry is removed again");
+        assertTrue(registry.verify().passed());
+        for (Object raw : array(registry.index().get("identities"))) {
+            assertEquals(SemanticVariants.MULTIPLE_UNRECONCILED_VARIANTS, object(raw).get("semanticVariantStatus"), "no half-applied state: both stay as the plain admission left them");
+        }
+
+        // The same journal path with the other identity restated verbatim is accepted, on a fresh registry.
+        FoundryRegistry clean = new FoundryRegistry(temp.resolve("registry-enr8-clean"), SCHEMAS);
+        clean.register(t0.packagePath());
+        PipelineResult grown = manufacture("enr8-clean", fixture -> addRootClaim(fixture, "Fixture assertion: one more sourced statement."));
+        FoundryRegistry.RegistrationResult ok = clean.register(grown.packagePath());
+        String v1c = array(identityByUid(clean.index(), uid).get("occurrences")).stream().map(PersistentIdentityRegistryTest::object)
+                .filter(o -> ok.packageId().equals(o.get("packageId"))).map(o -> o.get("semanticVariantDigest").toString()).findFirst().orElseThrow();
+        clean.applyIdentityOperation(IdentityOperation.enrich(uid, v0, v1c, ok.packageId(), List.of("LIFE_CHRONOLOGY"), "journal path, clean", "operator", "2026-09-07T00:00:00Z"));
+        assertTrue(clean.verify().passed());
+        for (Object raw : array(clean.index().get("identities"))) assertEquals(SemanticVariants.SINGLE_VARIANT, object(raw).get("semanticVariantStatus"));
+    }
+
+    @Test
+    void theOperationSchemaAdmitsOnlyOneSubjectAndTargetForEnrich() {
+        // Codex pass-H F-H2: the machine-readable contract states the one-identity rule, not only the Java constructor.
+        Map<String,Object> record = new java.util.LinkedHashMap<>(IdentityOperation.enrich("uao-aaaaaaaaaaaa", "a".repeat(64), "b".repeat(64), "pkg-0000000000000001",
+                List.of("LIFE_CHRONOLOGY"), "one", "operator", "2026-09-07T00:00:00Z").toMap());
+        new org.seventeenthsecond.uaofoundry.validation.SchemaValidator().validate(record, SCHEMAS.resolve("identity-operation.schema.json")).requireValid("single-subject ENRICH");
+        Map<String,Object> two = new java.util.LinkedHashMap<>(record);
+        two.put("subjects", List.of("uao-aaaaaaaaaaaa", "uao-bbbbbbbbbbbb")); two.put("targets", List.of("uao-aaaaaaaaaaaa", "uao-bbbbbbbbbbbb"));
+        assertThrows(IllegalArgumentException.class, () -> new org.seventeenthsecond.uaofoundry.validation.SchemaValidator().validate(two, SCHEMAS.resolve("identity-operation.schema.json")).requireValid("two-subject ENRICH"));
+    }
+
+    @Test
     void aGenuineEnrichmentForkInTheJournalFailsTheIndexClosed() {
         PipelineResult t0 = manufacture("enr3-t0", fixture -> {});
         PipelineResult t1 = manufacture("enr3-t1", fixture -> addRootClaim(fixture, "Fixture assertion: branch one."));
