@@ -257,3 +257,18 @@ identity is derivable from bytes alone.
   squatting the package path survives both `enrich()` and `register()`; a symlinked journal record and a symlinked
   package directory fail the index closed and are neither followed nor deleted; a refused first operation leaves no
   journal directory through either path. Java 194/194, 0 skipped. ⚠ Jar rebuild still pending the `ai` batch.
+- **Codex pass L (2026-09-07, read-only, on 667c51a): REFUSED** — F-K2 and F-K4 closed. F-L2 HIGH: the "no links"
+  claim held only at the two leaves probed in pass K; the index file, both store roots and files inside packages
+  still followed links, and a linked index or journal root could direct a write outside the registry. Report:
+  `temp/codex-uaofoundry-adr0007-ratification-pass-l-001.md`.
+- **Remediation (thirteenth commit):** one guard, `requireLinkFreeStores`, runs at the start of every read and every
+  rebuild: the index must be a regular file reached without a link, each store root a real directory, and every entry
+  under both stores a real directory or regular file — any symbolic link anywhere fails the read closed before a byte
+  is written. The tree digest refuses trees containing links, and the package verifier refuses a package containing
+  one, so a linked candidate is refused at registration and a linked file inside an admitted package fails
+  verification even when its target bytes are identical. Tests cover the linked index (never rewritten), the linked
+  journal root (nothing written into the target), the linked package-internal file, and the linked candidate. Because
+  a squatted store is now refused before admission, the post-admission rollback proof moved to a package-private
+  fault-injection seam (`postWriteFault`, a no-op in production) that fails the transaction after both writes and
+  before the rebuild, deterministically and without any permission trick. Java 195/195, 0 skipped. ⚠ Jar rebuild
+  still pending the `ai` batch.

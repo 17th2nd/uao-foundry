@@ -364,7 +364,7 @@ class PersistentIdentityRegistryTest {
         Path link = journal.resolve(op.operationId() + ".json");
         try { Files.createSymbolicLink(link, outside); } catch (UnsupportedOperationException | java.io.IOException ex) { org.junit.jupiter.api.Assumptions.abort("symbolic links unavailable here: " + ex); }
         IllegalArgumentException read = assertThrows(IllegalArgumentException.class, registry::index);
-        assertTrue(read.getMessage().contains("not a regular file"), read.getMessage());
+        assertTrue(read.getMessage().contains("Symbolic link") || read.getMessage().contains("not a regular file"), read.getMessage());
         assertFalse(registry.verify().passed());
         assertThrows(IllegalArgumentException.class, () -> registry.applyIdentityOperation(op));
         assertTrue(Files.isSymbolicLink(link), "the link is refused, not replaced or deleted");
@@ -394,6 +394,60 @@ class PersistentIdentityRegistryTest {
         assertThrows(IllegalArgumentException.class, () -> registry.enrich(mixed.packagePath(), uid, List.of("LIFE_CHRONOLOGY"), "mixed", "operator", "2026-09-07T00:00:00Z"));
         assertFalse(Files.exists(journal));
         assertTrue(registry.verify().passed());
+    }
+
+    @Test
+    void noLinkAnywhereInTheStoresIsFollowedOrWrittenThrough() throws Exception {
+        // Codex pass-L F-L2: the index file, a store root, and a file inside an admitted package.
+        PipelineResult t0 = manufacture("enr16-t0", fixture -> {});
+        PipelineResult t1 = manufacture("enr16-t1", fixture -> addRootClaim(fixture, "Fixture assertion: enriched."));
+        FoundryRegistry registry = registryWith(t0);
+        String uid = rootUid(t0);
+        Path index = registryRoot.resolve("index.json");
+        try {
+            // 1. index.json replaced by a link to an external copy: refused, and the external copy is never rewritten.
+            Path externalIndex = temp.resolve("external-index.json"); Files.copy(index, externalIndex);
+            String externalBytes = Files.readString(externalIndex);
+            Files.delete(index); Files.createSymbolicLink(index, externalIndex);
+            assertThrows(IllegalArgumentException.class, registry::index);
+            assertFalse(registry.verify().passed());
+            assertThrows(IllegalArgumentException.class, registry::rebuildAndPersist);
+            assertThrows(IllegalArgumentException.class, () -> registry.register(t1.packagePath()));
+            assertEquals(externalBytes, Files.readString(externalIndex), "nothing was written through the link");
+            assertTrue(Files.isSymbolicLink(index), "the link is refused, not replaced");
+            Files.delete(index); Files.copy(externalIndex, index);
+            assertTrue(registry.verify().passed());
+        } catch (UnsupportedOperationException ex) { org.junit.jupiter.api.Assumptions.abort("symbolic links unavailable here"); }
+
+        // 2. identity-operations/ as a link to an external directory: no record is written there.
+        Path externalJournal = temp.resolve("external-journal"); Files.createDirectories(externalJournal);
+        Path journal = registryRoot.resolve("identity-operations");
+        Files.createSymbolicLink(journal, externalJournal);
+        String v0 = object(array(object(FileOps.readJson(index)).get("identities")).getFirst()).get("occurrences") instanceof List<?> l ? object(l.getFirst()).get("semanticVariantDigest").toString() : null;
+        IdentityOperation op = IdentityOperation.enrich(uid, v0, "f".repeat(64), "pkg-0000000000000000", List.of("LIFE_CHRONOLOGY"), "through a link", "operator", "2026-09-07T00:00:00Z");
+        assertThrows(IllegalArgumentException.class, () -> registry.applyIdentityOperation(op));
+        assertThrows(IllegalArgumentException.class, () -> registry.enrich(t1.packagePath(), uid, List.of("LIFE_CHRONOLOGY"), "through a link", "operator", "2026-09-07T00:00:00Z"));
+        try (var s = Files.list(externalJournal)) { assertEquals(0, s.count(), "nothing was written into the external directory"); }
+        assertTrue(Files.isSymbolicLink(journal));
+        Files.delete(journal);
+        assertTrue(registry.verify().passed());
+
+        // 3. a file inside an admitted package replaced by a link to identical external bytes: verification fails.
+        Path pkgDir = registryRoot.resolve("packages").resolve(object(array(registry.index().get("packages")).getFirst()).get("packageId").toString());
+        Path inner = pkgDir.resolve("identity-resolution.json"); Path externalCopy = temp.resolve("external-identity-resolution.json");
+        Files.copy(inner, externalCopy); Files.delete(inner); Files.createSymbolicLink(inner, externalCopy);
+        assertFalse(registry.verify().passed(), "identical bytes reached through a link are not the registry's bytes");
+        assertThrows(IllegalArgumentException.class, registry::index);
+        Files.delete(inner); Files.copy(externalCopy, inner);
+        assertTrue(registry.verify().passed());
+
+        // 4. a candidate package that contains a link is refused at registration.
+        Path candidate = temp.resolve("linked-candidate"); FileOps.copyTree(t1.packagePath(), candidate);
+        Path candidateInner = candidate.resolve("identity-resolution.json"); Path candidateExternal = temp.resolve("candidate-external.json");
+        Files.copy(candidateInner, candidateExternal); Files.delete(candidateInner); Files.createSymbolicLink(candidateInner, candidateExternal);
+        String before = FileOps.treeHash(registryRoot);
+        assertThrows(IllegalArgumentException.class, () -> registry.register(candidate));
+        assertEquals(before, FileOps.treeHash(registryRoot));
     }
 
     @Test
@@ -626,29 +680,30 @@ class PersistentIdentityRegistryTest {
         assertEquals(before, FileOps.treeHash(registryRoot), "refusal before admission must not touch the registry");
         assertEquals(1, array(identityByUid(registry.index(), uid).get("occurrences")).size());
 
-        // After admission (Codex pass-B F-B3, pass-C F-C2): a plain FILE squats the journal path. index() treats a
-        // non-directory journal as empty, register() still admits the package -- packages/ and index.json are
-        // siblings -- and only the ENRICH record write fails (its parent cannot be created). That failure is
-        // genuinely after admission, needs no permission trick, and can never be skipped: the rollback must remove
-        // the admitted package, restore the index byte-for-byte and leave no journal behind.
+        // After admission (Codex pass-B F-B3, pass-C F-C2, pass-L): the package and its ENRICH record are written,
+        // then the transaction fails before its single rebuild. The fault is injected through the package-private
+        // seam, so this proof is deterministic and can never skip. The rollback must remove the package, the record
+        // and the journal directory it created, and restore the index byte-for-byte.
         String indexBefore = Files.readString(registryRoot.resolve("index.json"));
         String packageId = object(FileOps.readJson(t1.packagePath().resolve("manifest.json"))).get("packageId").toString();
         Path journal = registryRoot.resolve("identity-operations");
-        Files.writeString(journal, "not a directory");
-        String beforeWithJournal = FileOps.treeHash(registryRoot);
-        IllegalArgumentException afterAdmission = assertThrows(IllegalArgumentException.class, () -> registry.enrich(t1.packagePath(), uid,
-                List.of("LIFE_CHRONOLOGY"), "fails after admission", "operator", "2026-09-06T00:00:00Z"));
-        assertTrue(afterAdmission.getMessage().contains("Unable to write"), "the failure is the journal write, after admission: " + afterAdmission.getMessage());
-        assertFalse(Files.isDirectory(registryRoot.resolve("packages").resolve(packageId)), "the package admitted before the failure is rolled back");
-        assertEquals(indexBefore, Files.readString(registryRoot.resolve("index.json")), "the index is restored byte-for-byte");
-        assertTrue(Files.isRegularFile(journal), "nothing replaced the squatting file, so no ENRICH record was written");
-        assertEquals(beforeWithJournal, FileOps.treeHash(registryRoot), "the registry is byte-identical to before the call");
-        Files.delete(journal);
-        assertEquals(before, FileOps.treeHash(registryRoot), "with the squatting file gone, byte-identical to before both attempts");
+        assertFalse(Files.exists(journal));
+        registry.postWriteFault = () -> { throw new IllegalStateException("injected after both writes"); };
+        try {
+            IllegalStateException afterAdmission = assertThrows(IllegalStateException.class, () -> registry.enrich(t1.packagePath(), uid,
+                    List.of("LIFE_CHRONOLOGY"), "fails after admission", "operator", "2026-09-06T00:00:00Z"));
+            assertEquals("injected after both writes", afterAdmission.getMessage());
+            assertFalse(Files.isDirectory(registryRoot.resolve("packages").resolve(packageId)), "the package admitted before the failure is rolled back");
+            assertFalse(Files.exists(journal), "the record and the journal directory this call created are rolled back");
+            assertEquals(indexBefore, Files.readString(registryRoot.resolve("index.json")), "the index is restored byte-for-byte");
+        } finally {
+            registry.postWriteFault = () -> {};
+        }
+        assertEquals(before, FileOps.treeHash(registryRoot), "byte-identical to before both attempts");
         assertTrue(registry.verify().passed());
         assertEquals(1, array(identityByUid(registry.index(), uid).get("occurrences")).size());
 
-        // The rollback left nothing behind that blocks the same enrichment once the journal path is free again.
+        // The rollback left nothing behind that blocks the same enrichment.
         FoundryRegistry.EnrichmentResult recovered = registry.enrich(t1.packagePath(), uid, List.of("LIFE_CHRONOLOGY"), "after recovery", "operator", "2026-09-06T00:00:00Z");
         assertEquals(1, recovered.assertionsAdded());
         assertTrue(Files.isDirectory(registryRoot.resolve("packages").resolve(packageId)));

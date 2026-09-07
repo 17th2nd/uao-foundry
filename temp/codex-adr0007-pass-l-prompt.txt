@@ -1,0 +1,11 @@
+You are the independent, read-only ratifier for the UAO Foundry programme (Claude implements, Codex ratifies, git/runtime is authority). Pass L on branch feature/enrichment-operation: review `git diff HEAD~12 HEAD` (all twelve commits of ADR-0007) with emphasis on the twelfth commit, which remediates your pass-K refusal (temp/codex-uaofoundry-adr0007-ratification-pass-k-001.md, findings F-K2, F-K3, F-K4). Your acceptances of the attributable whole-package invariant, F-J1 and F-J3 stand.
+
+Standing condition: target/uao-foundry-0.1.0.jar is still the eighth-commit build because a live manufacture batch holds it; ratify the SOURCE and name the rebuild as the condition.
+
+Ratify or refuse, citing file:line you have read yourself:
+1. F-K2: reproduce your regular-file-at-packages/<id> probe through enrich() and register(); is the file refused before any write and never deleted?
+2. F-K3: reproduce your symlinked-journal-record probe (and a symlinked package directory); with NOFOLLOW_LINKS in the package scan, the journal reader and every write guard, is any link followed, replaced or deleted anywhere in FoundryRegistry? Any remaining Files.isRegularFile/isDirectory/exists call on store paths that follows links?
+3. F-K4: reproduce your unsupported-first-operation probe through applyIdentityOperation() and enrich(); is any filesystem state (including an empty identity-operations/ directory) left behind after a refusal?
+4. Are the twelve-pass ratification record and counts accurate (Python 36, adapter 14, Java 194 per target/surefire-reports, `git diff --check HEAD~12 HEAD`)?
+5. Any defect the author missed.
+Output: verdict line (RATIFIED / RATIFIED WITH CONDITIONS / REFUSED), findings F-L1.. with severity and file:line, one-paragraph closure. Do not modify any file.

@@ -52,7 +52,11 @@ public final class FileOps {
             if (!Files.exists(root)) return Hashes.sha256("");
             List<Path> files;
             try (var stream = Files.walk(root)) {
-                files = stream.filter(Files::isRegularFile).sorted(Comparator.comparing(p -> root.relativize(p).toString())).toList();
+                List<Path> entries = stream.toList();
+                for (Path entry : entries) {
+                    if (Files.isSymbolicLink(entry)) throw new IllegalArgumentException("Symbolic link inside tree " + root + ": " + root.relativize(entry) + "; content-addressed trees hold regular files only.");
+                }
+                files = entries.stream().filter(p -> Files.isRegularFile(p, java.nio.file.LinkOption.NOFOLLOW_LINKS)).sorted(Comparator.comparing(p -> root.relativize(p).toString())).toList();
             }
             StringBuilder content = new StringBuilder();
             for (Path file : files) {

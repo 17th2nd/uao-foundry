@@ -33,14 +33,24 @@ public final class PackageVerifier {
         this.schemaDir = schemaDir.toAbsolutePath().normalize();
     }
 
+    /** A package file is a regular file reached without following a link (Codex pass-L F-L2). */
+    private static boolean regular(Path path) { return Files.isRegularFile(path, java.nio.file.LinkOption.NOFOLLOW_LINKS); }
+
     public Result verify(Path packageDir) {
         packageDir = packageDir.toAbsolutePath().normalize();
         List<String> errors = new ArrayList<>();
         List<String> checks = new ArrayList<>();
         if (!Files.isDirectory(packageDir)) return new Result(false, List.of("Package directory does not exist: " + packageDir), List.of());
+        try (var stream = Files.walk(packageDir)) {
+            for (Path entry : stream.toList()) {
+                if (Files.isSymbolicLink(entry)) return new Result(false, List.of("Symbolic link inside package: " + packageDir.relativize(entry) + "; a package holds regular files only."), List.of());
+            }
+        } catch (java.io.IOException ex) {
+            return new Result(false, List.of("Unable to walk package: " + ex.getMessage()), List.of());
+        }
 
         Path checksumFile = packageDir.resolve("checksums.sha256");
-        if (!Files.isRegularFile(checksumFile)) errors.add("checksums.sha256 is missing");
+        if (!regular(checksumFile)) errors.add("checksums.sha256 is missing");
         else {
             checks.add("CHECKSUM_FILE_PRESENT");
             verifyChecksums(packageDir, checksumFile, errors);
@@ -67,9 +77,9 @@ public final class PackageVerifier {
         Object provenanceLedger = readValue(packageDir.resolve("provenance-ledger.json"), "provenance-ledger", errors);
         Object unresolvedItems = readValue(packageDir.resolve("unresolved-items.json"), "unresolved-items", errors);
         Object providerSnapshot = readValue(packageDir.resolve("provider-snapshot.json"), "provider-snapshot", errors);
-        Object experimentalRelationships = Files.isRegularFile(packageDir.resolve("experimental-relationships.json"))
+        Object experimentalRelationships = regular(packageDir.resolve("experimental-relationships.json"))
                 ? readValue(packageDir.resolve("experimental-relationships.json"), "experimental-relationships", errors) : null;
-        Object editionDocument = Files.isRegularFile(packageDir.resolve("relationship-type-edition.json"))
+        Object editionDocument = regular(packageDir.resolve("relationship-type-edition.json"))
                 ? readValue(packageDir.resolve("relationship-type-edition.json"), "relationship-type-edition", errors) : null;
 
         if (manifest != null) {
@@ -672,7 +682,7 @@ public final class PackageVerifier {
             if (!listed.add(relative)) { errors.add("Duplicate checksum path: " + relative); continue; }
             Path file = packageDir.resolve(relative).normalize();
             if (!file.startsWith(packageDir)) { errors.add("Checksum path escapes package: " + relative); continue; }
-            if (!Files.isRegularFile(file)) { errors.add("Checksummed file missing: " + relative); continue; }
+            if (!regular(file)) { errors.add("Checksummed file missing: " + relative); continue; }
             try {
                 String actual = Hashes.sha256(Files.readAllBytes(file));
                 if (!actual.equals(expected)) errors.add("Checksum mismatch: " + relative);
@@ -705,7 +715,7 @@ public final class PackageVerifier {
 
     private void verifySourceSnapshots(Path packageDir, List<String> errors) {
         Path registryPath = packageDir.resolve("source-registry.json");
-        if (!Files.isRegularFile(registryPath)) { errors.add("source-registry.json is missing"); return; }
+        if (!regular(registryPath)) { errors.add("source-registry.json is missing"); return; }
         Object parsed = FileOps.readJson(registryPath);
         Map<String,Object> registry;
         try { registry = Json.object(parsed, "source registry"); }
@@ -720,7 +730,7 @@ public final class PackageVerifier {
             if (!(pathValue instanceof String relative) || !(hashValue instanceof String expected)) continue;
             Path snapshot = packageDir.resolve(relative).normalize();
             if (!snapshot.startsWith(packageDir)) { errors.add("Source snapshot escapes package: " + relative); continue; }
-            if (!Files.isRegularFile(snapshot)) { errors.add("Source snapshot missing: " + relative); continue; }
+            if (!regular(snapshot)) { errors.add("Source snapshot missing: " + relative); continue; }
             try {
                 String actual = Hashes.sha256(Files.readAllBytes(snapshot));
                 if (!actual.equals(expected)) errors.add("Source snapshot content hash mismatch: " + relative);
@@ -729,7 +739,7 @@ public final class PackageVerifier {
     }
 
     private Object readValue(Path path, String label, List<String> errors) {
-        if (!Files.isRegularFile(path)) { errors.add(label + " file is missing: " + path.getFileName()); return null; }
+        if (!regular(path)) { errors.add(label + " file is missing: " + path.getFileName()); return null; }
         try { return FileOps.readJson(path); }
         catch (IllegalArgumentException ex) { errors.add(label + ": " + ex.getMessage()); return null; }
     }
@@ -748,7 +758,7 @@ public final class PackageVerifier {
 
     private List<String> inventory(Path root) {
         try (var stream = Files.walk(root)) {
-            return stream.filter(Files::isRegularFile).map(root::relativize).map(Path::toString)
+            return stream.filter(PackageVerifier::regular).map(root::relativize).map(Path::toString)
                     .map(v -> v.replace('\\','/')).sorted().toList();
         } catch (Exception ex) { throw new IllegalArgumentException("Unable to inventory package: " + ex.getMessage(), ex); }
     }

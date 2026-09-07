@@ -71,6 +71,13 @@ public final class FoundryRegistry {
         }
     }
 
+    /**
+     * Fault-injection seam for the enrichment transaction: runs after both stores have been written and before the
+     * single rebuild. A no-op in production; package-private so a test can prove the post-write rollback
+     * deterministically, without permission tricks that could silently skip (Codex pass-C F-C2, pass-L).
+     */
+    Runnable postWriteFault = () -> {};
+
     /** A journal directory this call created implicitly (first record) is removed again when the record is rolled back, if empty. */
     private void removeJournalDirIfCreated(boolean preExisting) {
         if (preExisting || !Files.isDirectory(operationRoot, LinkOption.NOFOLLOW_LINKS)) return;
@@ -172,7 +179,7 @@ public final class FoundryRegistry {
         } catch (IllegalArgumentException ex) {
             return new VerificationResult(false, List.of(ex.getMessage()), 0, 0);
         }
-        if (!Files.isRegularFile(indexPath)) {
+        if (!Files.isRegularFile(indexPath, LinkOption.NOFOLLOW_LINKS)) {
             errors.add("Registry index is missing: " + indexPath);
         } else {
             try {
@@ -190,7 +197,8 @@ public final class FoundryRegistry {
     }
 
     public Map<String,Object> index() {
-        if (!Files.isRegularFile(indexPath)) {
+        requireLinkFreeStores();
+        if (!Files.isRegularFile(indexPath, LinkOption.NOFOLLOW_LINKS)) {
             if (Files.isDirectory(packageRoot)) {
                 try (var stream = Files.list(packageRoot)) {
                     if (stream.findAny().isPresent()) throw new IllegalArgumentException("Registry has packages but no verified index; rebuild explicitly.");
@@ -212,9 +220,40 @@ public final class FoundryRegistry {
     }
 
     public Map<String,Object> rebuildAndPersist() {
-        Map<String,Object> index = rebuildIndex();
+        Map<String,Object> index = rebuildIndex();   // buildIndex refuses a linked store before this write
         FileOps.writeJson(indexPath, index);
         return index;
+    }
+
+    /**
+     * The registry is two content-addressed stores of regular files under real directories, plus one derived
+     * index file (Codex pass-K F-K3, pass-L F-L2). A symbolic link anywhere in them -- the index, a store root,
+     * a package directory, a record, or a file inside a package -- is tampering: it could redirect a read to
+     * bytes outside the registry or a write outside it. Every read and every rebuild starts here; a store that
+     * fails this check is never followed, never written through, and never modified.
+     */
+    private void requireLinkFreeStores() {
+        if (Files.isSymbolicLink(indexPath)) throw new IllegalArgumentException("Registry index is a symbolic link; refusing to read or write through it.");
+        if (Files.exists(indexPath, LinkOption.NOFOLLOW_LINKS) && !Files.isRegularFile(indexPath, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IllegalArgumentException("Registry index path is occupied by something that is not a file.");
+        }
+        for (Path storeRoot : List.of(packageRoot, operationRoot)) {
+            if (Files.isSymbolicLink(storeRoot)) throw new IllegalArgumentException("Registry store root is a symbolic link: " + root.relativize(storeRoot));
+            if (Files.exists(storeRoot, LinkOption.NOFOLLOW_LINKS) && !Files.isDirectory(storeRoot, LinkOption.NOFOLLOW_LINKS)) {
+                throw new IllegalArgumentException("Registry store root is not a directory: " + root.relativize(storeRoot));
+            }
+            if (!Files.isDirectory(storeRoot, LinkOption.NOFOLLOW_LINKS)) continue;
+            try (var stream = Files.walk(storeRoot)) {          // walk never follows links; a link is visited as itself
+                for (Path entry : stream.toList()) {
+                    if (Files.isSymbolicLink(entry)) throw new IllegalArgumentException("Symbolic link inside the registry store: " + root.relativize(entry));
+                    if (!Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS) && !Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) {
+                        throw new IllegalArgumentException("Registry store entry is neither a directory nor a regular file: " + root.relativize(entry));
+                    }
+                }
+            } catch (java.io.IOException ex) {
+                throw new IllegalArgumentException("Unable to walk registry store " + root.relativize(storeRoot) + ": " + ex.getMessage(), ex);
+            }
+        }
     }
 
     public List<Object> search(String query) {
@@ -385,6 +424,7 @@ public final class FoundryRegistry {
     private Map<String,Object> rebuildIndex() { return buildIndex(); }
 
     private Map<String,Object> buildIndex() {
+        requireLinkFreeStores();
         Map<String,PackageRecord> packages = new TreeMap<>();
         Map<String,IdentityAggregate> identities = new TreeMap<>();
         Map<String,RelationshipAggregate> relationships = new TreeMap<>();
@@ -893,6 +933,7 @@ public final class FoundryRegistry {
         try {
             copyPackage(packageDir, destination, digest, packageId);
             writeOperation(operation, journalFile);
+            postWriteFault.run();
             Map<String,Object> rebuilt = rebuildIndex();
             FileOps.writeJson(indexPath, rebuilt);
             RegistrationResult registration = new RegistrationResult(packageId, digest, destination, packagePreExisting,
