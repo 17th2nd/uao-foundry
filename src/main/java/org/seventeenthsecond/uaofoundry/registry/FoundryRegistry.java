@@ -12,6 +12,7 @@ import org.seventeenthsecond.uaofoundry.util.Hashes;
 import org.seventeenthsecond.uaofoundry.verifier.PackageVerifier;
 
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.text.Normalizer;
 import java.util.ArrayList;
@@ -70,9 +71,22 @@ public final class FoundryRegistry {
         }
     }
 
+    /** A journal directory this call created implicitly (first record) is removed again when the record is rolled back, if empty. */
+    private void removeJournalDirIfCreated(boolean preExisting) {
+        if (preExisting || !Files.isDirectory(operationRoot, LinkOption.NOFOLLOW_LINKS)) return;
+        try (var stream = Files.list(operationRoot)) {
+            if (stream.findAny().isEmpty()) Files.delete(operationRoot);
+        } catch (java.io.IOException ignored) {
+            // leaving an empty directory behind is the lesser failure than masking the refusal being reported
+        }
+    }
+
     /** Copies a candidate package into the store without rebuilding the index; returns whether it was already there (byte-identical). */
     private boolean copyPackage(Path packageDir, Path destination, String digest, String packageId) {
-        boolean alreadyPresent = Files.isDirectory(destination);
+        if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS) && !Files.isDirectory(destination, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IllegalArgumentException("Package path is occupied by something that is not a package directory: " + packageId);
+        }
+        boolean alreadyPresent = Files.isDirectory(destination, LinkOption.NOFOLLOW_LINKS);
         if (alreadyPresent) {
             if (!digest.equals(FileOps.treeHash(destination))) {
                 throw new IllegalArgumentException("Registry package-id collision with different immutable content: " + packageId);
@@ -85,10 +99,10 @@ public final class FoundryRegistry {
 
     /** Writes an operation record into the journal without rebuilding the index; returns whether it was already there (byte-identical). */
     private boolean writeOperation(IdentityOperation operation, Path destination) {
-        if (Files.exists(destination) && !Files.isRegularFile(destination)) {
+        if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS) && !Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS)) {
             throw new IllegalArgumentException("Journal path is occupied by something that is not a record file: " + destination.getFileName());
         }
-        boolean alreadyPresent = Files.isRegularFile(destination);
+        boolean alreadyPresent = Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS);
         if (alreadyPresent) {
             if (!Json.canonical(FileOps.readJson(destination)).equals(Json.canonical(operation.toMap()))) {
                 throw new IllegalArgumentException("Identity operation id collision with different content: " + operation.operationId());
@@ -132,9 +146,10 @@ public final class FoundryRegistry {
         if (!destination.startsWith(operationRoot)) throw new IllegalArgumentException("Operation id escapes the journal root.");
         // Content-addressed: an identical id means identical bytes, so re-recording is a no-op. The path is checked
         // before the write so a squatted path is refused, never deleted by the rollback below.
-        if (Files.exists(destination) && !Files.isRegularFile(destination)) {
+        if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS) && !Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS)) {
             throw new IllegalArgumentException("Journal path is occupied by something that is not a record file: " + destination.getFileName());
         }
+        boolean journalDirPreExisting = Files.isDirectory(operationRoot, LinkOption.NOFOLLOW_LINKS);
         boolean alreadyPresent = writeOperation(operation, destination);
 
         try {
@@ -144,6 +159,7 @@ public final class FoundryRegistry {
                     array(rebuilt.get("identityOperations"), "index identityOperations").size());
         } catch (RuntimeException ex) {
             if (!alreadyPresent) FileOps.deleteTree(destination);
+            removeJournalDirIfCreated(journalDirPreExisting);
             throw ex;
         }
     }
@@ -374,7 +390,10 @@ public final class FoundryRegistry {
         Map<String,RelationshipAggregate> relationships = new TreeMap<>();
         if (Files.isDirectory(packageRoot)) {
             try (var stream = Files.list(packageRoot)) {
-                for (Path dir : stream.filter(Files::isDirectory).sorted().toList()) {
+                for (Path dir : stream.sorted().toList()) {
+                    // Codex pass-K F-K3: the stores are content-addressed directories of regular files; a link or a stray
+                    // file under packages/ is tampering, never something to follow or skip.
+                    if (!Files.isDirectory(dir, LinkOption.NOFOLLOW_LINKS)) throw new IllegalArgumentException("Unexpected entry under registry packages (not a directory): " + dir.getFileName());
                     requireReusablePackage(dir);
                     Map<String,Object> manifest = object(FileOps.readJson(dir.resolve("manifest.json")), "manifest");
                     String packageId = string(manifest.get("packageId"), "packageId");
@@ -568,7 +587,7 @@ public final class FoundryRegistry {
             for (Path file : stream.sorted().toList()) {
                 String name = file.getFileName().toString();
                 // Codex pass-J F-J2: anything that is not a regular record file is a tampered journal, not something to skip.
-                if (!Files.isRegularFile(file)) throw new IllegalArgumentException("Unexpected entry in the identity-operation journal (not a regular file): " + name);
+                if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IllegalArgumentException("Unexpected entry in the identity-operation journal (not a regular file): " + name);
                 if (!name.endsWith(".json")) throw new IllegalArgumentException("Unexpected file in the identity-operation journal: " + name);
                 IdentityOperation operation = IdentityOperation.fromMap(object(FileOps.readJson(file), "identity operation"));
                 if (!name.equals(operation.operationId() + ".json")) {
@@ -859,13 +878,18 @@ public final class FoundryRegistry {
                 throw new IllegalArgumentException("ENRICH refused: package " + packageId + " already enriches an identity (" + recorded.get("operationId") + "); a package enriches exactly one identity.");
             }
         }
-        if (Files.exists(journalFile) && !Files.isRegularFile(journalFile)) {
+        if (Files.exists(journalFile, LinkOption.NOFOLLOW_LINKS) && !Files.isRegularFile(journalFile, LinkOption.NOFOLLOW_LINKS)) {
             throw new IllegalArgumentException("ENRICH refused: journal path is occupied by something that is not a record file: " + journalFile.getFileName());
         }
-        // Everything this call may create is known BEFORE the first write, so rollback removes exactly what this
-        // call wrote -- never a pre-existing package or record -- and a failure inside the first copy is covered too.
-        boolean packagePreExisting = Files.isDirectory(destination);
-        boolean operationPreExisting = Files.isRegularFile(journalFile);
+        if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS) && !Files.isDirectory(destination, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IllegalArgumentException("ENRICH refused: package path is occupied by something that is not a package directory: " + packageId);
+        }
+        // Everything this call may create is known BEFORE the first write (links never followed), so rollback removes
+        // exactly what this call wrote -- never a pre-existing package, record or journal directory -- and a failure
+        // inside the first copy is covered too (Codex pass-K F-K2, F-K4).
+        boolean packagePreExisting = Files.isDirectory(destination, LinkOption.NOFOLLOW_LINKS);
+        boolean operationPreExisting = Files.isRegularFile(journalFile, LinkOption.NOFOLLOW_LINKS);
+        boolean journalDirPreExisting = Files.isDirectory(operationRoot, LinkOption.NOFOLLOW_LINKS);
         try {
             copyPackage(packageDir, destination, digest, packageId);
             writeOperation(operation, journalFile);
@@ -878,6 +902,7 @@ public final class FoundryRegistry {
             return new EnrichmentResult(registration, recorded, from, to, newer.size() - older.size());
         } catch (RuntimeException ex) {
             if (!operationPreExisting) FileOps.deleteTree(journalFile);
+            removeJournalDirIfCreated(journalDirPreExisting);
             if (!packagePreExisting) FileOps.deleteTree(destination);
             FileOps.writeJson(indexPath, before);
             throw ex;

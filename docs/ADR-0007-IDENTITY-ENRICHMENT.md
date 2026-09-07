@@ -245,3 +245,15 @@ identity is derivable from bytes alone.
   squatted journal path refused with the squatter untouched and the tree unchanged, through both public paths; the
   constructor refuses subject ≠ target and a missing block. Java 191/191, 0 skipped. ⚠ Jar rebuild still pending
   the `ai` batch.
+- **Codex pass K (2026-09-07, read-only, on a6e07aa): REFUSED** — F-J1 and F-J3 closed, the attributable invariant
+  accepted. Remaining, all at the filesystem boundary: F-K2 HIGH a regular file squatting `packages/<id>` was recorded
+  as absent and deleted by the rollback; F-K3 HIGH `isRegularFile` followed symbolic links, so a journal pathname linked
+  to a record outside the registry was read and verified; F-K4 MEDIUM a refused first operation left an empty
+  `identity-operations/` directory. Report: `temp/codex-uaofoundry-adr0007-ratification-pass-k-001.md`.
+- **Remediation (twelfth commit):** the stores are read and written with `NOFOLLOW_LINKS` throughout — a link or a
+  stray file under `packages/` or in the journal is tampering and fails every read closed; a squatted package or
+  journal path is refused before any write by every path; pre-existence is recorded without following links; and a
+  journal directory the call created implicitly is removed again when its only record is rolled back. Tests: file
+  squatting the package path survives both `enrich()` and `register()`; a symlinked journal record and a symlinked
+  package directory fail the index closed and are neither followed nor deleted; a refused first operation leaves no
+  journal directory through either path. Java 194/194, 0 skipped. ⚠ Jar rebuild still pending the `ai` batch.

@@ -1,0 +1,11 @@
+You are the independent, read-only ratifier for the UAO Foundry programme (Claude implements, Codex ratifies, git/runtime is authority). Pass K on branch feature/enrichment-operation: review `git diff HEAD~11 HEAD` (all eleven commits of ADR-0007) with emphasis on the eleventh commit, which remediates your pass-J refusal (temp/codex-uaofoundry-adr0007-ratification-pass-j-001.md, findings F-J1, F-J2, F-J3). Your pass-J acceptance of the attributable whole-package invariant stands.
+
+Standing condition: target/uao-foundry-0.1.0.jar is still the eighth-commit build because a live manufacture batch holds it; ratify the SOURCE and name the rebuild as the condition.
+
+Ratify or refuse, citing file:line you have read yourself:
+1. F-J1: toPackageId is unique across ENRICH records on every index build (FoundryRegistry.enforceWholePackageRule) and refused at enrich() preflight. Reproduce your two-records-one-package probe against current source; any path where one package enriches two identities?
+2. F-J2: enrich() records what pre-exists before its first write and rolls back only what it created; a journal path occupied by a non-record entry is refused before any write in enrich(), applyIdentityOperation() and writeOperation(); readOperations fails closed on non-regular entries. Reproduce your sentinel-directory probe; any write outside the rollback boundary, any deletion of pre-existing content, any partial state left behind?
+3. F-J3: IdentityOperation's canonical constructor enforces the ENRICH shape at every construction site; is the schema comment now accurate?
+4. Are the eleven-pass ratification record and counts accurate (Python 36, adapter 14, Java 191 per target/surefire-reports, `git diff --check HEAD~11 HEAD`)?
+5. Any defect the author missed.
+Output: verdict line (RATIFIED / RATIFIED WITH CONDITIONS / REFUSED), findings F-K1.. with severity and file:line, one-paragraph closure. Do not modify any file.

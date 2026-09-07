@@ -330,6 +330,73 @@ class PersistentIdentityRegistryTest {
     }
 
     @Test
+    void rollbackNeverDeletesAFileSquattingThePackagePath() throws Exception {
+        // Codex pass-K F-K2: a regular file at packages/<id> is not "absent"; the call refuses before writing and the file survives.
+        PipelineResult t0 = manufacture("enr13-t0", fixture -> {});
+        PipelineResult t1 = manufacture("enr13-t1", fixture -> addRootClaim(fixture, "Fixture assertion: enriched."));
+        FoundryRegistry registry = registryWith(t0);
+        String uid = rootUid(t0);
+        String packageId = object(FileOps.readJson(t1.packagePath().resolve("manifest.json"))).get("packageId").toString();
+        Path squat = registryRoot.resolve("packages").resolve(packageId);
+        Files.writeString(squat, "do not delete");
+        // The packages store now holds a stray file: every read is fail-closed, and nothing is deleted by any path.
+        assertThrows(IllegalArgumentException.class, () -> registry.enrich(t1.packagePath(), uid, List.of("LIFE_CHRONOLOGY"), "squat", "operator", "2026-09-07T00:00:00Z"));
+        assertEquals("do not delete", Files.readString(squat));
+        assertThrows(IllegalArgumentException.class, () -> registry.register(t1.packagePath()));
+        assertEquals("do not delete", Files.readString(squat));
+        Files.delete(squat);
+        assertTrue(registry.verify().passed());
+    }
+
+    @Test
+    void symbolicLinksInTheStoresAreTamperingNotRecords() throws Exception {
+        // Codex pass-K F-K3: a journal pathname linked to a valid record outside the registry must not be read, written over, or followed.
+        PipelineResult t0 = manufacture("enr14-t0", fixture -> {});
+        PipelineResult t1 = manufacture("enr14-t1", fixture -> addRootClaim(fixture, "Fixture assertion: enriched."));
+        FoundryRegistry registry = registryWith(t0);
+        String uid = rootUid(t0);
+        String v0 = object(array(identityByUid(registry.index(), uid).get("occurrences")).getFirst()).get("semanticVariantDigest").toString();
+        FoundryRegistry.RegistrationResult admitted = registry.register(t1.packagePath());
+        String v1 = variantIn(registry, uid, admitted.packageId());
+        IdentityOperation op = IdentityOperation.enrich(uid, v0, v1, admitted.packageId(), List.of("LIFE_CHRONOLOGY"), "linked", "operator", "2026-09-07T00:00:00Z");
+        Path outside = temp.resolve("outside-" + op.operationId() + ".json"); FileOps.writeJson(outside, op.toMap());
+        Path journal = registryRoot.resolve("identity-operations"); Files.createDirectories(journal);
+        Path link = journal.resolve(op.operationId() + ".json");
+        try { Files.createSymbolicLink(link, outside); } catch (UnsupportedOperationException | java.io.IOException ex) { org.junit.jupiter.api.Assumptions.abort("symbolic links unavailable here: " + ex); }
+        IllegalArgumentException read = assertThrows(IllegalArgumentException.class, registry::index);
+        assertTrue(read.getMessage().contains("not a regular file"), read.getMessage());
+        assertFalse(registry.verify().passed());
+        assertThrows(IllegalArgumentException.class, () -> registry.applyIdentityOperation(op));
+        assertTrue(Files.isSymbolicLink(link), "the link is refused, not replaced or deleted");
+        assertTrue(Files.isRegularFile(outside));
+        Files.delete(link);
+        // A package directory that is a link is tampering too.
+        Path pkgLink = registryRoot.resolve("packages").resolve("pkg-00000000000000ff");
+        Files.createSymbolicLink(pkgLink, t1.packagePath());
+        assertThrows(IllegalArgumentException.class, registry::index);
+        Files.delete(pkgLink);
+        assertTrue(registry.verify().passed());
+    }
+
+    @Test
+    void aRefusedFirstOperationLeavesNoJournalDirectoryBehind() {
+        // Codex pass-K F-K4: the journal directory is created implicitly by the first record; a refused first record must not leave it.
+        PipelineResult t0 = manufacture("enr15-t0", fixture -> {});
+        FoundryRegistry registry = registryWith(t0);
+        String uid = rootUid(t0);
+        Path journal = registryRoot.resolve("identity-operations");
+        assertFalse(Files.exists(journal));
+        IdentityOperation bogus = IdentityOperation.enrich(uid, "e".repeat(64), "f".repeat(64), "pkg-0000000000000000", List.of("LIFE_CHRONOLOGY"), "unsupported", "operator", "2026-09-07T00:00:00Z");
+        assertThrows(IllegalArgumentException.class, () -> registry.applyIdentityOperation(bogus));
+        assertFalse(Files.exists(journal), "no empty journal directory after a refused first operation");
+        // The same through enrich(): a package that introduces a new variant of the context identity.
+        PipelineResult mixed = manufacture("enr15-mixed", fixture -> { addRootClaim(fixture, "Fixture assertion: enriched."); rewordContext(fixture); });
+        assertThrows(IllegalArgumentException.class, () -> registry.enrich(mixed.packagePath(), uid, List.of("LIFE_CHRONOLOGY"), "mixed", "operator", "2026-09-07T00:00:00Z"));
+        assertFalse(Files.exists(journal));
+        assertTrue(registry.verify().passed());
+    }
+
+    @Test
     void enrichmentMakesAStrictSupersetTheCurrentStateAndReuseFollowsIt() {
         PipelineResult t0 = manufacture("enr-t0", fixture -> {});
         PipelineResult t1 = manufacture("enr-t1", fixture -> addRootClaim(fixture, "Fixture assertion: enriched with a second sourced statement."));
