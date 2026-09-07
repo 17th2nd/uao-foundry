@@ -41,11 +41,12 @@ public final class PackageVerifier {
         List<String> errors = new ArrayList<>();
         List<String> checks = new ArrayList<>();
         if (!Files.isDirectory(packageDir)) return new Result(false, List.of("Package directory does not exist: " + packageDir), List.of());
+        if (Files.isSymbolicLink(packageDir)) return new Result(false, List.of("Package path is a symbolic link: " + packageDir.getFileName() + "; a package is a real directory of regular files."), List.of());
         try (var stream = Files.walk(packageDir)) {
             for (Path entry : stream.toList()) {
                 if (Files.isSymbolicLink(entry)) return new Result(false, List.of("Symbolic link inside package: " + packageDir.relativize(entry) + "; a package holds regular files only."), List.of());
             }
-        } catch (java.io.IOException ex) {
+        } catch (java.io.IOException | java.io.UncheckedIOException ex) {
             return new Result(false, List.of("Unable to walk package: " + ex.getMessage()), List.of());
         }
 

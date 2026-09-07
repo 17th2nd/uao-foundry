@@ -280,7 +280,7 @@ class PersistentIdentityRegistryTest {
         Files.delete(journal.resolve(opB.operationId() + ".json"));
         // With one record the package still cannot enrich A: it introduces a new variant of B (F-I1 rule).
         IllegalArgumentException stillRefused = assertThrows(IllegalArgumentException.class, registry::index);
-        assertTrue(stillRefused.getMessage().contains("introduces a new variant of"), stillRefused.getMessage());
+        assertTrue(stillRefused.getMessage().contains("found in no other package"), stillRefused.getMessage());
         Files.delete(journal.resolve(opA.operationId() + ".json"));
         assertTrue(registry.verify().passed());
     }
@@ -450,6 +450,65 @@ class PersistentIdentityRegistryTest {
         assertEquals(before, FileOps.treeHash(registryRoot));
     }
 
+    /** Adds a NEW non-root identity (dairy cattle) with one sourced claim, restating every fixture claim verbatim. */
+    private static void addNewIdentity(Map<String,Object> fixture, String statement) {
+        Map<String,Object> candidates = object(fixture.get("candidates"));
+        Map<String,Object> ident = new java.util.LinkedHashMap<>();
+        ident.put("candidateId", "cid-dairy"); ident.put("label", "dairy cattle"); ident.put("resolutionKey", "fixture:biology:dairy-cattle"); ident.put("root", false);
+        ident.put("aliases", List.of()); ident.put("sourceRefs", List.of("src-cow-bio")); ident.put("externalIdentifiers", Map.of());
+        array(candidates.get("identities")).add(ident);
+        Map<String,Object> claim = new java.util.LinkedHashMap<>();
+        claim.put("candidateId", "clm-dairy"); claim.put("subjectIdentityRef", "cid-dairy"); claim.put("statement", statement); claim.put("channels", List.of("foundry")); claim.put("sourceRefs", List.of("src-cow-bio"));
+        array(candidates.get("claims")).add(claim);
+        Map<String,Object> evidence = new java.util.LinkedHashMap<>();
+        evidence.put("evidenceId", "ev-dairy"); evidence.put("sourceRef", "src-cow-bio"); evidence.put("supportsCandidateRef", "clm-dairy"); evidence.put("extract", "Synthetic fixture evidence for dairy cattle."); evidence.put("locatorWithinSource", "sentence-4");
+        array(candidates.get("evidence")).add(evidence);
+    }
+
+    @Test
+    void anIdentityIntroducedByAnEnrichingPackageIsPinnedUntilRestatedElsewhere() {
+        // Claude pass-M F-M3 (probe J), pinned as the rule's actual behaviour: the invariant is monotone only for identities that
+        // exist outside the enriching package. C first appears inside A's enriching package; a later plain admission of a
+        // different variant of C is refused (fail-closed, both packages named), while a verbatim restatement of C elsewhere is fine.
+        PipelineResult t0 = manufacture("enr17-t0", fixture -> {});
+        PipelineResult a1b0c0 = manufacture("enr17-a1b0c0", fixture -> { addRootClaim(fixture, "Fixture assertion: enriched."); addNewIdentity(fixture, "Fixture assertion: dairy cattle are kept for milk."); });
+        PipelineResult a1b0c1 = manufacture("enr17-a1b0c1", fixture -> { addRootClaim(fixture, "Fixture assertion: enriched."); addNewIdentity(fixture, "Fixture assertion: dairy cattle are kept for milk (re-worded)."); });
+        PipelineResult a1b0c0again = manufacture("enr17-a1b0c0-again", fixture -> { addRootClaim(fixture, "Fixture assertion: enriched."); addNewIdentity(fixture, "Fixture assertion: dairy cattle are kept for milk."); });
+        FoundryRegistry registry = registryWith(t0);
+        String uid = rootUid(t0);
+        FoundryRegistry.EnrichmentResult enriched = registry.enrich(a1b0c0.packagePath(), uid, List.of("LIFE_CHRONOLOGY"), "introduces C", "operator", "2026-09-07T00:00:00Z");
+        assertTrue(registry.verify().passed());
+        assertEquals(3, array(registry.index().get("identities")).size());
+        String before = FileOps.treeHash(registryRoot);
+        IllegalArgumentException pinned = assertThrows(IllegalArgumentException.class, () -> registry.register(a1b0c1.packagePath()));
+        assertTrue(pinned.getMessage().contains("found in no other package"), pinned.getMessage());
+        assertTrue(pinned.getMessage().contains(enriched.registration().packageId()), "the refusal names the enriching package: " + pinned.getMessage());
+        assertEquals(before, FileOps.treeHash(registryRoot), "the refused plain admission leaves the registry byte-identical");
+        assertTrue(registry.verify().passed());
+        // A verbatim restatement of C elsewhere is a re-observation and is admitted; after it, C is known outside the enriching package.
+        registry.register(a1b0c0again.packagePath());
+        assertTrue(registry.verify().passed());
+    }
+
+    @Test
+    void verifyReturnsAFailedResultForAnUnreadableStoreEntry() throws Exception {
+        // Claude pass-M F-M4: an unreadable entry is a failed verification, not an unchecked exception out of verify().
+        PipelineResult t0 = manufacture("enr18-t0", fixture -> {});
+        FoundryRegistry registry = registryWith(t0);
+        Path pkg = registryRoot.resolve("packages").resolve(object(array(registry.index().get("packages")).getFirst()).get("packageId").toString());
+        Set<java.nio.file.attribute.PosixFilePermission> perms = Files.getPosixFilePermissions(pkg);
+        Files.setPosixFilePermissions(pkg, java.util.EnumSet.noneOf(java.nio.file.attribute.PosixFilePermission.class));
+        try {
+            org.junit.jupiter.api.Assumptions.assumeFalse(Files.isReadable(pkg.resolve("manifest.json")), "permissions are not enforced for this user; nothing to prove here");
+            FoundryRegistry.VerificationResult result = registry.verify();
+            assertFalse(result.passed());
+            assertTrue(result.errors().stream().anyMatch(e -> e.contains("Unable to walk registry store") || e.contains("Unable to")), result.errors().toString());
+        } finally {
+            Files.setPosixFilePermissions(pkg, perms);
+        }
+        assertTrue(registry.verify().passed());
+    }
+
     @Test
     void enrichmentMakesAStrictSupersetTheCurrentStateAndReuseFollowsIt() {
         PipelineResult t0 = manufacture("enr-t0", fixture -> {});
@@ -599,7 +658,7 @@ class PersistentIdentityRegistryTest {
         String before = FileOps.treeHash(registryRoot);
         IdentityOperation enrich = IdentityOperation.enrich(uid, v0, v1, admitted.packageId(), List.of("LIFE_CHRONOLOGY"), "journal path", "operator", "2026-09-07T00:00:00Z");
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class, () -> registry.applyIdentityOperation(enrich));
-        assertTrue(refused.getMessage().contains("introduces a new variant of"), refused.getMessage());
+        assertTrue(refused.getMessage().contains("found in no other package"), refused.getMessage());
         assertEquals(before, FileOps.treeHash(registryRoot), "the refused journal entry is removed again");
         assertTrue(registry.verify().passed());
         for (Object raw : array(registry.index().get("identities"))) {

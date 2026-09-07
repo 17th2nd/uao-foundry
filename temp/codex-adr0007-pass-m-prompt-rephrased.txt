@@ -1,0 +1,10 @@
+You are the independent, read-only ratifier for the UAO Foundry programme (Claude implements, Codex ratifies, git/runtime is authority). Pass M on branch feature/enrichment-operation: review `git diff HEAD~13 HEAD` (all thirteen commits of ADR-0007) with emphasis on the thirteenth commit, which remediates your pass-L refusal (temp/codex-uaofoundry-adr0007-ratification-pass-l-001.md, finding F-L2). This is ordinary data-integrity verification of a content-addressed registry's own invariants; nothing here targets any system other than the repository's test fixtures.
+
+Standing condition: target/uao-foundry-0.1.0.jar is still the eighth-commit build because a live manufacture batch holds it; ratify the SOURCE and name the rebuild as the condition.
+
+Ratify or refuse, citing file:line you have read yourself:
+1. F-L2: FoundryRegistry.requireLinkFreeStores runs at the start of every read (index) and every rebuild (buildIndex, hence verify, rebuildAndPersist, register, enrich, applyIdentityOperation). Confirm from the source and the existing test (PersistentIdentityRegistryTest.noLinkAnywhereInTheStoresIsFollowedOrWrittenThrough) that the registry treats every filesystem link in its stores as an integrity failure: the derived index file, both store roots, records, package directories and files inside packages. Is every read of a store path done without following links, and is no write possible through one? The registry root path itself is operator-supplied and not resolved; is that acceptable?
+2. The post-admission rollback proof now uses a package-private fault seam (postWriteFault, a no-op in production); assess whether that is an acceptable test boundary and whether the proof is non-tautological.
+3. Are the thirteen-pass ratification record and counts accurate (Python 36, adapter 14, Java 195 per target/surefire-reports, `git diff --check HEAD~13 HEAD`)?
+4. Any defect the author missed.
+Output: verdict line (RATIFIED / RATIFIED WITH CONDITIONS / REFUSED), findings F-M1.. with severity and file:line, one-paragraph closure. Do not modify any file.

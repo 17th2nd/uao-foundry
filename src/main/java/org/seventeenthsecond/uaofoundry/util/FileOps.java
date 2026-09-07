@@ -64,7 +64,7 @@ public final class FileOps {
                 content.append(Hashes.sha256(Files.readAllBytes(file))).append('\n');
             }
             return Hashes.sha256(content.toString());
-        } catch (IOException ex) {
+        } catch (IOException | java.io.UncheckedIOException ex) {
             throw new IllegalArgumentException("Unable to hash tree " + root + ": " + ex.getMessage(), ex);
         }
     }

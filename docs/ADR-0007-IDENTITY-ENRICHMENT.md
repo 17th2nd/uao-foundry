@@ -31,10 +31,14 @@ Add a fifth identity operation, `ENRICH`, to the append-preserving journal.
   than one named target, and the atomic admission (`enrich()`) checks — before anything is written — that every
   *other* registered identity the package carries is a verbatim re-observation of its current state. The
   rebuild-time form of the same rule, re-derived on every index build whichever path recorded the operation, is
-  stated so that it is order-independent, attributable and monotone: **an enriching package introduces no new
-  variant of any other registered identity** — each other identity it carries is in a state that identity already
-  has in another package or in its own `ENRICH` chain. An identity left unreconciled by a *plain* admission
-  elsewhere is that admission's doing, which the registry's admission law permits; an enrichment never causes it.
+  stated so that it is order-independent and attributable: **an enriching package introduces no new variant of
+  any other registered identity** — each other identity it carries is in a state that identity already has in
+  another package or in its own `ENRICH` chain. For identities that exist outside the enriching package the rule
+  is monotone: an identity left unreconciled by a *plain* admission elsewhere is that admission's doing, which the
+  registry's admission law permits, and no later admission can invalidate a recorded enrichment. An identity the
+  enriching package itself *introduces* is pinned to that state until another package restates it verbatim or it is
+  enriched itself: a later plain admission of a different variant of it is refused, naming both packages. No
+  set-based rule can tell that case from the one it must refuse, so the registry fails closed.
 - Variants superseded by an `ENRICH` are history, not unreconciled siblings. An identity is `SINGLE_VARIANT`
   when exactly one current variant remains; the index then exposes `currentVariant` and `variantHistory`.
   These fields appear only for enriched identities, so registries without `ENRICH` operations keep verifying
@@ -272,3 +276,19 @@ identity is derivable from bytes alone.
   fault-injection seam (`postWriteFault`, a no-op in production) that fails the transaction after both writes and
   before the rebuild, deterministically and without any permission trick. Java 195/195, 0 skipped. ⚠ Jar rebuild
   still pending the `ai` batch.
+- **Claude pass M (2026-09-07, independent Claude reviewer with no authoring context, read-only, on c7f94f8): RATIFIED
+  WITH CONDITIONS** — run because the Codex CLI could not complete pass M (usage limit, then the provider's content
+  classifier terminated the run on the link-integrity material; both filed as `temp/codex-adr0007-pass-m-*-001.*`).
+  The reviewer reproduced every F-L2 scenario and four more (dangling index link, linked store roots, linked package
+  sub-directory, linked candidate root), the atomic transaction, the whole-package invariant in both orders and from a
+  rebuilt copy, and the seam-based rollback proof; found no path that admits a wrong state or writes outside the
+  registry. Conditions: M-1 the "monotone" claim was overstated for an identity the enriching package itself
+  introduces (the code fails closed correctly; the text and the refusal message did not say so); M-2 `verify()`
+  threw `UncheckedIOException` for an unreadable store entry instead of returning a failed result; M-3 (standing) the
+  jar rebuild. Report: `temp/claude-uaofoundry-adr0007-ratification-pass-m-001.md`. This is a Claude pass, not a
+  Codex one; the founder asked for it and weighs it accordingly.
+- **Remediation (fourteenth commit, conditions M-1 and M-2):** the Decision and the code comment now state the pinning
+  behaviour for introduced identities, the refusal names the enriching package and the packages carrying the other
+  states, and a test pins probe J's outcome; the three tree walks catch `UncheckedIOException` so `verify()` returns a
+  failed result for an unreadable entry (test). Java 197/197, 0 skipped. M-3 remains: rebuild the jar when the `ai`
+  batch releases it.

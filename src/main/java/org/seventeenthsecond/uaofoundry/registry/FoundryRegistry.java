@@ -250,7 +250,7 @@ public final class FoundryRegistry {
                         throw new IllegalArgumentException("Registry store entry is neither a directory nor a regular file: " + root.relativize(entry));
                     }
                 }
-            } catch (java.io.IOException ex) {
+            } catch (java.io.IOException | java.io.UncheckedIOException ex) {
                 throw new IllegalArgumentException("Unable to walk registry store " + root.relativize(storeRoot) + ": " + ex.getMessage(), ex);
             }
         }
@@ -725,10 +725,13 @@ public final class FoundryRegistry {
      * applied (Codex pass-H F-H1, pass-I F-I1/F-I2): <em>the package an ENRICH names introduces no new variant of
      * any other registered identity.</em> For every other identity the package carries, its occurrence there must
      * be a variant that identity already has in some other package, or a variant of its own ENRICH chain. The rule
-     * is order-independent (sets over all packages and operations), attributable (only a variant that exists
-     * nowhere else is the enriching package's doing), and monotone (later admissions can only add to the other
-     * variants, never invalidate a recorded enrichment). An identity's unreconciled status caused by a plain
-     * admission elsewhere is that admission's, which the registry's own law permits, not the enrichment's.
+     * is order-independent (sets over all packages and operations) and attributable (only a variant that exists
+     * nowhere else is the enriching package's doing). It is monotone for identities that exist OUTSIDE the enriching
+     * package: later admissions can only add to their other variants, never invalidate a recorded enrichment. An
+     * identity the enriching package itself INTRODUCES is pinned to that state until another package restates it
+     * verbatim or it is enriched itself: a later plain admission of a different variant of it is refused, and the
+     * refusal names both packages (Claude pass-M F-M3). No set-based rule can tell that case from the one it must
+     * refuse, so the registry fails closed rather than admit a state it cannot attribute.
      */
     private void enforceWholePackageRule(Map<String,IdentityAggregate> identities, List<IdentityOperation> operations) {
         // Codex pass-J F-J1: one package enriches exactly one identity. Two ENRICH records naming the same package would
@@ -753,8 +756,10 @@ public final class FoundryRegistry {
                 for (Occurrence occurrence : other.occurrences) {
                     if (!occurrence.packageId().equals(toPackage)) continue;
                     if (!other.knownOutside(toPackage, occurrence.semanticVariantDigest())) {
-                        throw new IllegalArgumentException("ENRICH " + operation.operationId() + " refused: package " + toPackage + " introduces a new variant of " + other.uid
-                                + " (" + other.resolutionKey + "); an enrichment package restates every other registered identity in a state it already has, and enriches exactly one.");
+                        List<String> elsewhere = other.occurrences.stream().filter(o -> !o.packageId().equals(toPackage)).map(Occurrence::packageId).sorted().toList();
+                        throw new IllegalArgumentException("ENRICH " + operation.operationId() + " refused: package " + toPackage + " carries " + other.uid
+                                + " (" + other.resolutionKey + ") in a variant found in no other package, while " + elsewhere + " carry it in other states"
+                                + "; an enrichment package restates every other registered identity in a state it already has, and an identity an enrichment introduced stays in that state until restated verbatim elsewhere or enriched itself.");
                     }
                 }
             }
