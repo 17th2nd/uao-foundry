@@ -187,6 +187,76 @@ class PersistentIdentityRegistryTest {
         array(candidates.get("evidence")).add(evidence);
     }
 
+    /** Adds one sourced claim about the context identity (cid-bovine-context) while restating every fixture claim verbatim. */
+    private static void addContextClaim(Map<String,Object> fixture, String statement) {
+        Map<String,Object> candidates = object(fixture.get("candidates"));
+        Map<String,Object> claim = new java.util.LinkedHashMap<>();
+        claim.put("candidateId", "clm-context-enriched"); claim.put("subjectIdentityRef", "cid-bovine-context");
+        claim.put("statement", statement); claim.put("channels", List.of("foundry")); claim.put("sourceRefs", List.of("src-cow-bio"));
+        array(candidates.get("claims")).add(claim);
+        Map<String,Object> evidence = new java.util.LinkedHashMap<>();
+        evidence.put("evidenceId", "ev-context-enriched"); evidence.put("sourceRef", "src-cow-bio"); evidence.put("supportsCandidateRef", "clm-context-enriched");
+        evidence.put("extract", "Synthetic fixture evidence for the context enrichment."); evidence.put("locatorWithinSource", "sentence-3");
+        array(candidates.get("evidence")).add(evidence);
+    }
+    private static void rewordContext(Map<String,Object> fixture) {
+        for (Object raw : array(object(fixture.get("candidates")).get("claims"))) {
+            Map<String,Object> claim = object(raw);
+            if ("cid-bovine-context".equals(claim.get("subjectIdentityRef"))) claim.put("statement", claim.get("statement") + " (re-worded)");
+        }
+    }
+    private String variantIn(FoundryRegistry registry, String uid, String packageId) {
+        return array(identityByUid(registry.index(), uid).get("occurrences")).stream().map(PersistentIdentityRegistryTest::object)
+                .filter(o -> packageId.equals(o.get("packageId"))).map(o -> o.get("semanticVariantDigest").toString()).findFirst().orElseThrow();
+    }
+    private String contextUid(PipelineResult result) {
+        return array(FileOps.readJson(result.packagePath().resolve("canonical-identities.json"))).stream().map(PersistentIdentityRegistryTest::object)
+                .map(u -> String.valueOf(u.get("uid"))).filter(u -> !u.equals(rootUid(result))).findFirst().orElseThrow();
+    }
+
+    @Test
+    void aLaterEnrichmentOfTheOtherIdentityIsAccepted() {
+        // Codex pass-I F-I2: enrich A with a package carrying B verbatim, then enrich B with a package carrying the
+        // enriched A verbatim. Both are legitimate successions; the second must not be refused by the first.
+        PipelineResult t0 = manufacture("enr9-t0", fixture -> {});
+        PipelineResult a1b0 = manufacture("enr9-a1b0", fixture -> addRootClaim(fixture, "Fixture assertion: one more sourced statement."));
+        PipelineResult a1b1 = manufacture("enr9-a1b1", fixture -> { addRootClaim(fixture, "Fixture assertion: one more sourced statement."); addContextClaim(fixture, "Fixture assertion: the context gained a statement."); });
+        FoundryRegistry registry = registryWith(t0);
+        String a = rootUid(t0), b = contextUid(t0);
+        assertEquals(1, registry.enrich(a1b0.packagePath(), a, List.of("LIFE_CHRONOLOGY"), "A first", "operator", "2026-09-07T00:00:00Z").assertionsAdded());
+        assertEquals(1, registry.enrich(a1b1.packagePath(), b, List.of("LIFE_CHRONOLOGY"), "B second, A restated in its enriched state", "operator", "2026-09-07T00:00:01Z").assertionsAdded());
+        assertTrue(registry.verify().passed());
+        for (Object raw : array(registry.index().get("identities"))) assertEquals(SemanticVariants.SINGLE_VARIANT, object(raw).get("semanticVariantStatus"));
+        assertEquals(3, array(identityByUid(registry.index(), a).get("occurrences")).size());
+    }
+
+    @Test
+    void theWholePackageRuleIsAttributableAndOrderIndependent() {
+        // Codex pass-I F-I1 probe, with the invariant stated precisely: an ENRICH package introduces no new variant of
+        // another identity. Here A0/B0, A1/B0, A0/B1 and an unlinked A0/B2 are all plainly registered, then A0→A1 and
+        // B0→B1 are recorded through the journal. Both enrichments are valid: their packages carry the other identity
+        // in a state it has elsewhere. B stays unreconciled, but that is the plain admission of A0/B2's doing, which
+        // the registry's own law permits -- not the enrichments'. A package that would introduce B2 as part of an
+        // ENRICH is refused (theJournalPathCannotLeaveASecondIdentityUnreconciledEither).
+        PipelineResult t0 = manufacture("enr10-a0b0", fixture -> {});
+        PipelineResult a1b0 = manufacture("enr10-a1b0", fixture -> addRootClaim(fixture, "Fixture assertion: one more sourced statement."));
+        PipelineResult a0b1 = manufacture("enr10-a0b1", fixture -> addContextClaim(fixture, "Fixture assertion: the context gained a statement."));
+        PipelineResult a0b2 = manufacture("enr10-a0b2", fixture -> rewordContext(fixture));
+        FoundryRegistry registry = registryWith(t0);
+        String a = rootUid(t0), b = contextUid(t0);
+        String a0 = variantIn(registry, a, registry.index().get("packages") == null ? "" : object(array(registry.index().get("packages")).getFirst()).get("packageId").toString());
+        FoundryRegistry.RegistrationResult pA1 = registry.register(a1b0.packagePath());
+        FoundryRegistry.RegistrationResult pB1 = registry.register(a0b1.packagePath());
+        registry.register(a0b2.packagePath());
+        String b0 = variantIn(registry, b, pA1.packageId()), a1 = variantIn(registry, a, pA1.packageId()), b1 = variantIn(registry, b, pB1.packageId());
+        registry.applyIdentityOperation(IdentityOperation.enrich(b, b0, b1, pB1.packageId(), List.of("LIFE_CHRONOLOGY"), "B", "operator", "2026-09-07T00:00:00Z"));
+        registry.applyIdentityOperation(IdentityOperation.enrich(a, a0, a1, pA1.packageId(), List.of("LIFE_CHRONOLOGY"), "A", "operator", "2026-09-07T00:00:00Z"));
+        assertTrue(registry.verify().passed());
+        assertEquals(SemanticVariants.SINGLE_VARIANT, identityByUid(registry.index(), a).get("semanticVariantStatus"));
+        assertEquals(SemanticVariants.MULTIPLE_UNRECONCILED_VARIANTS, identityByUid(registry.index(), b).get("semanticVariantStatus"), "B's unlinked sibling comes from the plain admission of A0/B2");
+        assertEquals(2, array(registry.index().get("identityOperations")).size());
+    }
+
     @Test
     void enrichmentMakesAStrictSupersetTheCurrentStateAndReuseFollowsIt() {
         PipelineResult t0 = manufacture("enr-t0", fixture -> {});
@@ -336,7 +406,7 @@ class PersistentIdentityRegistryTest {
         String before = FileOps.treeHash(registryRoot);
         IdentityOperation enrich = IdentityOperation.enrich(uid, v0, v1, admitted.packageId(), List.of("LIFE_CHRONOLOGY"), "journal path", "operator", "2026-09-07T00:00:00Z");
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class, () -> registry.applyIdentityOperation(enrich));
-        assertTrue(refused.getMessage().contains("outside that identity's accepted lineage"), refused.getMessage());
+        assertTrue(refused.getMessage().contains("introduces a new variant of"), refused.getMessage());
         assertEquals(before, FileOps.treeHash(registryRoot), "the refused journal entry is removed again");
         assertTrue(registry.verify().passed());
         for (Object raw : array(registry.index().get("identities"))) {

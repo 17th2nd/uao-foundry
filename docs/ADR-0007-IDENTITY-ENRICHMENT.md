@@ -28,9 +28,13 @@ Add a fifth identity operation, `ENRICH`, to the append-preserving journal.
   assertion superset**: every prior assertion restated verbatim (canonical JSON equality) plus at least one more.
   Anything else is refused at admission and fails verification thereafter.
 - A package enriches **exactly one** identity: the operation names one subject, the reuse analyzer refuses more
-  than one named target, and admission checks — before anything is written — that every *other* registered
-  identity the package carries is a verbatim re-observation of its current state, so a successful `ENRICH` can
-  never leave a second identity an unreconciled variant.
+  than one named target, and the atomic admission (`enrich()`) checks — before anything is written — that every
+  *other* registered identity the package carries is a verbatim re-observation of its current state. The
+  rebuild-time form of the same rule, re-derived on every index build whichever path recorded the operation, is
+  stated so that it is order-independent, attributable and monotone: **an enriching package introduces no new
+  variant of any other registered identity** — each other identity it carries is in a state that identity already
+  has in another package or in its own `ENRICH` chain. An identity left unreconciled by a *plain* admission
+  elsewhere is that admission's doing, which the registry's admission law permits; an enrichment never causes it.
 - Variants superseded by an `ENRICH` are history, not unreconciled siblings. An identity is `SINGLE_VARIANT`
   when exactly one current variant remains; the index then exposes `currentVariant` and `variantHistory`.
   These fields appear only for enriched identities, so registries without `ENRICH` operations keep verifying
@@ -206,3 +210,21 @@ identity is derivable from bytes alone.
   made them, the clean journal path accepted; a two-subject ENRICH fails schema validation. Java 186/186, 0 skipped.
   ⚠ The jar is NOT rebuilt in this commit: a live batch (the `ai` collection, ~150 seeds) holds it; the rebuild follows
   the batch and is the condition on which the operator tool's default runtime carries this rule.
+- **Codex pass I (2026-09-07, read-only, on 912749f): REFUSED** — F-I1 HIGH a hand-written journal could still record
+  an ENRICH while another identity carried by its package was unreconciled for reasons elsewhere, and the index
+  verified; F-I2 HIGH the ninth commit's "accepted lineage" wrongly refused a legitimate later enrichment of the other
+  identity, because the two-step `enrich()` (register, then record) validated an intermediate state in which that
+  identity had two variants and no chain yet; F-I3 MEDIUM the schema cannot express subject == target. F-I4 INFO:
+  counts verified; the deferred jar rebuild accepted as the programme condition. Report:
+  `temp/codex-uaofoundry-adr0007-ratification-pass-i-001.md`.
+- **Remediation (tenth commit):** `enrich()` is one transaction — package copied, ENRICH record written, the index
+  rebuilt ONCE over both, everything rolled back on any failure — so no intermediate state is ever validated alone.
+  The rebuild-time rule is restated as above ("introduces no new variant of any other registered identity",
+  `IdentityAggregate.knownOutside`), which closes F-I2 and answers F-I1 precisely: the state Codex's probe produced
+  (A enriched, B unreconciled because a *plain* admission of A0/B2 exists) is not one an enrichment created, and
+  refusing the enrichment for it would let any later plain admission retroactively invalidate a recorded
+  enrichment — the registry's admission law permits preserving a divergent occurrence, so the rule attributes
+  divergence to the package that introduces it. Tests: the later-enrichment case accepted; the four-package
+  attribution case accepted with B's status attributed to the plain admission; the journal path that would introduce
+  a new variant refused and removed. The schema comment states that subject == target is the constructor's rule.
+  ⚠ Jar still not rebuilt (the `ai` batch holds it); its rebuild remains the runtime condition.

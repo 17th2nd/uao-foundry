@@ -56,15 +56,7 @@ public final class FoundryRegistry {
 
         Map<String,Object> before = index(); // verified read; tampered indexes fail before mutation
         validateIdentityContinuity(packageDir, before);
-        boolean alreadyPresent = Files.isDirectory(destination);
-        if (alreadyPresent) {
-            String existingDigest = FileOps.treeHash(destination);
-            if (!digest.equals(existingDigest)) {
-                throw new IllegalArgumentException("Registry package-id collision with different immutable content: " + packageId);
-            }
-        } else {
-            FileOps.copyTree(packageDir, destination);
-        }
+        boolean alreadyPresent = copyPackage(packageDir, destination, digest, packageId);
 
         try {
             Map<String,Object> rebuilt = rebuildIndex();
@@ -76,6 +68,32 @@ public final class FoundryRegistry {
             if (!alreadyPresent) FileOps.deleteTree(destination);
             throw ex;
         }
+    }
+
+    /** Copies a candidate package into the store without rebuilding the index; returns whether it was already there (byte-identical). */
+    private boolean copyPackage(Path packageDir, Path destination, String digest, String packageId) {
+        boolean alreadyPresent = Files.isDirectory(destination);
+        if (alreadyPresent) {
+            if (!digest.equals(FileOps.treeHash(destination))) {
+                throw new IllegalArgumentException("Registry package-id collision with different immutable content: " + packageId);
+            }
+        } else {
+            FileOps.copyTree(packageDir, destination);
+        }
+        return alreadyPresent;
+    }
+
+    /** Writes an operation record into the journal without rebuilding the index; returns whether it was already there (byte-identical). */
+    private boolean writeOperation(IdentityOperation operation, Path destination) {
+        boolean alreadyPresent = Files.isRegularFile(destination);
+        if (alreadyPresent) {
+            if (!Json.canonical(FileOps.readJson(destination)).equals(Json.canonical(operation.toMap()))) {
+                throw new IllegalArgumentException("Identity operation id collision with different content: " + operation.operationId());
+            }
+        } else {
+            FileOps.writeJson(destination, operation.toMap());
+        }
+        return alreadyPresent;
     }
 
     /**
@@ -109,15 +127,8 @@ public final class FoundryRegistry {
 
         Path destination = operationRoot.resolve(operation.operationId() + ".json").normalize();
         if (!destination.startsWith(operationRoot)) throw new IllegalArgumentException("Operation id escapes the journal root.");
-        boolean alreadyPresent = Files.isRegularFile(destination);
-        if (alreadyPresent) {
-            // Content-addressed: an identical id means identical bytes, so re-recording is a no-op.
-            if (!Json.canonical(FileOps.readJson(destination)).equals(Json.canonical(operation.toMap()))) {
-                throw new IllegalArgumentException("Identity operation id collision with different content: " + operation.operationId());
-            }
-        } else {
-            FileOps.writeJson(destination, operation.toMap());
-        }
+        // Content-addressed: an identical id means identical bytes, so re-recording is a no-op.
+        boolean alreadyPresent = writeOperation(operation, destination);
 
         try {
             Map<String,Object> rebuilt = rebuildIndex();
@@ -642,11 +653,14 @@ public final class FoundryRegistry {
     }
 
     /**
-     * The whole-package half of the ENRICH rule (Codex pass-H F-H1), re-derived on every index build after all
-     * enrichments are applied: the package an ENRICH names may carry other registered identities only in a state
-     * that belongs to that identity's accepted lineage (its single state, or a variant linked by its own ENRICH
-     * chain). Otherwise the enrichment would have left a second identity an unreconciled variant -- the state the
-     * Decision forbids -- whichever public path admitted the package and recorded the operation.
+     * The whole-package half of the ENRICH rule, re-derived on every index build after all enrichments are
+     * applied (Codex pass-H F-H1, pass-I F-I1/F-I2): <em>the package an ENRICH names introduces no new variant of
+     * any other registered identity.</em> For every other identity the package carries, its occurrence there must
+     * be a variant that identity already has in some other package, or a variant of its own ENRICH chain. The rule
+     * is order-independent (sets over all packages and operations), attributable (only a variant that exists
+     * nowhere else is the enriching package's doing), and monotone (later admissions can only add to the other
+     * variants, never invalidate a recorded enrichment). An identity's unreconciled status caused by a plain
+     * admission elsewhere is that admission's, which the registry's own law permits, not the enrichment's.
      */
     private void enforceWholePackageRule(Map<String,IdentityAggregate> identities, List<IdentityOperation> operations) {
         for (IdentityOperation operation : operations) {
@@ -657,9 +671,9 @@ public final class FoundryRegistry {
                 if (other.uid.equals(subject)) continue;
                 for (Occurrence occurrence : other.occurrences) {
                     if (!occurrence.packageId().equals(toPackage)) continue;
-                    if (!other.inLineage(occurrence.semanticVariantDigest())) {
-                        throw new IllegalArgumentException("ENRICH " + operation.operationId() + " refused: package " + toPackage + " also carries " + other.uid
-                                + " (" + other.resolutionKey + ") in a variant outside that identity's accepted lineage; an enrichment package restates every other registered identity verbatim, and enriches exactly one.");
+                    if (!other.knownOutside(toPackage, occurrence.semanticVariantDigest())) {
+                        throw new IllegalArgumentException("ENRICH " + operation.operationId() + " refused: package " + toPackage + " introduces a new variant of " + other.uid
+                                + " (" + other.resolutionKey + "); an enrichment package restates every other registered identity in a state it already has, and enriches exactly one.");
                     }
                 }
             }
@@ -807,18 +821,31 @@ public final class FoundryRegistry {
         String packageId = string(object(FileOps.readJson(packageDir.resolve("manifest.json")), "manifest").get("packageId"), "manifest.packageId");
         IdentityOperation operation = IdentityOperation.enrich(uid, from, to, packageId, reasonCodes, justification, authority, recordedAt);
 
-        RegistrationResult registration = register(packageDir);
+        // One transaction (Codex pass-I F-I2): the package and its ENRICH record enter the stores together and the
+        // index is rebuilt ONCE over both, so no intermediate state (package admitted, operation not yet recorded)
+        // is ever validated on its own. Anything that fails after the first write is rolled back completely.
+        requireReusablePackage(packageDir);
+        String digest = FileOps.treeHash(packageDir);
+        Path destination = packageRoot.resolve(packageId).normalize();
+        if (!destination.startsWith(packageRoot)) throw new IllegalArgumentException("Package id escapes registry package root.");
+        Path journalFile = operationRoot.resolve(operation.operationId() + ".json").normalize();
+        if (!journalFile.startsWith(operationRoot)) throw new IllegalArgumentException("Operation id escapes the journal root.");
+        validateIdentityContinuity(packageDir, before);
+        boolean packagePresent = copyPackage(packageDir, destination, digest, packageId);
+        boolean operationPresent = false;
         try {
-            if (!registration.packageId().equals(packageId)) throw new IllegalArgumentException("Registered package id differs from the candidate manifest: " + registration.packageId());
-            OperationResult recorded = applyIdentityOperation(operation);
+            operationPresent = writeOperation(operation, journalFile);
+            Map<String,Object> rebuilt = rebuildIndex();
+            FileOps.writeJson(indexPath, rebuilt);
+            RegistrationResult registration = new RegistrationResult(packageId, digest, destination, packagePresent,
+                    array(rebuilt.get("packages"), "index packages").size(), array(rebuilt.get("identities"), "index identities").size());
+            OperationResult recorded = new OperationResult(operation.operationId(), operation.operation().name(), operationPresent,
+                    array(rebuilt.get("identityOperations"), "index identityOperations").size());
             return new EnrichmentResult(registration, recorded, from, to, newer.size() - older.size());
         } catch (RuntimeException ex) {
-            // Anything after admission fails closed: a package this call copied in is removed and the
-            // index restored, so the registry is byte-identical to its state before the call.
-            if (!registration.alreadyPresent()) {
-                FileOps.deleteTree(registration.registryPath());
-                FileOps.writeJson(indexPath, before);
-            }
+            if (!operationPresent) FileOps.deleteTree(journalFile);
+            if (!packagePresent) FileOps.deleteTree(destination);
+            FileOps.writeJson(indexPath, before);
             throw ex;
         }
     }
@@ -915,16 +942,19 @@ public final class FoundryRegistry {
         private IdentityAggregate(String uid, String resolutionKey) { this.uid = uid; this.resolutionKey = resolutionKey; }
 
         /**
-         * Whether {@code digest} is a state this identity accepts as its own: its single state when it has never
-         * been enriched, or a variant linked by its ENRICH chain. An unlinked sibling is not in the lineage.
+         * Whether {@code digest} is a state of this identity that exists independently of {@code packageId}:
+         * carried by some other package, or a variant of this identity's own ENRICH chain. An identity that
+         * appears only in {@code packageId} is new there, which is never a divergence.
          */
-        private boolean inLineage(String digest) {
-            Set<String> variants = new LinkedHashSet<>();
-            occurrences.forEach(o -> variants.add(o.semanticVariantDigest()));
-            if (enrichments.isEmpty()) return variants.size() == 1 && variants.contains(digest);
-            Set<String> chain = new LinkedHashSet<>();
-            enrichments.forEach(e -> { chain.add(String.valueOf(e.get("fromVariant"))); chain.add(String.valueOf(e.get("toVariant"))); });
-            return chain.contains(digest);
+        private boolean knownOutside(String packageId, String digest) {
+            Set<String> others = new LinkedHashSet<>();
+            for (Occurrence o : occurrences) if (!o.packageId().equals(packageId)) others.add(o.semanticVariantDigest());
+            if (others.isEmpty()) return true;
+            if (others.contains(digest)) return true;
+            for (Map<String,Object> e : enrichments) {
+                if (digest.equals(e.get("fromVariant")) || digest.equals(e.get("toVariant"))) return true;
+            }
+            return false;
         }
 
         /** Records one verified ENRICH edge between two of this identity's variants. */
