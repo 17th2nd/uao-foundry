@@ -85,6 +85,9 @@ public final class FoundryRegistry {
 
     /** Writes an operation record into the journal without rebuilding the index; returns whether it was already there (byte-identical). */
     private boolean writeOperation(IdentityOperation operation, Path destination) {
+        if (Files.exists(destination) && !Files.isRegularFile(destination)) {
+            throw new IllegalArgumentException("Journal path is occupied by something that is not a record file: " + destination.getFileName());
+        }
         boolean alreadyPresent = Files.isRegularFile(destination);
         if (alreadyPresent) {
             if (!Json.canonical(FileOps.readJson(destination)).equals(Json.canonical(operation.toMap()))) {
@@ -127,7 +130,11 @@ public final class FoundryRegistry {
 
         Path destination = operationRoot.resolve(operation.operationId() + ".json").normalize();
         if (!destination.startsWith(operationRoot)) throw new IllegalArgumentException("Operation id escapes the journal root.");
-        // Content-addressed: an identical id means identical bytes, so re-recording is a no-op.
+        // Content-addressed: an identical id means identical bytes, so re-recording is a no-op. The path is checked
+        // before the write so a squatted path is refused, never deleted by the rollback below.
+        if (Files.exists(destination) && !Files.isRegularFile(destination)) {
+            throw new IllegalArgumentException("Journal path is occupied by something that is not a record file: " + destination.getFileName());
+        }
         boolean alreadyPresent = writeOperation(operation, destination);
 
         try {
@@ -558,8 +565,10 @@ public final class FoundryRegistry {
         List<IdentityOperation> operations = new ArrayList<>();
         if (!Files.isDirectory(operationRoot)) return operations;
         try (var stream = Files.list(operationRoot)) {
-            for (Path file : stream.filter(Files::isRegularFile).sorted().toList()) {
+            for (Path file : stream.sorted().toList()) {
                 String name = file.getFileName().toString();
+                // Codex pass-J F-J2: anything that is not a regular record file is a tampered journal, not something to skip.
+                if (!Files.isRegularFile(file)) throw new IllegalArgumentException("Unexpected entry in the identity-operation journal (not a regular file): " + name);
                 if (!name.endsWith(".json")) throw new IllegalArgumentException("Unexpected file in the identity-operation journal: " + name);
                 IdentityOperation operation = IdentityOperation.fromMap(object(FileOps.readJson(file), "identity operation"));
                 if (!name.equals(operation.operationId() + ".json")) {
@@ -663,6 +672,19 @@ public final class FoundryRegistry {
      * admission elsewhere is that admission's, which the registry's own law permits, not the enrichment's.
      */
     private void enforceWholePackageRule(Map<String,IdentityAggregate> identities, List<IdentityOperation> operations) {
+        // Codex pass-J F-J1: one package enriches exactly one identity. Two ENRICH records naming the same package would
+        // each let the other identity's new state qualify as "its own chain"; uniqueness of toPackageId across the
+        // journal is order-independent and unaffected by plain admissions.
+        Map<String,String> enrichingPackages = new TreeMap<>();
+        for (IdentityOperation operation : operations) {
+            if (operation.operation() != IdentityOperation.Kind.ENRICH) continue;
+            String toPackage = string(operation.enrichment().get("toPackageId"), "enrichment.toPackageId");
+            String previous = enrichingPackages.putIfAbsent(toPackage, operation.operationId());
+            if (previous != null) {
+                throw new IllegalArgumentException("ENRICH operations " + previous + " and " + operation.operationId() + " both name package " + toPackage
+                        + "; a package enriches exactly one identity.");
+            }
+        }
         for (IdentityOperation operation : operations) {
             if (operation.operation() != IdentityOperation.Kind.ENRICH) continue;
             String subject = operation.subjects().getFirst();
@@ -831,20 +853,32 @@ public final class FoundryRegistry {
         Path journalFile = operationRoot.resolve(operation.operationId() + ".json").normalize();
         if (!journalFile.startsWith(operationRoot)) throw new IllegalArgumentException("Operation id escapes the journal root.");
         validateIdentityContinuity(packageDir, before);
-        boolean packagePresent = copyPackage(packageDir, destination, digest, packageId);
-        boolean operationPresent = false;
+        for (Object raw : array(before.get("identityOperations"), "identityOperations")) {
+            Map<String,Object> recorded = object(raw, "identity operation");
+            if ("ENRICH".equals(recorded.get("operation")) && packageId.equals(object(recorded.get("enrichment"), "enrichment").get("toPackageId"))) {
+                throw new IllegalArgumentException("ENRICH refused: package " + packageId + " already enriches an identity (" + recorded.get("operationId") + "); a package enriches exactly one identity.");
+            }
+        }
+        if (Files.exists(journalFile) && !Files.isRegularFile(journalFile)) {
+            throw new IllegalArgumentException("ENRICH refused: journal path is occupied by something that is not a record file: " + journalFile.getFileName());
+        }
+        // Everything this call may create is known BEFORE the first write, so rollback removes exactly what this
+        // call wrote -- never a pre-existing package or record -- and a failure inside the first copy is covered too.
+        boolean packagePreExisting = Files.isDirectory(destination);
+        boolean operationPreExisting = Files.isRegularFile(journalFile);
         try {
-            operationPresent = writeOperation(operation, journalFile);
+            copyPackage(packageDir, destination, digest, packageId);
+            writeOperation(operation, journalFile);
             Map<String,Object> rebuilt = rebuildIndex();
             FileOps.writeJson(indexPath, rebuilt);
-            RegistrationResult registration = new RegistrationResult(packageId, digest, destination, packagePresent,
+            RegistrationResult registration = new RegistrationResult(packageId, digest, destination, packagePreExisting,
                     array(rebuilt.get("packages"), "index packages").size(), array(rebuilt.get("identities"), "index identities").size());
-            OperationResult recorded = new OperationResult(operation.operationId(), operation.operation().name(), operationPresent,
+            OperationResult recorded = new OperationResult(operation.operationId(), operation.operation().name(), operationPreExisting,
                     array(rebuilt.get("identityOperations"), "index identityOperations").size());
             return new EnrichmentResult(registration, recorded, from, to, newer.size() - older.size());
         } catch (RuntimeException ex) {
-            if (!operationPresent) FileOps.deleteTree(journalFile);
-            if (!packagePresent) FileOps.deleteTree(destination);
+            if (!operationPreExisting) FileOps.deleteTree(journalFile);
+            if (!packagePreExisting) FileOps.deleteTree(destination);
             FileOps.writeJson(indexPath, before);
             throw ex;
         }

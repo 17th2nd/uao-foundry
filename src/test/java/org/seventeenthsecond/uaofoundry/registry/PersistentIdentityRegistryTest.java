@@ -258,6 +258,78 @@ class PersistentIdentityRegistryTest {
     }
 
     @Test
+    void onePackageEnrichesExactlyOneIdentityEvenThroughAHandWrittenJournal() throws Exception {
+        // Codex pass-J F-J1: two valid ENRICH records naming one package would let each identity's new state qualify
+        // as its own chain. Uniqueness of toPackageId across the journal refuses that on every build.
+        PipelineResult t0 = manufacture("enr11-t0", fixture -> {});
+        PipelineResult a1b1 = manufacture("enr11-a1b1", fixture -> { addRootClaim(fixture, "Fixture assertion: one more sourced statement."); addContextClaim(fixture, "Fixture assertion: the context gained a statement."); });
+        FoundryRegistry registry = registryWith(t0);
+        String a = rootUid(t0), b = contextUid(t0);
+        String a0 = variantIn(registry, a, object(array(registry.index().get("packages")).getFirst()).get("packageId").toString());
+        String b0 = variantIn(registry, b, object(array(registry.index().get("packages")).getFirst()).get("packageId").toString());
+        FoundryRegistry.RegistrationResult p = registry.register(a1b1.packagePath());
+        String a1 = variantIn(registry, a, p.packageId()), b1 = variantIn(registry, b, p.packageId());
+        Path journal = registryRoot.resolve("identity-operations"); Files.createDirectories(journal);
+        IdentityOperation opA = IdentityOperation.enrich(a, a0, a1, p.packageId(), List.of("LIFE_CHRONOLOGY"), "A", "operator", "2026-09-07T00:00:00Z");
+        IdentityOperation opB = IdentityOperation.enrich(b, b0, b1, p.packageId(), List.of("LIFE_CHRONOLOGY"), "B", "operator", "2026-09-07T00:00:00Z");
+        FileOps.writeJson(journal.resolve(opA.operationId() + ".json"), opA.toMap());
+        FileOps.writeJson(journal.resolve(opB.operationId() + ".json"), opB.toMap());
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class, registry::index);
+        assertTrue(refused.getMessage().contains("both name package"), refused.getMessage());
+        assertFalse(registry.verify().passed(), "a journal in which one package enriches two identities never verifies");
+        Files.delete(journal.resolve(opB.operationId() + ".json"));
+        // With one record the package still cannot enrich A: it introduces a new variant of B (F-I1 rule).
+        IllegalArgumentException stillRefused = assertThrows(IllegalArgumentException.class, registry::index);
+        assertTrue(stillRefused.getMessage().contains("introduces a new variant of"), stillRefused.getMessage());
+        Files.delete(journal.resolve(opA.operationId() + ".json"));
+        assertTrue(registry.verify().passed());
+    }
+
+    @Test
+    void theTransactionNeverDeletesWhatItDidNotWrite() throws Exception {
+        // Codex pass-J F-J2: a directory squatting the operation's journal path must be refused, not rolled back away.
+        PipelineResult t0 = manufacture("enr12-t0", fixture -> {});
+        PipelineResult t1 = manufacture("enr12-t1", fixture -> addRootClaim(fixture, "Fixture assertion: enriched."));
+        FoundryRegistry registry = registryWith(t0);
+        String uid = rootUid(t0);
+        String v0 = object(array(identityByUid(registry.index(), uid).get("occurrences")).getFirst()).get("semanticVariantDigest").toString();
+        String packageId = object(FileOps.readJson(t1.packagePath().resolve("manifest.json"))).get("packageId").toString();
+        String v1 = SemanticVariants.digest(array(FileOps.readJson(t1.packagePath().resolve("canonical-identities.json"))).stream()
+                .map(PersistentIdentityRegistryTest::object).filter(u -> uid.equals(u.get("uid"))).findFirst().orElseThrow());
+        IdentityOperation op = IdentityOperation.enrich(uid, v0, v1, packageId, List.of("LIFE_CHRONOLOGY"), "squatted", "operator", "2026-09-07T00:00:00Z");
+        Path squat = registryRoot.resolve("identity-operations").resolve(op.operationId() + ".json");
+        Files.createDirectories(squat); Files.writeString(squat.resolve("sentinel"), "do not delete");
+        String before = FileOps.treeHash(registryRoot);
+        assertThrows(IllegalArgumentException.class, () -> registry.enrich(t1.packagePath(), uid, List.of("LIFE_CHRONOLOGY"), "squatted", "operator", "2026-09-07T00:00:00Z"));
+        assertTrue(Files.isRegularFile(squat.resolve("sentinel")), "the squatting directory is untouched");
+        assertFalse(Files.isDirectory(registryRoot.resolve("packages").resolve(packageId)), "nothing was admitted");
+        assertEquals(before, FileOps.treeHash(registryRoot));
+        // While the squatter is there the journal is tampered and the whole registry is fail-closed: even a plain
+        // registration refuses, and nothing is deleted.
+        assertThrows(IllegalArgumentException.class, () -> registry.register(t1.packagePath()));
+        assertTrue(Files.isRegularFile(squat.resolve("sentinel")));
+        assertEquals(before, FileOps.treeHash(registryRoot));
+        FileOps.deleteTree(squat);
+        registry.register(t1.packagePath());
+        Files.createDirectories(squat); Files.writeString(squat.resolve("sentinel"), "do not delete");
+        String afterRegister = FileOps.treeHash(registryRoot);
+        assertThrows(IllegalArgumentException.class, () -> registry.applyIdentityOperation(op));
+        assertTrue(Files.isRegularFile(squat.resolve("sentinel")), "the journal path's squatter survives the operation path too");
+        assertEquals(afterRegister, FileOps.treeHash(registryRoot));
+        FileOps.deleteTree(squat);
+        assertTrue(registry.verify().passed());
+    }
+
+    @Test
+    void theRecordConstructorEnforcesTheEnrichShape() {
+        Map<String,Object> block = Map.of("fromVariant", "a".repeat(64), "toVariant", "b".repeat(64), "toPackageId", "pkg-0000000000000001");
+        assertThrows(IllegalArgumentException.class, () -> new IdentityOperation("op-x", IdentityOperation.Kind.ENRICH, List.of("uao-aaaaaaaaaaaa"), List.of("uao-bbbbbbbbbbbb"),
+                List.of("LIFE_CHRONOLOGY"), "j", List.of(), "operator", "2026-09-07T00:00:00Z", block));
+        assertThrows(IllegalArgumentException.class, () -> new IdentityOperation("op-x", IdentityOperation.Kind.ENRICH, List.of("uao-aaaaaaaaaaaa"), List.of("uao-aaaaaaaaaaaa"),
+                List.of("LIFE_CHRONOLOGY"), "j", List.of(), "operator", "2026-09-07T00:00:00Z", null));
+    }
+
+    @Test
     void enrichmentMakesAStrictSupersetTheCurrentStateAndReuseFollowsIt() {
         PipelineResult t0 = manufacture("enr-t0", fixture -> {});
         PipelineResult t1 = manufacture("enr-t1", fixture -> addRootClaim(fixture, "Fixture assertion: enriched with a second sourced statement."));

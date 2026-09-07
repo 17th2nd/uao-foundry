@@ -133,7 +133,7 @@
         }
       },
       "then": {
-        "$comment": "ENRICH names exactly one identity as both subject and target (the identity persists; one enrichment per package): the cardinalities are enforced here, the equality subjects[0] == targets[0] is enforced by IdentityOperation's constructor and fromMap, since JSON Schema cannot express cross-field equality. The registry also re-derives on every build that the package named by toPackageId introduces no new variant of any OTHER registered identity (each must be a state that identity already has in another package or in its own ENRICH chain).",
+        "$comment": "ENRICH names exactly one identity as both subject and target (the identity persists; one enrichment per package): the cardinalities are enforced here, the equality subjects[0] == targets[0] cannot be expressed in JSON Schema and is enforced by the IdentityOperation record's canonical constructor (every construction site, including fromMap and create). One package enriches exactly one identity: the registry refuses two ENRICH records naming the same toPackageId. The registry also re-derives on every build that the package named by toPackageId introduces no new variant of any OTHER registered identity (each must be a state that identity already has in another package or in its own ENRICH chain).",
         "required": [
           "enrichment"
         ],

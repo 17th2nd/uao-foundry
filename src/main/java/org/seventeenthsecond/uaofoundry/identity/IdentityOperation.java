@@ -80,6 +80,11 @@ public record IdentityOperation(
         reasonCodes = List.copyOf(reasonCodes);
         evidence = evidence == null ? List.of() : List.copyOf(evidence);
         enrichment = enrichment == null ? null : Json.object(Json.parse(Json.canonical(enrichment)), "enrichment");
+        // Codex pass-J F-J3: the shape that makes ENRICH meaningful is enforced at every construction site, not only
+        // in the create() factory -- one subject, named again as the only target, with an enrichment block.
+        if (operation == Kind.ENRICH && (subjects.size() != 1 || !targets.equals(subjects) || enrichment == null)) {
+            throw new IllegalArgumentException("ENRICH requires exactly one subject, named again as its only target, and an enrichment block.");
+        }
     }
 
     /** Backwards-compatible constructor for the four lifecycle kinds, which carry no enrichment block. */

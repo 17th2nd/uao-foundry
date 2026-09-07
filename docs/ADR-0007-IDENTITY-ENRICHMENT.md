@@ -228,3 +228,20 @@ identity is derivable from bytes alone.
   attribution case accepted with B's status attributed to the plain admission; the journal path that would introduce
   a new variant refused and removed. The schema comment states that subject == target is the constructor's rule.
   ⚠ Jar still not rebuilt (the `ai` batch holds it); its rebuild remains the runtime condition.
+- **Codex pass J (2026-09-07, read-only, on 2bf6ab4): REFUSED, dispute accepted** — the attributable invariant was
+  judged defensible ("without immutable admission chronology, no final-set rule can distinguish plain package first
+  from a simultaneously installed journal"). Remaining: F-J1 HIGH two valid ENRICH records naming one package let each
+  identity's new state qualify as its own chain; F-J2 HIGH the transaction's first write sat outside its rollback
+  boundary, and a directory squatting the journal path was skipped by the reader, then deleted by the rollback;
+  F-J3 MEDIUM the schema comment named the record constructor as enforcing subject == target when only the `create`
+  factory did. F-J4 INFO: counts verified; jar condition stands. Report:
+  `temp/codex-uaofoundry-adr0007-ratification-pass-j-001.md`.
+- **Remediation (eleventh commit):** `toPackageId` is unique across ENRICH records on every build (and refused at
+  `enrich()` preflight), so one package enriches exactly one identity through every path. The transaction knows what
+  pre-exists before its first write and rolls back only what it created; a journal path occupied by anything but a
+  record file is refused before writing, by `enrich()`, `applyIdentityOperation()` and `writeOperation()`; the journal
+  reader fails closed on any non-regular entry. The record's canonical constructor enforces the ENRICH shape at every
+  construction site, and the schema comment says so. Tests: hand-written double ENRICH refused and unverifiable;
+  squatted journal path refused with the squatter untouched and the tree unchanged, through both public paths; the
+  constructor refuses subject ≠ target and a missing block. Java 191/191, 0 skipped. ⚠ Jar rebuild still pending
+  the `ai` batch.
